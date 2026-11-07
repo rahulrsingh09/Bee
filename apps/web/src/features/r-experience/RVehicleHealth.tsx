@@ -39,6 +39,7 @@ import {
 } from '../health/VehicleHealthPage';
 import { NoVehicleState } from '../../components/layout/NoVehicleState';
 import { RAppLayout } from './RAppLayout';
+import { RSettingsEntry } from './RSettingsNavigation';
 import { RMissedDrives } from './RMissedDrives';
 import { vehicleLockReading } from './vehicleLockReading';
 import './r-health.css';
@@ -77,7 +78,7 @@ export function RVehicleHealth() {
   const canRecover = vehicle?.membership_role === 'owner' || vehicle?.membership_role === 'manager';
 
   return (
-    <RAppLayout activeKey="health">
+    <RAppLayout activeKey="health" footer={<RSettingsEntry />}>
       <div className="r-page-heading r-health-heading">
         <div>
           <h1>Vehicle health</h1>

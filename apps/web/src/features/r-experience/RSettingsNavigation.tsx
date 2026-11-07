@@ -1,5 +1,7 @@
 import React from 'react';
-import { ArrowLeft, ArrowRight, Search } from 'lucide-react';
+import { Link } from '@tanstack/react-router';
+import { ArrowLeft, ArrowRight, Search, Settings2, Users } from 'lucide-react';
+import { useMe } from '@riviamigo/hooks';
 import { SelectPicker } from '@riviamigo/ui/primitives';
 import './r-settings.css';
 
@@ -25,12 +27,25 @@ const groups = [
   { title: 'Data & administration', ids: ['external', 'api', 'jobs', 'raw', 'backup', 'authentication'] },
 ];
 
+/** Labelled Settings entry for the Car tab. Pass it to the RAppLayout `footer` slot. */
+export function RSettingsEntry() {
+  return (
+    <nav className="r-directory r-settings-entry" aria-label="Car settings">
+      <Link to="/settings">
+        <Settings2 aria-hidden="true" /><span><strong>Settings</strong><small>Preferences, connections, appearance and account</small></span><ArrowRight aria-hidden="true" />
+      </Link>
+    </nav>
+  );
+}
+
 export function RSettingsNavigation<T extends string>({ sections, active, onSelect }: {
   sections: Array<{ id: T; label: string; icon: React.ElementType }>;
   active: T | 'directory';
   onSelect: (section: T | 'directory') => void;
 }) {
   const [search, setSearch] = React.useState('');
+  const { data: me } = useMe();
+  const canManagePeople = me?.role === 'admin' || me?.role === 'super_user';
   if (active !== 'directory') return (
     <nav className="r-settings-navigation" aria-label="Settings sections">
       <button type="button" onClick={() => onSelect('directory')}><ArrowLeft />All settings</button>
@@ -42,18 +57,23 @@ export function RSettingsNavigation<T extends string>({ sections, active, onSele
   const shown = sections.filter(section => `${section.label} ${descriptions[section.id] ?? ''}`.toLowerCase().includes(query));
   const known = new Set(groups.flatMap(group => group.ids));
   const additional = { title: 'More settings', ids: sections.filter(section => !known.has(section.id)).map(section => section.id) };
+  const people = canManagePeople && 'people access accounts invitations permissions'.includes(query);
   const renderGroup = (group: typeof groups[number]) => {
     const items = group.ids.flatMap(id => shown.filter(section => section.id === id));
-    return items.length ? <section key={group.title} className="r-settings-group"><h2>{group.title}</h2><div className="r-directory">
+    const withPeople = people && group.title === 'Data & administration';
+    return items.length || withPeople ? <section key={group.title} className="r-settings-group"><h2>{group.title}</h2><div className="r-directory">
       {items.map(({ id, label, icon: Icon }) => <button type="button" key={id} onClick={() => onSelect(id)}>
         <Icon aria-hidden="true" /><span><strong>{id === 'units' ? 'Units & time' : label}</strong><small>{descriptions[id]}</small></span><ArrowRight aria-hidden="true" />
       </button>)}
+      {withPeople && <Link to="/users">
+        <Users aria-hidden="true" /><span><strong>People &amp; access</strong><small>Accounts, invitations and permissions</small></span><ArrowRight aria-hidden="true" />
+      </Link>}
     </div></section> : null;
   };
   return (
     <div className="r-settings-directory">
       <label className="r-settings-search"><Search aria-hidden="true" /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Find a setting" aria-label="Find a setting" type="search" /></label>
-      {!shown.length && <p className="r-empty" role="status">No settings match “{search}”.</p>}
+      {!shown.length && !people && <p className="r-empty" role="status">No settings match “{search}”.</p>}
       <div className="r-settings-columns"><div>{groups.slice(0, 3).map(renderGroup)}</div><div>{groups.slice(3).map(renderGroup)}{renderGroup(additional)}</div></div>
     </div>
   );

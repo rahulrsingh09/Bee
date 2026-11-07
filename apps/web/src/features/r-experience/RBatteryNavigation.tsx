@@ -5,6 +5,6 @@ export function RBatteryNavigation({ pathname }: { pathname: string }) {
   if (pathname !== '/battery' && pathname !== '/battery/phantom-drain') return null;
   return <nav className="r-battery-navigation" aria-label="Battery sections">
     <Link to="/battery" activeOptions={{ exact: true }}>Battery overview</Link>
-    <Link to="/battery/phantom-drain" activeOptions={{ exact: true }}>Phantom drain</Link>
+    <Link to="/battery/phantom-drain" activeOptions={{ exact: true }}>Parked loss</Link>
   </nav>;
 }

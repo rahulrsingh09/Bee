@@ -20,6 +20,7 @@ Used to ensure full parity with the best-in-class EV trackers.
 | Estimated range | mi / km | Time-series | Based on reported DTE |
 | Battery capacity (rated) | kWh | Static | From vehicle config |
 | Battery capacity (usable) | kWh | Derived | From charge session data |
+| Battery capacity (new baseline) | kWh | Derived | The "new" value for battery health. `GET /v1/battery/health` returns it as `new_capacity_kwh` with `new_capacity_source`. See [New capacity baseline](#new-capacity-baseline). |
 | Degradation % | % | Derived | Usable/rated × 100 |
 | Phantom drain rate | %/hr | Derived | SoC lost while parked/asleep |
 | Phantom drain daily total | % | Derived | Aggregated per day |
@@ -28,6 +29,28 @@ Used to ensure full parity with the best-in-class EV trackers.
 | HV battery thermal event | enum | Time-series | None/Reduced/Forced |
 | 12V battery health | enum | Time-series | Normal/Warning/Critical |
 | Cell voltage min/max | V | Optional | Not always exposed by Rivian |
+
+### New capacity baseline
+
+Battery health % is the usable capacity now divided by the "new" capacity.
+The API selects the "new" capacity in this order:
+
+1. `factory`: the stored vehicle capacity. This is the model default or the value that you set in Settings → Vehicles.
+2. `highest_seen`: the highest capacity in telemetry. The API uses this value only when no stored capacity is above 10 kWh.
+3. `null`: no capacity above 10 kWh is available. Battery health % is then not available.
+
+The `highest_seen` value can hide wear. A vehicle that Riviamigo first sees at 95% of its factory capacity shows 100% health.
+To prevent this, set the factory capacity in Settings → Vehicles.
+
+`GET /v1/battery/health` returns these fields:
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `new_capacity_kwh` | number or null | The "new" capacity baseline, in kWh. |
+| `new_capacity_source` | `"factory"`, `"highest_seen"`, or null | The source of `new_capacity_kwh`. |
+| `usable_new_kwh` | number or null | The same value as `new_capacity_kwh`. Existing dashboards use this field. |
+
+The UI shows the source next to the value, for example "New: 87.9 kWh (factory)" or "New: 91.5 kWh (highest seen)".
 
 ---
 

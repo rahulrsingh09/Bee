@@ -18,12 +18,57 @@ use crate::{
     },
 };
 
-/// Returns the vehicle's stored factory capacity (from vehicles.battery_capacity_wh), falling
-/// back to the max ever observed value in telemetry. Used as the "new" baseline for health %.
-async fn resolve_usable_new_wh(
+/// Smallest capacity, in Wh, that counts as a real pack reading. Smaller values are
+/// placeholders or partial telemetry and must not become the "new" baseline.
+const MIN_PLAUSIBLE_CAPACITY_WH: f64 = 10_000.0;
+
+/// Where the "new" capacity baseline for battery health comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum NewCapacitySource {
+    /// The stored vehicle capacity (`vehicles.battery_capacity_wh`): the model default
+    /// or the value the owner sets in Settings → Vehicles.
+    Factory,
+    /// The highest capacity seen in telemetry. This can hide wear that happened before
+    /// Riviamigo first saw the vehicle.
+    HighestSeen,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct NewCapacityBaseline {
+    wh: f64,
+    source: NewCapacitySource,
+}
+
+fn plausible_capacity_wh(value: Option<f64>) -> Option<f64> {
+    value.filter(|w| w.is_finite() && *w > MIN_PLAUSIBLE_CAPACITY_WH)
+}
+
+/// Picks the "new" capacity baseline: the stored factory capacity when it is plausible,
+/// else the highest observed capacity, else nothing.
+fn select_new_capacity_baseline(
+    stored_wh: Option<f64>,
+    highest_seen_wh: Option<f64>,
+) -> Option<NewCapacityBaseline> {
+    if let Some(wh) = plausible_capacity_wh(stored_wh) {
+        return Some(NewCapacityBaseline {
+            wh,
+            source: NewCapacitySource::Factory,
+        });
+    }
+    plausible_capacity_wh(highest_seen_wh).map(|wh| NewCapacityBaseline {
+        wh,
+        source: NewCapacitySource::HighestSeen,
+    })
+}
+
+/// Resolves the "new" capacity baseline for health % with its source. Reads the stored
+/// factory capacity (vehicles.battery_capacity_wh) first and only queries telemetry for
+/// the highest observed capacity when no plausible factory value exists.
+async fn resolve_new_capacity_baseline(
     pool: &sqlx::PgPool,
     vehicle_id: uuid::Uuid,
-) -> Result<Option<f64>, crate::errors::AppError> {
+) -> Result<Option<NewCapacityBaseline>, crate::errors::AppError> {
     let stored: Option<f64> =
         sqlx::query_scalar("SELECT battery_capacity_wh FROM riviamigo.vehicles WHERE id = $1")
             .bind(vehicle_id)
@@ -31,20 +76,31 @@ async fn resolve_usable_new_wh(
             .await?
             .flatten();
 
-    if let Some(w) = stored.filter(|&w| w > 10000.0) {
-        return Ok(Some(w));
+    if let Some(baseline) = select_new_capacity_baseline(stored, None) {
+        return Ok(Some(baseline));
     }
 
-    let max_ever: Option<f64> = sqlx::query_scalar(
+    let highest_seen: Option<f64> = sqlx::query_scalar(
         "SELECT max(battery_capacity_wh) FROM timeseries.telemetry \
-         WHERE vehicle_id = $1 AND battery_capacity_wh > 10000",
+         WHERE vehicle_id = $1 AND battery_capacity_wh > $2",
     )
     .bind(vehicle_id)
+    .bind(MIN_PLAUSIBLE_CAPACITY_WH)
     .fetch_optional(pool)
     .await?
     .flatten();
 
-    Ok(max_ever)
+    Ok(select_new_capacity_baseline(stored, highest_seen))
+}
+
+/// The "new" capacity baseline in Wh, without its source.
+async fn resolve_usable_new_wh(
+    pool: &sqlx::PgPool,
+    vehicle_id: uuid::Uuid,
+) -> Result<Option<f64>, crate::errors::AppError> {
+    Ok(resolve_new_capacity_baseline(pool, vehicle_id)
+        .await?
+        .map(|baseline| baseline.wh))
 }
 
 pub fn router() -> Router<AppState> {
@@ -248,7 +304,7 @@ async fn get_health(
     require_vehicle_access(&auth, vid)?;
     require_vehicle_read_access(&state.pool, &auth, vid).await?;
 
-    let usable_new_wh = resolve_usable_new_wh(&state.pool, vid).await?;
+    let new_baseline = resolve_new_capacity_baseline(&state.pool, vid).await?;
 
     // Average of daily-peak capacity readings over the last 30 days
     let usable_now_wh: Option<f64> = sqlx::query_scalar(
@@ -278,7 +334,8 @@ async fn get_health(
     .await?;
 
     let usable_now_kwh = usable_now_wh.map(|w| w / 1000.0);
-    let usable_new_kwh = usable_new_wh.map(|w| w / 1000.0);
+    let usable_new_kwh = new_baseline.map(|baseline| baseline.wh / 1000.0);
+    let new_capacity_source = new_baseline.map(|baseline| baseline.source);
     let total_added = charges.total_added_kwh;
     let total_used = charges.total_used_kwh;
     let battery_health_pct = match (usable_now_kwh, usable_new_kwh) {
@@ -297,6 +354,8 @@ async fn get_health(
     Ok(Json(serde_json::json!({
         "usable_now_kwh": usable_now_kwh,
         "usable_new_kwh": usable_new_kwh,
+        "new_capacity_kwh": usable_new_kwh,
+        "new_capacity_source": new_capacity_source,
         "battery_health_pct": battery_health_pct,
         "estimated_degradation_pct": battery_health_pct.map(|pct| (100.0 - pct).max(0.0)),
         "charging_cycles": charging_cycles,
@@ -571,6 +630,65 @@ mod tests {
     }
 
     // ── pure unit tests (no DB needed) ───────────────────────────────────────
+
+    #[test]
+    fn new_capacity_baseline_prefers_stored_factory_capacity() {
+        use super::{select_new_capacity_baseline, NewCapacityBaseline, NewCapacitySource};
+        assert_eq!(
+            select_new_capacity_baseline(Some(87_900.0), Some(91_000.0)),
+            Some(NewCapacityBaseline {
+                wh: 87_900.0,
+                source: NewCapacitySource::Factory,
+            })
+        );
+    }
+
+    #[test]
+    fn new_capacity_baseline_falls_back_to_highest_seen() {
+        use super::{select_new_capacity_baseline, NewCapacityBaseline, NewCapacitySource};
+        let expected = Some(NewCapacityBaseline {
+            wh: 91_500.0,
+            source: NewCapacitySource::HighestSeen,
+        });
+        assert_eq!(select_new_capacity_baseline(None, Some(91_500.0)), expected);
+        // A stored value at or below the plausibility floor is not a factory capacity.
+        assert_eq!(
+            select_new_capacity_baseline(Some(10_000.0), Some(91_500.0)),
+            expected
+        );
+        assert_eq!(
+            select_new_capacity_baseline(Some(f64::NAN), Some(91_500.0)),
+            expected
+        );
+    }
+
+    #[test]
+    fn new_capacity_baseline_is_none_without_plausible_values() {
+        use super::select_new_capacity_baseline;
+        assert_eq!(select_new_capacity_baseline(None, None), None);
+        assert_eq!(select_new_capacity_baseline(Some(0.0), Some(9_500.0)), None);
+        assert_eq!(
+            select_new_capacity_baseline(None, Some(f64::INFINITY)),
+            None
+        );
+    }
+
+    #[test]
+    fn new_capacity_source_serializes_as_snake_case() {
+        use super::NewCapacitySource;
+        assert_eq!(
+            serde_json::to_value(NewCapacitySource::Factory).unwrap(),
+            serde_json::json!("factory")
+        );
+        assert_eq!(
+            serde_json::to_value(NewCapacitySource::HighestSeen).unwrap(),
+            serde_json::json!("highest_seen")
+        );
+        assert_eq!(
+            serde_json::to_value(None::<NewCapacitySource>).unwrap(),
+            serde_json::Value::Null
+        );
+    }
 
     #[test]
     fn lifetime_time_bounds_use_epoch_instead_of_default_window() {

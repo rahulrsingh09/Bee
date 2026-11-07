@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const metricMocks = vi.hoisted(() => ({
@@ -63,6 +63,7 @@ const metricMocks = vi.hoisted(() => ({
     coverage_percent: number;
   },
   vehicleStatus: null as null | Record<string, unknown>,
+  chargingFetching: false,
 }));
 
 vi.mock('@riviamigo/hooks', async (importOriginal) => {
@@ -95,17 +96,31 @@ vi.mock('@riviamigo/hooks', async (importOriginal) => {
     },
     useEfficiencySummary: () => ({ data: metricMocks.efficiencySummary, isLoading: false }),
     useBatteryHealth: () => ({ data: metricMocks.batteryHealth, isLoading: false }),
-    useChargingSummary: () => ({ data: metricMocks.chargingSummary, isLoading: false }),
+    useChargingSummary: () => ({
+      data: metricMocks.chargingSummary,
+      isLoading: metricMocks.chargingFetching && metricMocks.chargingSummary == null,
+      isFetching: metricMocks.chargingFetching,
+    }),
     useCurrentVehicleStatus: () => ({ data: metricMocks.vehicleStatus, isLoading: false }),
     useMetricCatalog: () => ({ data: [] }),
   };
 });
 
-import { DashboardRenderer } from '@riviamigo/dashboards';
+import {
+  DashboardRenderer,
+  DEFAULT_DASHBOARDS,
+  getWidget,
+  getWidgetEditorMeta,
+  SensorChipSummary,
+} from '@riviamigo/dashboards';
 import { MiniSparkline, resolveCanvasColor } from '@riviamigo/ui/charts';
 import { applyThemePreferences } from '@riviamigo/ui/lib/theme';
 import type { DashboardConfig } from '@riviamigo/dashboards';
-import { getSensorDefinition, resolveSensorColorToken } from '../../../../packages/dashboards/src/widgets/sensor/sensorDefinitions';
+import {
+  getSensorDefinition,
+  resolveSensorColorToken,
+  SENSOR_DEFINITIONS,
+} from '../../../../packages/dashboards/src/widgets/sensor/sensorDefinitions';
 
 const defaultCtx = {
   vehicleId: 'vehicle-1',
@@ -155,6 +170,15 @@ function config(
   };
 }
 
+/** Numbers render in primary ink: no series colour on the value itself. */
+function expectPrimaryInkValue(chip: HTMLElement) {
+  const valueNode = chip.querySelector<HTMLElement>('[data-sensor-value]');
+  expect(valueNode).not.toBeNull();
+  expect(valueNode).toHaveClass('text-fg');
+  expect(valueNode).not.toHaveClass('text-accent');
+  expect(valueNode!.style.color).toBe('');
+}
+
 describe('dashboard sensor chips', () => {
   beforeEach(() => {
     applyThemePreferences({ mode: 'dark', palette: 'classic' });
@@ -181,6 +205,7 @@ describe('dashboard sensor chips', () => {
       coverage_percent: 100,
     };
     metricMocks.vehicleStatus = null;
+    metricMocks.chargingFetching = false;
     metricMocks.metricSeriesCalls = [];
     metricMocks.metricBatchCalls = [];
   });
@@ -311,7 +336,7 @@ describe('dashboard sensor chips', () => {
     const chip = screen.getByTestId('sensor-chip');
     expect(chip).toHaveAttribute('style', expect.stringContaining('border-color: var(--rm-series-07)'));
     expect(chip.outerHTML).toContain('color: var(--rm-series-07)');
-    expect(chip.querySelector('.font-mono')).toHaveAttribute('style', expect.stringContaining('var(--rm-series-07-text)'));
+    expectPrimaryInkValue(chip);
   });
 
   it('resolves theme tokens for Canvas without replacing an explicit editor color', () => {
@@ -385,17 +410,23 @@ describe('dashboard sensor chips', () => {
       ['total_miles', 'series-03'],
       ['avg_efficiency', 'series-04'],
     ] as const) {
+      metricMocks.value = { ...metricMocks.value, metric, value: 42, unit: null, label: metric };
       const view = render(
         <DashboardRenderer config={config(false, false, {}, metric, metric)} ctx={defaultCtx} />
       );
 
-      expect(view.container.querySelector('[data-testid="sensor-chip"]')?.outerHTML).toContain(`color: var(--rm-${token}-text)`);
+      const chip = view.container.querySelector<HTMLElement>('[data-testid="sensor-chip"]')!;
+      // The series colour stays on the small marks (icon, sprite, border) only.
+      expect(resolveSensorColorToken(metric, getSensorDefinition(metric), 'rad')).toBe(token);
+      expect(chip.outerHTML).not.toContain(`var(--rm-${token}-text)`);
+      expectPrimaryInkValue(chip);
       view.unmount();
     }
   });
 
   it('keeps light RAD Total Trips bright for graphics and readable for the value', () => {
     applyThemePreferences({ mode: 'light', palette: 'rad' });
+    metricMocks.value = { ...metricMocks.value, metric: 'total_trips', value: 123, unit: null, label: 'Total Trips' };
 
     render(
       <DashboardRenderer
@@ -407,7 +438,7 @@ describe('dashboard sensor chips', () => {
     const chip = screen.getByTestId('sensor-chip');
     expect(chip).toHaveAttribute('style', expect.stringContaining('border-color: var(--rm-series-02)'));
     expect(chip.outerHTML).toContain('color: var(--rm-series-02)');
-    expect(chip.querySelector('.font-mono')).toHaveAttribute('style', expect.stringContaining('var(--rm-series-02-text)'));
+    expectPrimaryInkValue(chip);
   });
 
   it('renders automatic source-chip colors and readable light values for RAD', () => {
@@ -439,25 +470,25 @@ describe('dashboard sensor chips', () => {
     };
 
     for (const [definitionId, title, token] of [
-      ['charging_total_energy', 'Total Energy', 'series-01'],
+      ['charging_total_energy', 'Energy added', 'series-01'],
       ['battery_health_pct', 'Battery Health', 'series-05'],
     ] as const) {
       const view = render(<DashboardRenderer config={config(false, true, {}, definitionId, title)} ctx={defaultCtx} />);
       const chip = screen.getByTestId('sensor-chip');
       expect(chip.outerHTML).toContain(`var(--rm-${token})`);
-      expect(chip.querySelector('.font-mono')).toHaveAttribute('style', expect.stringContaining(`var(--rm-${token}-text)`));
+      expectPrimaryInkValue(chip);
       view.unmount();
     }
   });
 
-  it('shows an empty sprite state for sparse bounded range data instead of falling back to latest', () => {
+  it('hides a bounded range tile with no data instead of falling back to latest', () => {
     metricMocks.series = [];
 
     render(<DashboardRenderer config={config(true)} ctx={defaultCtx} />);
 
-    const layer = screen.getByTestId('sensor-sprite-layer');
-    expect(layer.querySelector('[data-sparkline-state="empty"]')).not.toBeNull();
-    expect(layer.querySelectorAll('path, rect').length).toBeGreaterThan(0);
+    expect(screen.queryByTestId('sensor-chip')).not.toBeInTheDocument();
+    expect(screen.getByTestId('sensor-chip-hidden')).toHaveAttribute('data-sensor-empty', 'hidden');
+    expect(document.body).not.toHaveTextContent('12,345');
   });
 
   it('keeps a visible sprite for sparse lifetime data', () => {
@@ -480,15 +511,15 @@ describe('dashboard sensor chips', () => {
     expect(layer.querySelector('canvas')).not.toBeNull();
   });
 
-  it('shows an empty sprite state when both series and value are missing', () => {
+  it('hides the tile when both series and value are missing', () => {
     metricMocks.value = { ...metricMocks.value, value: null };
     metricMocks.series = [];
 
     render(<DashboardRenderer config={config(true)} ctx={defaultCtx} />);
 
-    const layer = screen.getByTestId('sensor-sprite-layer');
-    expect(layer.querySelector('[data-sparkline-state="empty"]')).not.toBeNull();
-    expect(layer.querySelectorAll('path, rect').length).toBeGreaterThan(0);
+    expect(screen.queryByTestId('sensor-chip')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sensor-sprite-layer')).not.toBeInTheDocument();
+    expect(screen.getByTestId('sensor-chip-hidden')).toBeInTheDocument();
   });
 
   it('shows the weighted avg efficiency value instead of the latest series point', () => {
@@ -582,7 +613,7 @@ describe('dashboard sensor chips', () => {
 
     render(
       <DashboardRenderer
-        config={config(false, false, {}, 'efficiency_coverage', 'Consumption Data Coverage')}
+        config={config(false, false, {}, 'efficiency_coverage', 'Efficiency data coverage')}
         ctx={defaultCtx}
       />
     );
@@ -590,7 +621,7 @@ describe('dashboard sensor chips', () => {
     expect(screen.getByText('99%')).toBeInTheDocument();
     expect(screen.getByText('1,200 mi / 1,211 mi')).toBeInTheDocument();
 
-    fireEvent.focus(screen.getByRole('button', { name: 'Consumption Data Coverage help' }));
+    fireEvent.focus(screen.getByRole('button', { name: 'Efficiency data coverage help' }));
     expect(screen.getByRole('tooltip')).toHaveTextContent('Share of miles in this range');
   });
 
@@ -611,9 +642,9 @@ describe('dashboard sensor chips', () => {
       coverage_percent: 99,
     };
 
-    render(<DashboardRenderer config={config(false, false, {}, 'avg_efficiency', 'Avg Consumption')} ctx={defaultCtx} />);
+    render(<DashboardRenderer config={config(false, false, {}, 'avg_efficiency', 'Efficiency (net)')} ctx={defaultCtx} />);
 
-    fireEvent.focus(screen.getByRole('button', { name: 'Avg Consumption help' }));
+    fireEvent.focus(screen.getByRole('button', { name: 'Efficiency (net) help' }));
     expect(screen.getByRole('tooltip')).toHaveTextContent('Total estimated battery energy used ÷ miles driven');
     expect(screen.getByRole('tooltip')).toHaveTextContent('1,200 mi of 1,211 mi');
   });
@@ -967,5 +998,207 @@ describe('dashboard sensor chips', () => {
     );
 
     expect(screen.getByText('1 open')).toBeInTheDocument();
+  });
+});
+
+type ChargingSummaryFixture = NonNullable<typeof metricMocks.chargingSummary>;
+type SessionFixture = { energy_kwh: number; charger_type: 'AC' | 'DC' | null };
+
+/**
+ * Mirrors the `/charging/summary` aggregate: every session counts, and each
+ * session adds its energy to the AC or DC bucket of its charger type (the same
+ * per-session type that `/charging/chart-series` stacks in the Energy-by-day
+ * chart).
+ */
+function summaryFromSessions(sessions: SessionFixture[]): ChargingSummaryFixture {
+  const sum = (rows: SessionFixture[]) => rows.reduce((total, row) => total + row.energy_kwh, 0);
+  return {
+    session_count: sessions.length,
+    total_energy_kwh: sum(sessions),
+    total_cost_usd: null,
+    home_kwh: 0,
+    away_kwh: 0,
+    unknown_location_kwh: 0,
+    ac_kwh: sum(sessions.filter((row) => row.charger_type === 'AC')),
+    dc_kwh: sum(sessions.filter((row) => row.charger_type === 'DC')),
+    charging_cycles: 1,
+    charging_efficiency_pct: null,
+    max_charge_rate_kw: null,
+    max_charge_limit_pct: null,
+  };
+}
+
+function chargingDefaultSensorConfig(): DashboardConfig {
+  const charging = DEFAULT_DASHBOARDS.find((dashboard) => dashboard.slug === 'charging')!;
+  return {
+    ...charging,
+    // Always-visible tiles only; plugged/unplugged tiles depend on live status.
+    widgets: charging.widgets.filter(
+      (widget) => widget.componentType === 'sensor' && !(widget.visibility?.length),
+    ),
+  };
+}
+
+function tileByTitle(title: string) {
+  const chip = screen
+    .getAllByTestId('sensor-chip')
+    .find((element) => element.querySelector('p')?.textContent?.trim().startsWith(title));
+  expect(chip, title).toBeDefined();
+  return chip!;
+}
+
+describe('sensor tile rules', () => {
+  beforeEach(() => {
+    applyThemePreferences({ mode: 'dark', palette: 'rad' });
+    metricMocks.chargingSummary = null;
+    metricMocks.chargingFetching = false;
+  });
+
+  it('keeps one Charges tile and shows N charges and D ÷ total DC share from one session set', () => {
+    const sessions: SessionFixture[] = [
+      { energy_kwh: 30, charger_type: 'DC' },
+      { energy_kwh: 20, charger_type: 'AC' },
+      { energy_kwh: 50, charger_type: 'DC' },
+      { energy_kwh: 25, charger_type: 'AC' },
+    ];
+    const n = sessions.length;
+    const dcEnergy = 80;
+    const total = 125;
+    metricMocks.chargingSummary = summaryFromSessions(sessions);
+
+    const config = chargingDefaultSensorConfig();
+    const countTiles = config.widgets.filter(
+      (widget) => getSensorDefinition(widget.definitionId)?.valuePath === 'session_count',
+    );
+    expect(countTiles.map((widget) => [widget.definitionId, widget.title])).toEqual([
+      ['charging_cycles_summary', 'Charges'],
+    ]);
+
+    render(<DashboardRenderer config={config} ctx={defaultCtx} />);
+
+    expect(screen.queryByText('Sessions')).not.toBeInTheDocument();
+    expect(tileByTitle('Charges').querySelector('[data-sensor-value]')).toHaveTextContent(String(n));
+    const dcTile = tileByTitle('DC fast');
+    expect(dcTile.querySelector('[data-sensor-value]')).toHaveTextContent(
+      `${Math.round((dcEnergy / total) * 100)}%`,
+    );
+    expect(dcTile).toHaveTextContent('AC 45.0 kWh / DC 80.0 kWh');
+    expect(tileByTitle('Energy added').querySelector('[data-sensor-value]')).toHaveTextContent('125.0 kWh');
+    expect(tileByTitle('Charges')).toHaveTextContent('Full cycles: 1');
+  });
+
+  it('never renders a dash value: cost shows an action, other empty tiles hide', () => {
+    metricMocks.chargingSummary = {
+      ...summaryFromSessions([{ energy_kwh: 12, charger_type: 'AC' }]),
+      home_kwh: 0,
+      away_kwh: 0,
+      unknown_location_kwh: 0,
+    };
+
+    render(<DashboardRenderer config={chargingDefaultSensorConfig()} ctx={defaultCtx} />);
+
+    const costTile = tileByTitle('Total Cost');
+    const action = within(costTile).getByRole('link', { name: 'Add a home price' });
+    expect(action).toHaveAttribute('href', '/settings?section=places');
+    expect(costTile).toHaveAttribute('data-sensor-empty', 'action');
+    expect(costTile.querySelector('[data-sensor-value]')).toBeNull();
+    // Home share is 0 ÷ 0: no value, so the tile hides.
+    expect(screen.queryByText('Home Charging')).not.toBeInTheDocument();
+    expect(screen.getAllByTestId('sensor-chip-hidden')).toHaveLength(1);
+    for (const chip of screen.getAllByTestId('sensor-chip')) {
+      const value = chip.querySelector('[data-sensor-value]')?.textContent?.trim();
+      expect(value === '-' || value === '—').toBe(false);
+    }
+  });
+
+  it('keeps an empty tile visible with a reason line in the dashboard editor', () => {
+    metricMocks.value = { ...metricMocks.value, value: null };
+    metricMocks.series = [];
+
+    render(
+      <DashboardRenderer
+        config={config(true)}
+        ctx={{ ...defaultCtx, visibilityState: { 'vehicle-connection': 'unplugged' } }}
+      />,
+    );
+
+    const chip = screen.getByTestId('sensor-chip');
+    expect(chip).toHaveAttribute('data-sensor-empty', 'reason');
+    expect(within(chip).getByTestId('sensor-empty-line')).toHaveTextContent('No data in this range');
+    expect(chip.querySelector('[data-sensor-value]')).toBeNull();
+    expect(screen.queryByTestId('sensor-sprite-layer')).not.toBeInTheDocument();
+  });
+
+  it('shows a busy skeleton line while summary data loads', () => {
+    metricMocks.chargingFetching = true;
+
+    render(<DashboardRenderer config={config(false, false, {}, 'charging_total_energy', 'Energy added')} ctx={defaultCtx} />);
+
+    const chip = screen.getByTestId('sensor-chip');
+    expect(chip).toHaveAttribute('aria-busy', 'true');
+    expect(within(chip).getByTestId('sensor-value-skeleton')).toHaveAttribute('aria-hidden', 'true');
+    expect(chip).not.toHaveTextContent('...');
+  });
+
+  it('gives the small help icon a 44 × 44 hit area', () => {
+    render(<DashboardRenderer config={config(false, false, {}, 'efficiency_coverage', 'Efficiency data coverage')} ctx={defaultCtx} />);
+
+    const button = screen.getByRole('button', { name: 'Efficiency data coverage help' });
+    const hitArea = within(button).getByTestId('sensor-help-hit-area');
+    expect(hitArea).toHaveClass('absolute', 'h-11', 'w-11');
+    expect(hitArea).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('hides the duplicate count tile from the editor palette but still renders saved layouts', () => {
+    expect(getWidgetEditorMeta(getWidget('sensor', 'charging_sessions_summary')).deprecated).toBe(true);
+    expect(getWidgetEditorMeta(getWidget('sensor', 'charging_cycles_summary')).deprecated).toBe(false);
+  });
+
+  it('uses glossary terms in tile labels', () => {
+    const titles = SENSOR_DEFINITIONS.map((definition) => definition.title);
+    for (const title of titles) {
+      expect(title, title).not.toMatch(/Session|Consumption|\bSOC\b|\bSoC\b|Total Energy|Energy Charged|->|Avg \//);
+    }
+    expect(getSensorDefinition('charging_avg_session')?.title).toBe('Average per charge');
+    expect(getSensorDefinition('avg_efficiency')?.title).toBe('Efficiency (net)');
+    expect(getSensorDefinition('charging_total_energy')?.title).toBe('Energy added');
+    expect(getSensorDefinition('charging_dc_share')?.title).toBe('DC fast');
+    const chargingTitles = DEFAULT_DASHBOARDS.find((dashboard) => dashboard.slug === 'charging')!
+      .widgets.filter((widget) => widget.componentType === 'sensor')
+      .map((widget) => widget.title);
+    expect(chargingTitles).not.toContain('Sessions');
+    expect(chargingTitles).not.toContain('Avg / Session');
+    expect(chargingTitles).not.toContain('Total Energy');
+  });
+});
+
+describe('SensorChipSummary tile rules', () => {
+  beforeEach(() => {
+    applyThemePreferences({ mode: 'light', palette: 'rad' });
+  });
+
+  it.each(['-', '—', '', null])('shows a reason line instead of the %j placeholder', (value) => {
+    render(<SensorChipSummary title="Avg. Speed" value={value} dataAccent="series-03" valueColor="data" />);
+
+    const chip = screen.getByTestId('sensor-chip');
+    expect(chip.querySelector('[data-sensor-value]')).toBeNull();
+    expect(within(chip).getByTestId('sensor-empty-line')).toHaveTextContent('No data');
+  });
+
+  it('renders the number in primary ink with the series colour only on the icon', () => {
+    render(<SensorChipSummary title="Distance" value="12.4 mi" dataAccent="series-03" valueColor="data" />);
+
+    const chip = screen.getByTestId('sensor-chip');
+    expectPrimaryInkValue(chip);
+    expect(chip.outerHTML).not.toContain('var(--rm-series-03-text)');
+  });
+
+  it('shows a busy skeleton line while loading', () => {
+    render(<SensorChipSummary title="Distance" value="12.4 mi" loading />);
+
+    const chip = screen.getByTestId('sensor-chip');
+    expect(chip).toHaveAttribute('aria-busy', 'true');
+    expect(within(chip).getByTestId('sensor-value-skeleton')).toBeInTheDocument();
+    expect(chip).not.toHaveTextContent('12.4 mi');
   });
 });

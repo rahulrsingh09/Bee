@@ -1,3 +1,34 @@
+/**
+ * Shared sensor tile definitions.
+ *
+ * Tile rules (UX release 2026-11-07, review section 3.11):
+ * - No placeholder value. A tile with no value hides in dashboard view. A
+ *   definition can set `emptyState` to show a short reason or action line
+ *   instead (for example, Total Cost links to Settings → Places to add a home
+ *   price). The dashboard editor always shows the tile with its reason line,
+ *   so an editor can still select it. Loading shows a skeleton line and sets
+ *   `aria-busy` on the tile.
+ * - The number renders in primary ink (`text-fg`). `valueColor` and
+ *   `dataAccent` no longer colour the number. The series colour stays on
+ *   small marks only: the icon, the sprite, and the accent border.
+ *   Vehicle-status tones (success, warning, danger, info) still colour status
+ *   values, because they are status, not data categories.
+ * - Labels follow the copy glossary: Charge (not Session), Energy added,
+ *   Efficiency (not Consumption), Battery (not SoC).
+ *
+ * Charging contract (review section 3.4):
+ * - One "Charges" tile (`charging_cycles_summary`) shows
+ *   `/charging/summary.session_count`, the same rows that the charging list
+ *   totals. `charging_sessions_summary` is a duplicate. It stays registered
+ *   only so that saved layouts still render; the editor palette hides it.
+ * - The DC share tile reads `/charging/summary` `dc_kwh ÷ total_energy_kwh`.
+ *   Since the DC fix (commits 90ad098 and fdac387), the summary and the
+ *   Energy-by-day chart (`/charging/chart-series` daily_sessions) both classify
+ *   each session with the one `charger_type_sql!` rule over the same
+ *   `started_at` window. Both sum the same energy expression
+ *   (`kwh_added`, else `energy_added_wh / 1000`). So the tile and the stacked
+ *   DC bars read the same session-classified energy.
+ */
 import type { MiniSparklineType } from '@riviamigo/ui/charts';
 import type { ChartColorDefinition, ChartColorToken, ThemePalette, TimeframeScope } from '@riviamigo/types';
 
@@ -8,7 +39,28 @@ export type SensorIconKey = string;
 export type SensorChartType = MiniSparklineType | 'daily_delta' | 'none';
 export type SensorDataSource = 'metric' | 'batteryHealth' | 'chargingSummary' | 'efficiencySummary' | 'vehicleStatus';
 export type SensorDataAccent = Extract<ChartColorToken, `series-${string}`>;
+/**
+ * Kept for saved layouts and the editor. The number always renders in primary
+ * ink; this option no longer changes the number colour (see the file header).
+ */
 export type SensorValueColor = 'accent' | 'data' | 'default';
+
+/** In-app destination for an empty-tile action. Only Settings sections today. */
+export interface SensorEmptyAction {
+  label: string;
+  to: '/settings';
+  search: { section: 'places' | 'charging' | 'vehicles' };
+}
+
+/**
+ * What a tile shows when it has no value. Without an `emptyState`, the tile
+ * hides in dashboard view.
+ */
+export interface SensorEmptyState {
+  /** Short reason line, for example "No price yet". */
+  message?: string;
+  action?: SensorEmptyAction;
+}
 
 export interface SensorDefinition {
   id: string;
@@ -37,27 +89,35 @@ export interface SensorDefinition {
   timeframeScope?: TimeframeScope;
   /** Cumulative metrics (always-rising) auto-default to daily-delta sprite. */
   cumulative?: boolean;
+  /** Reason or action line when there is no value. Absent = hide the tile. */
+  emptyState?: SensorEmptyState;
+  /** Still renders in saved layouts, but the editor palette hides it. */
+  deprecated?: boolean;
 }
+
+const ADD_HOME_PRICE: SensorEmptyState = {
+  action: { label: 'Add a home price', to: '/settings', search: { section: 'places' } },
+};
 
 export const SENSOR_DEFINITIONS: SensorDefinition[] = [
   { id: 'total_miles', title: 'Total Miles', metric: 'total_miles', icon: 'lucide:route', chartType: 'daily_delta', valueMode: 'latest', valueColor: 'data', dataAccent: 'series-03', accent: true, cumulative: true },
   { id: 'total_trips', title: 'Total Trips', metric: 'total_trips', icon: 'lucide:calendar-days', chartType: 'bar', valueMode: 'latest', valueColor: 'data', dataAccent: 'series-02', cumulative: true },
-  { id: 'energy_charged', title: 'Energy Charged', metric: 'energy_charged', icon: 'lucide:bolt', chartType: 'daily_delta', valueMode: 'latest', valueColor: 'data', dataAccent: 'series-01', cumulative: true },
-  { id: 'avg_efficiency', title: 'Avg Consumption', metric: 'avg_efficiency', icon: 'lucide:gauge', chartType: 'line', valueMode: 'latest', valueColor: 'data', dataAccent: 'series-04', helpText: 'Total estimated battery energy used ÷ miles driven, distance-weighted for the selected range.' },
-  { id: 'avg_gross_efficiency', title: 'Avg Consumption (gross)', metric: 'avg_gross_efficiency', icon: 'lucide:zap', chartType: 'line', valueMode: 'latest', valueColor: 'data', dataAccent: 'series-05' },
-  { id: 'efficiency_coverage', title: 'Consumption Data Coverage', dataSource: 'efficiencySummary', valuePath: 'coverage_percent', unit: '%', inlineSecondaryTemplate: '[efficiency_miles:mi] / [total_miles:mi]', icon: 'lucide:database-zap', chartType: 'none', valueMode: 'latest', valueColor: 'default', helpText: 'Share of miles in this range with enough battery data to calculate average consumption. Trips without a consumption estimate are excluded from that average.' },
+  { id: 'energy_charged', title: 'Energy added', metric: 'energy_charged', icon: 'lucide:bolt', chartType: 'daily_delta', valueMode: 'latest', valueColor: 'data', dataAccent: 'series-01', cumulative: true },
+  { id: 'avg_efficiency', title: 'Efficiency (net)', metric: 'avg_efficiency', icon: 'lucide:gauge', chartType: 'line', valueMode: 'latest', valueColor: 'data', dataAccent: 'series-04', helpText: 'Total estimated battery energy used ÷ miles driven, distance-weighted for the selected range.' },
+  { id: 'avg_gross_efficiency', title: 'Efficiency (gross)', metric: 'avg_gross_efficiency', icon: 'lucide:zap', chartType: 'line', valueMode: 'latest', valueColor: 'data', dataAccent: 'series-05' },
+  { id: 'efficiency_coverage', title: 'Efficiency data coverage', dataSource: 'efficiencySummary', valuePath: 'coverage_percent', unit: '%', inlineSecondaryTemplate: '[efficiency_miles:mi] / [total_miles:mi]', icon: 'lucide:database-zap', chartType: 'none', valueMode: 'latest', valueColor: 'default', helpText: 'Share of miles in this range with enough battery data to calculate the average efficiency. Trips without an efficiency estimate are not in that average.' },
   { id: 'avg_outside_temp_c', title: 'Avg Outside (estimated)', metric: 'avg_outside_temp_c', icon: 'lucide:thermometer', chartType: 'line', valueMode: 'latest', valueColor: 'data', dataAccent: 'series-06' },
   { id: 'trip_miles', title: 'Miles Driven', metric: 'trip_miles', icon: 'lucide:map', chartType: 'line', valueMode: 'latest', valueColor: 'data', dataAccent: 'series-03', accent: true },
   { id: 'avg_trip_duration', title: 'Avg Duration', metric: 'avg_trip_duration', icon: 'lucide:clock-3', chartType: 'bar', valueMode: 'latest' },
-  { id: 'battery_level', title: 'Current SOC', metric: 'battery_level', icon: 'lucide:battery', chartType: 'area', valueMode: 'latest', accent: true },
+  { id: 'battery_level', title: 'Battery', metric: 'battery_level', icon: 'lucide:battery', chartType: 'area', valueMode: 'latest', accent: true },
   { id: 'range_miles', title: 'Estimated Range', metric: 'range_miles', icon: 'lucide:route', chartType: 'area', valueMode: 'latest' },
   { id: 'odometer_miles', title: 'Odometer', metric: 'odometer_miles', icon: 'lucide:route', chartType: 'daily_delta', valueMode: 'latest', cumulative: true },
   { id: 'outside_temp_c', title: 'Outside Temp', metric: 'outside_temp_c', icon: 'lucide:thermometer', chartType: 'line', valueMode: 'latest' },
   { id: 'speed_mph', title: 'Speed', metric: 'speed_mph', icon: 'lucide:gauge', chartType: 'line', valueMode: 'latest' },
   { id: 'power_kw', title: 'Power', metric: 'power_kw', icon: 'lucide:zap', chartType: 'line', valueMode: 'latest' },
-  { id: 'charging_sessions', title: 'Charging Sessions', metric: 'charging_sessions', icon: 'lucide:calendar-days', chartType: 'bar', valueMode: 'latest' },
-  { id: 'total_cost', title: 'Total Cost', metric: 'total_cost', icon: 'lucide:activity', chartType: 'daily_delta', valueMode: 'latest', cumulative: true },
-  { id: 'avg_session_energy', title: 'Avg Session', metric: 'avg_session_energy', icon: 'lucide:bolt', chartType: 'bar', valueMode: 'latest' },
+  { id: 'charging_sessions', title: 'Charges', metric: 'charging_sessions', icon: 'lucide:calendar-days', chartType: 'bar', valueMode: 'latest' },
+  { id: 'total_cost', title: 'Total Cost', metric: 'total_cost', icon: 'lucide:activity', chartType: 'daily_delta', valueMode: 'latest', cumulative: true, emptyState: ADD_HOME_PRICE },
+  { id: 'avg_session_energy', title: 'Average per charge', metric: 'avg_session_energy', icon: 'lucide:bolt', chartType: 'bar', valueMode: 'latest' },
   { id: 'battery_health_pct', title: 'Battery Health', dataSource: 'batteryHealth', valuePath: 'battery_health_pct', unit: '%', icon: 'lucide:shield-check', chartType: 'none', valueMode: 'latest', accent: true, valueColor: 'data', dataAccent: 'series-05', timeframeScope: 'current' },
   { id: 'estimated_degradation_pct', title: 'Estimated Degradation', dataSource: 'batteryHealth', valuePath: 'estimated_degradation_pct', unit: '%', icon: 'lucide:trending-down', chartType: 'none', valueMode: 'latest', valueColor: 'data', dataAccent: 'series-06', timeframeScope: 'current' },
   {
@@ -98,16 +158,16 @@ export const SENSOR_DEFINITIONS: SensorDefinition[] = [
   { id: 'charging_cycles_health', title: 'Charging Cycles', dataSource: 'batteryHealth', valuePath: 'charging_cycles', fallbackValuePath: 'charge_count', icon: 'lucide:refresh-ccw', chartType: 'none', valueMode: 'latest', valueColor: 'data', dataAccent: 'series-13', timeframeScope: 'lifetime' },
   { id: 'battery_energy_added', title: 'Energy Added', dataSource: 'batteryHealth', valuePath: 'total_energy_added_kwh', unit: 'kWh', icon: 'lucide:bolt', chartType: 'none', valueMode: 'latest', valueColor: 'data', dataAccent: 'series-01', timeframeScope: 'lifetime' },
   { id: 'battery_charge_efficiency', title: 'Charge Efficiency', dataSource: 'batteryHealth', valuePath: 'charging_efficiency_pct', unit: '%', icon: 'lucide:zap', chartType: 'none', valueMode: 'latest', valueColor: 'data', dataAccent: 'series-04', timeframeScope: 'lifetime' },
-  { id: 'charging_sessions_summary', title: 'Sessions', dataSource: 'chargingSummary', valuePath: 'session_count', icon: 'lucide:calendar-days', chartType: 'none', valueMode: 'latest', valueColor: 'data', dataAccent: 'series-02' },
-  { id: 'charging_total_energy', title: 'Total Energy', dataSource: 'chargingSummary', valuePath: 'total_energy_kwh', unit: 'kWh', icon: 'lucide:bolt', chartType: 'none', valueMode: 'latest', accent: true, valueColor: 'data', dataAccent: 'series-01' },
-  { id: 'charging_total_cost', title: 'Total Cost', dataSource: 'chargingSummary', valuePath: 'total_cost_usd', unit: 'USD', icon: 'lucide:dollar-sign', chartType: 'none', valueMode: 'latest', valueColor: 'data', dataAccent: 'series-08' },
-  { id: 'charging_avg_session', title: 'Avg / Session', dataSource: 'chargingSummary', valueFormula: '[total_energy_kwh] / [session_count]', unit: 'kWh', icon: 'lucide:zap', chartType: 'none', valueMode: 'latest', valueColor: 'data', dataAccent: 'series-01' },
-  { id: 'charging_cycles_summary', title: 'Charges', dataSource: 'chargingSummary', valuePath: 'session_count', secondaryTemplate: '[charging_cycles:int] cycles', icon: 'lucide:refresh-cw', chartType: 'none', valueMode: 'latest', valueColor: 'data', dataAccent: 'series-13' },
+  { id: 'charging_sessions_summary', title: 'Charges', deprecated: true, dataSource: 'chargingSummary', valuePath: 'session_count', icon: 'lucide:calendar-days', chartType: 'none', valueMode: 'latest', valueColor: 'data', dataAccent: 'series-02' },
+  { id: 'charging_total_energy', title: 'Energy added', dataSource: 'chargingSummary', valuePath: 'total_energy_kwh', unit: 'kWh', icon: 'lucide:bolt', chartType: 'none', valueMode: 'latest', accent: true, valueColor: 'data', dataAccent: 'series-01' },
+  { id: 'charging_total_cost', title: 'Total Cost', dataSource: 'chargingSummary', valuePath: 'total_cost_usd', unit: 'USD', icon: 'lucide:dollar-sign', chartType: 'none', valueMode: 'latest', valueColor: 'data', dataAccent: 'series-08', emptyState: ADD_HOME_PRICE },
+  { id: 'charging_avg_session', title: 'Average per charge', dataSource: 'chargingSummary', valueFormula: '[total_energy_kwh] / [session_count]', unit: 'kWh', icon: 'lucide:zap', chartType: 'none', valueMode: 'latest', valueColor: 'data', dataAccent: 'series-01' },
+  { id: 'charging_cycles_summary', title: 'Charges', dataSource: 'chargingSummary', valuePath: 'session_count', secondaryTemplate: 'Full cycles: [charging_cycles:int]', icon: 'lucide:refresh-cw', chartType: 'none', valueMode: 'latest', valueColor: 'data', dataAccent: 'series-13' },
   { id: 'charging_efficiency_summary', title: 'Charge Efficiency', dataSource: 'chargingSummary', valuePath: 'charging_efficiency_pct', unit: '%', icon: 'lucide:activity', chartType: 'none', valueMode: 'latest', valueColor: 'data', dataAccent: 'series-04' },
   { id: 'charging_max_rate', title: 'Max Charge Rate', dataSource: 'chargingSummary', valuePath: 'max_charge_rate_kw', unit: 'kW', icon: 'lucide:gauge', chartType: 'none', valueMode: 'latest', valueColor: 'data', dataAccent: 'series-11' },
   { id: 'charging_max_limit', title: 'Max Charge Limit', dataSource: 'chargingSummary', valuePath: 'max_charge_limit_pct', unit: '%', icon: 'lucide:battery', chartType: 'none', valueMode: 'latest', valueColor: 'data', dataAccent: 'series-10' },
   // Enrichment sensors (require Rivian API backfill — from migration 0024)
-  { id: 'charging_free_sessions', title: 'Free Sessions', dataSource: 'chargingSummary', valuePath: 'free_session_count', icon: 'lucide:gift', chartType: 'none', valueMode: 'latest', valueColor: 'data', dataAccent: 'series-02' },
+  { id: 'charging_free_sessions', title: 'Free charges', dataSource: 'chargingSummary', valuePath: 'free_session_count', icon: 'lucide:gift', chartType: 'none', valueMode: 'latest', valueColor: 'data', dataAccent: 'series-02' },
   { id: 'charging_range_added', title: 'Range Added', dataSource: 'chargingSummary', valuePath: 'total_range_added_km', unit: 'km', icon: 'lucide:route', chartType: 'none', valueMode: 'latest', valueColor: 'data', dataAccent: 'series-03' },
   { id: 'charging_rivian_billed', title: 'Rivian Billed', dataSource: 'chargingSummary', valuePath: 'rivian_paid_total_usd', unit: 'USD', icon: 'lucide:receipt', chartType: 'none', valueMode: 'latest', valueColor: 'data', dataAccent: 'series-08' },
   {
@@ -125,7 +185,7 @@ export const SENSOR_DEFINITIONS: SensorDefinition[] = [
   },
   {
     id: 'charging_dc_share',
-    title: 'DC Fast Charging',
+    title: 'DC fast',
     dataSource: 'chargingSummary',
     valueFormula: '([dc_kwh] / [total_energy_kwh]) * 100',
     unit: '%',
@@ -213,9 +273,9 @@ export function resolveSensorColorToken(
 }
 
 /**
- * Keep sensor graphics vivid while giving light-mode numeric values a readable
- * companion derived from the same selected data accent. Custom colors remain
- * user-owned and are darkened only for the value presentation.
+ * Readable light-mode companion for a selected data accent. Sensor numbers no
+ * longer use it (they render in primary ink); it stays exported for small
+ * text marks that keep the series colour.
  */
 export function resolveSensorValueColor(
   curveColor: ChartColorToken | ChartColorDefinition | undefined,

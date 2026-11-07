@@ -218,7 +218,7 @@ describe('dashboard editability', () => {
   it.each([
     ['dashboard', 'd1000001-0000-0000-0000-000000000002', 15, 14],
     ['battery', 'd2000002-0000-0000-0000-000000000001', 14, 14],
-    ['charging', 'd4000004-0000-0000-0000-000000000001', 13, 13],
+    ['charging', 'd4000004-0000-0000-0000-000000000001', 12, 12],
     ['efficiency', 'd3000003-0000-0000-0000-000000000001', 9, 9],
     ['trips', 'd5000005-0000-0000-0000-000000000005', 6, 6],
   ] as const)('opens widget editing from the shared shell for %s', async (slug, widgetId, widgetCount, editableWidgetCount) => {

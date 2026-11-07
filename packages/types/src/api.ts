@@ -163,6 +163,10 @@ export interface Trip {
   drive_mode: DriveMode | null;
   soc_start: number | null;
   soc_end: number | null;
+  /** Odometer at trip start, in miles. Null when the trip has no reading. Additive server field; older API versions omit it. */
+  start_odometer_mi?: number | null;
+  /** Odometer at trip end, in miles. Null when the trip has no reading. Additive server field; older API versions omit it. */
+  end_odometer_mi?: number | null;
   start_lat?: number | null;
   start_lng?: number | null;
   end_lat?: number | null;
@@ -639,6 +643,10 @@ export interface BatteryHealthSummary {
   total_energy_added_kwh: number | null;
   total_energy_used_kwh: number | null;
   charging_efficiency_pct: number | null;
+  /** "New" capacity baseline for battery health %, in kWh. Same value as usable_new_kwh. */
+  new_capacity_kwh?: number | null;
+  /** Source of new_capacity_kwh: 'factory' = stored vehicle capacity; 'highest_seen' = highest capacity in telemetry (can hide wear); null = no baseline. */
+  new_capacity_source?: 'factory' | 'highest_seen' | null;
 }
 
 export interface BatteryMileagePoint {

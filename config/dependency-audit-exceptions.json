@@ -36,19 +36,15 @@
     "removal": "Remove when i18n-config or age stops depending on basic-toml, or when a vulnerability is reported for it."
   },
   {
-    "ecosystem": "pnpm",
-    "id": "GHSA-ch52-4w7c-c8xp",
-    "package": "http-cache-semantics",
-    "version": "4.2.0",
-    "pathPrefix": "apps__docs>",
-    "pathSuffixes": [
-      ">update-notifier>latest-version>package-json>got>cacheable-request>http-cache-semantics"
-    ],
+    "ecosystem": "cargo",
+    "id": "RUSTSEC-2026-0440",
+    "package": "astral-tokio-tar",
+    "version": "0.6.4",
     "owner": "Release maintainer",
-    "reviewed": "2026-10-05",
-    "expires": "2026-11-05",
-    "source": "https://github.com/kornelski/http-cache-semantics/issues/56",
-    "reason": "Disputed max-stale/shared-cache advisory with no verified upstream fix. Used only by Docusaurus's update-notifier registry client, not an HTTP server or cross-user shared cache; got caching is disabled by default. Version 4.2.1 is unpublished; 4.3.0 does not change the reported max-stale path.",
-    "removal": "Remove when the advisory is withdrawn, an independently verified fix is published, or the dependency is removed. Any shared-cache or request-header input from application users invalidates this exception."
+    "reviewed": "2026-11-07",
+    "expires": "2026-12-31",
+    "source": "https://rustsec.org/advisories/RUSTSEC-2026-0440.html",
+    "reason": "Unmaintained, with no reported vulnerability. A dev-dependency only: testcontainers 0.27.3 uses it to pack Docker build contexts in integration tests. It is not in the release binary and never reads runtime or user input. The latest testcontainers 0.28.0 still requires it.",
+    "removal": "Remove when testcontainers stops depending on it, or when a vulnerability is reported for it. Any use outside dev-dependencies invalidates this exception."
   }
 ]

@@ -66,6 +66,7 @@
 .r-dashboard-surface[data-r-default-layout] [data-dashboard-grid="view"] { grid-auto-rows: auto !important; grid-auto-flow: dense; }
 .r-dashboard-surface[data-r-default-layout] [data-dashboard-grid="view"] > [data-widget-id] { grid-row: auto !important; min-height: 0 !important; }
 .r-dashboard-surface[data-r-default-layout] [data-dashboard-grid="view"] > [data-widget-type="chart"] { height: clamp(320px,42dvh,420px) !important; }
+.r-dashboard-surface[data-r-default-layout] [data-dashboard-grid="view"] > [data-widget-type="chart"]:has([data-chart-empty-row]) { height: auto !important; }
 .r-dashboard-surface[data-r-default-layout] [data-widget-type="sensor"] [data-ui-card] { min-height: 96px; }
 .r-dashboard-surface[data-r-default-layout] [data-widget-type="sensor"] .font-mono { font-family: inherit; font-size: 26px; font-weight: 450; }
 .r-app[data-area="health"] [data-ui-card] { padding: 20px; }
@@ -119,6 +120,7 @@
 }
 @media(max-width:639px) {
   .r-dashboard-surface[data-r-default-layout] [data-dashboard-grid="view"] > [data-widget-type="chart"] { height: 420px !important; }
+  .r-dashboard-surface[data-r-default-layout] [data-dashboard-grid="view"] > [data-widget-type="chart"]:has([data-chart-empty-row]) { height: auto !important; }
   .r-experience [data-dashboard-grid="view"] { grid-template-columns: repeat(2,minmax(0,1fr)) !important; }
   .r-experience [data-dashboard-grid="view"] > [data-widget-type="sensor"] { min-height: 96px !important; }
   .r-experience [data-dashboard-grid="view"] > :not([data-widget-type="sensor"]) { grid-column: 1/-1; }

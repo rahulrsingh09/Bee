@@ -19,20 +19,40 @@ test('efficiency changes update actual overview and chart readings immediately',
   await expect(page.locator('[data-testid="sensor-chip"]').filter({ hasText: 'Efficiency (net)' }).first()).toContainText('320 Wh/mi');
 });
 
-test('owner-configured R2 rotates on entry and yields immediately to touch', async ({ page }) => {
+/** A small PNG for every owner image (data URL decoded). The protected image cache serves it. */
+const OWNER_PNG = Buffer.from('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='.split(',')[1]!, 'base64');
+
+test('owner-configured R2 rests on the owner side image and turns by touch through the owner images', async ({ page }) => {
+  // Reduced motion: a released drag rounds without inertia, so the end angle is exact.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await installRFixture(page, { unknownConfiguration: true });
+  const image = (placement: string, design: string) => ({ placement, design, size: 'large', resolution: null,
+    url: `/v1/vehicle-image-cache/owner-vehicle/${placement}-${design}.png`, metadata: { source: 'vehicle:cel' } });
+  await page.route(/\/v1\/vehicle-image-cache\//, route => route.fulfill({ contentType: 'image/png', body: OWNER_PNG }));
+  await page.route(/\/v1\/vehicles(\?|$)/, route => route.fulfill({ json: { vehicles: [{
+    id: 'owner-vehicle', user_id: '33333333-3333-4333-8333-333333333333', rivian_vehicle_id: 'fixture-r2', vin: null,
+    model: 'R2', year: null, trim: 'Performance', color: null, wheel_option: null, interior_color: null,
+    battery_capacity_kwh: 88, is_demo: false, display_name: 'Your Rivian', created_at: '2026-01-01T00:00:00Z', membership_role: 'owner',
+    images: { all: ['side', 'front', 'rear_three_quarter', 'overhead'].flatMap(placement => ['light', 'dark'].map(design => image(placement, design))) },
+  }] } }));
   await page.goto('/');
   const orbit = page.locator('.now-car').getByRole('slider', { name: 'Your R2. Use arrow keys to turn.', exact: true });
   await expect(orbit).toBeVisible();
-  await expect(page.locator('.r-orbit canvas')).toBeVisible();
-  const first = await orbit.getAttribute('aria-valuenow');
-  await expect.poll(() => orbit.getAttribute('aria-valuenow')).not.toBe(first);
-  await orbit.dispatchEvent('pointerdown', { pointerId: 1, isPrimary: true, button: 0, clientX: 120, clientY: 450 });
-  const stopped = await orbit.getAttribute('aria-valuenow');
-  await page.waitForTimeout(250);
-  await expect(orbit).toHaveAttribute('aria-valuenow', stopped!);
+  await expect(orbit).toHaveAttribute('aria-valuetext', 'Side');
+  // No turn on entry: the car stays on the owner side image.
+  await page.waitForTimeout(400);
+  await expect(orbit).toHaveAttribute('aria-valuetext', 'Side');
+  const box = (await orbit.boundingBox())!;
+  const y = box.y + box.height / 2;
+  await orbit.dispatchEvent('pointerdown', { pointerId: 1, isPrimary: true, button: 0, clientX: 120, clientY: y });
+  await orbit.dispatchEvent('pointermove', { pointerId: 1, isPrimary: true, button: 0, clientX: 180, clientY: y });
+  await orbit.dispatchEvent('pointermove', { pointerId: 1, isPrimary: true, button: 0, clientX: 230, clientY: y });
+  await orbit.dispatchEvent('pointerup', { pointerId: 1, isPrimary: true, button: 0, clientX: 230, clientY: y });
+  // Side + 110 px (about 1.1 steps) rounds to the next angle.
+  await expect(orbit).toHaveAttribute('aria-valuetext', 'Rear three-quarter');
   await orbit.press('Home');
-  await expect(orbit).toHaveAttribute('aria-valuenow', '325');
+  await expect(orbit).toHaveAttribute('aria-valuetext', 'Side');
+  await expect(page.locator('.now-car canvas, .r-orbit-poster')).toHaveCount(0);
 });
 
 test('phone Now and Overview keep the odometer and trip totals inside the frame above the dock', async ({ page }, testInfo) => {
@@ -46,7 +66,9 @@ test('phone Now and Overview keep the odometer and trip totals inside the frame 
   await page.goto(OVERVIEW_DASHBOARD_PATH);
   await expect(page.locator('.r-trip-instrument').first()).toContainText('Trip distance');
   await expect(page.locator('.r-snapshot-foot')).toContainText('Odometer 123,456');
-  await expect(page.locator('.r-orbit-poster')).toBeVisible();
+  // An R2 without owner images shows its packaged R2 side artwork, not the bundled orbit frames.
+  await expect(page.locator('.r-static-car img')).toBeVisible();
+  await expect(page.locator('.r-orbit-poster, .r-orbit canvas')).toHaveCount(0);
   const bounds = await page.locator('.r-trip-instrument').first().evaluate(element => {
     const parent = element.getBoundingClientRect();
     const value = element.querySelector('strong')!.getBoundingClientRect();

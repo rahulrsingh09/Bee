@@ -31,6 +31,52 @@ export function wrapFrame(frame: number) {
   return ((Math.round(frame) % ORBIT_FRAMES) + ORBIT_FRAMES) % ORBIT_FRAMES;
 }
 
+// --- owner-image turn ---------------------------------------------------------
+// The owner's own Rivian images form a short angle set (front, front three-quarter,
+// side, rear three-quarter, rear). These helpers step through that set.
+
+/** An angle index in a set of `count` images, rounded and wrapped around. */
+export function wrapAngleIndex(index: number, count: number) {
+  if (count < 1) return 0;
+  return ((Math.round(index) % count) + count) % count;
+}
+
+/** The angle the car rests on: side, else the nearest three-quarter, else the first. */
+export function restAngleIndex(angles: ReadonlyArray<{ angle: string }>) {
+  for (const angle of ['side', 'front-three-quarter', 'rear-three-quarter']) {
+    const index = angles.findIndex(item => item.angle === angle);
+    if (index >= 0) return index;
+  }
+  return 0;
+}
+
+/** Drag distance in CSS px for one angle step. */
+export function angleStepWidth(width: number) {
+  return Math.max(48, Math.min(140, width / 4));
+}
+
+/** A released drag carries on for this long at its release velocity before it rounds. */
+export const ANGLE_INERTIA_MS = 180;
+
+/**
+ * The angle a released drag settles on. `position` is the fractional angle index under
+ * the pointer and `velocity` is in angle steps per ms. Inertia adds at most one step;
+ * the result is rounded to the nearest angle and wrapped around.
+ */
+export function settleAngle(position: number, velocity: number, count: number) {
+  const carry = Math.max(-1, Math.min(1, velocity * ANGLE_INERTIA_MS));
+  return wrapAngleIndex(position + carry, count);
+}
+
+/** The next angle index for a key press, or null when the key does not turn the car. */
+export function angleForKey(key: string, index: number, count: number, rest: number): number | null {
+  if (key === 'ArrowRight' || key === 'ArrowUp') return wrapAngleIndex(index + 1, count);
+  if (key === 'ArrowLeft' || key === 'ArrowDown') return wrapAngleIndex(index - 1, count);
+  if (key === 'Home') return rest;
+  if (key === 'End') return Math.max(0, count - 1);
+  return null;
+}
+
 /** Throws when the mask index does not describe one in-bounds mask per frame, packed end to end. */
 export function validateMaskIndex(index: MaskIndex, byteLength: number): MaskIndex {
   const fail = (reason: string) => { throw new Error(`Invalid vehicle paint masks: ${reason}.`); };

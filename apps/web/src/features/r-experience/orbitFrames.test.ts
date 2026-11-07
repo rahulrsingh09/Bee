@@ -229,3 +229,81 @@ describe('untinted fallback', () => {
     frames.close();
   });
 });
+
+describe('owner-image angle set', () => {
+  // The angle set resolver reaches the app through resolveVehicleArtwork(..., 'vehicle-card').angles.
+  const angleSet = async () => {
+    const { resolveVehicleArtwork } = await import('@riviamigo/hooks');
+    return (images: Parameters<typeof resolveVehicleArtwork>[0], design: 'light' | 'dark') =>
+      resolveVehicleArtwork(images, 'R2', 'vehicle-card').angles![design];
+  };
+  const art = (placement: string, design: string | null, url: string, source = 'vehicle:photo') =>
+    ({ placement, design, size: 'large', resolution: null, url, metadata: { source } });
+
+  it('orders the owner images front, front three-quarter, side, rear three-quarter, rear and drops overhead and charging', async () => {
+    const resolveVehicleAngleSet = await angleSet();
+    const images = { all: [
+      art('overhead', 'light', '/top.png'), art('side-charging', 'light', '/charging.png'), art('rear', 'light', '/rear.png'),
+      art('rear_three_quarter', 'light', '/rq.png'), art('side', 'light', '/side.png'), art('Front Three Quarter', 'light', '/fq.png'),
+      art('front', 'light', '/front.png'), art('side', 'light', '/side-small.png'),
+    ] };
+    expect(resolveVehicleAngleSet(images, 'light')).toEqual([
+      { angle: 'front', label: 'Front', url: '/front.png' },
+      { angle: 'front-three-quarter', label: 'Front three-quarter', url: '/fq.png' },
+      { angle: 'side', label: 'Side', url: '/side.png' },
+      { angle: 'rear-three-quarter', label: 'Rear three-quarter', url: '/rq.png' },
+      { angle: 'rear', label: 'Rear', url: '/rear.png' },
+    ]);
+  });
+
+  it('uses the design that matches the theme and keeps one art style, using only placements that exist', async () => {
+    const resolveVehicleAngleSet = await angleSet();
+    const images = { all: [
+      art('side', 'light', '/side-light.png'), art('front', 'light', '/front-light.png'),
+      art('side', 'dark', '/side-dark.png'), art('front', 'dark', '/front-dark.png'), art('rear', 'dark', '/rear-dark.png'),
+      art('side', 'dark', '/side-cel.png', 'order:cel'),
+    ] };
+    expect(resolveVehicleAngleSet(images, 'dark').map(angle => angle.url)).toEqual(['/front-dark.png', '/side-dark.png', '/rear-dark.png']);
+    expect(resolveVehicleAngleSet(images, 'light').map(angle => angle.url)).toEqual(['/front-light.png', '/side-light.png']);
+    // Only the other design exists: use it rather than nothing.
+    expect(resolveVehicleAngleSet({ all: [art('side', 'dark', '/s.png'), art('front', 'dark', '/f.png')] }, 'light').map(angle => angle.url))
+      .toEqual(['/f.png', '/s.png']);
+  });
+
+  it('returns typed pairs when the image list is empty, and nothing without images', async () => {
+    const resolveVehicleAngleSet = await angleSet();
+    const { resolveVehicleArtwork } = await import('@riviamigo/hooks');
+    expect(resolveVehicleAngleSet({ all: [], side: { light: '/side.png', dark: '/side-dark.png' } }, 'dark'))
+      .toEqual([{ angle: 'side', label: 'Side', url: '/side-dark.png' }]);
+    expect(resolveVehicleAngleSet(null, 'light')).toEqual([]);
+    expect(resolveVehicleArtwork({ all: [art('side', 'light', '/s.png')] }, 'R2', 'overview').angles).toEqual({ light: [], dark: [] });
+  });
+});
+
+describe('owner-image stepping', () => {
+  it('wraps, rests on the side and maps keys', async () => {
+    const { angleForKey, restAngleIndex, wrapAngleIndex } = await import('./orbitFrames');
+    expect(wrapAngleIndex(4, 4)).toBe(0);
+    expect(wrapAngleIndex(-1, 4)).toBe(3);
+    expect(wrapAngleIndex(1.6, 4)).toBe(2);
+    expect(restAngleIndex([{ angle: 'front' }, { angle: 'front-three-quarter' }, { angle: 'side' }])).toBe(2);
+    expect(restAngleIndex([{ angle: 'front' }, { angle: 'rear-three-quarter' }])).toBe(1);
+    expect(restAngleIndex([{ angle: 'front' }, { angle: 'rear' }])).toBe(0);
+    expect(angleForKey('ArrowRight', 3, 4, 2)).toBe(0);
+    expect(angleForKey('ArrowLeft', 0, 4, 2)).toBe(3);
+    expect(angleForKey('Home', 0, 4, 2)).toBe(2);
+    expect(angleForKey('End', 0, 4, 2)).toBe(3);
+    expect(angleForKey('a', 0, 4, 2)).toBeNull();
+  });
+
+  it('rounds a released drag to the nearest angle with at most one step of inertia', async () => {
+    const { ANGLE_INERTIA_MS, angleStepWidth, settleAngle } = await import('./orbitFrames');
+    expect(settleAngle(2.3, 0, 4)).toBe(2);
+    expect(settleAngle(2.3, 1 / ANGLE_INERTIA_MS, 4)).toBe(3);
+    expect(settleAngle(2.3, 100, 4)).toBe(3);
+    expect(settleAngle(0.2, -100, 4)).toBe(3);
+    expect(angleStepWidth(400)).toBe(100);
+    expect(angleStepWidth(100)).toBe(48);
+    expect(angleStepWidth(2000)).toBe(140);
+  });
+});

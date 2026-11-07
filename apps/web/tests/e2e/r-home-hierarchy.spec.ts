@@ -38,9 +38,20 @@ async function installNowData(page: Page, options: { ownerArtwork?: boolean } = 
     id: 'owner-vehicle', user_id: '33333333-3333-4333-8333-333333333333', rivian_vehicle_id: 'fixture-r2', vin: null,
     model: 'R2', year: null, trim: 'Performance', color: 'Catalina Cove', wheel_option: null, interior_color: null,
     battery_capacity_kwh: 88, is_demo: false, display_name: 'Your Rivian', created_at: '2026-01-01T00:00:00Z', membership_role: 'owner',
-    images: { all: [], side: { light: '/vehicle-images/fallbacks/r2s/side.webp', dark: '/vehicle-images/fallbacks/r2s/side.webp' } },
+    images: OWNER_IMAGES,
   }] } }));
+  if (options.ownerArtwork) await page.route(/\/v1\/vehicle-image-cache\//, route => route.fulfill({ contentType: 'image/png', body: OWNER_PNG }));
 }
+
+/** A small PNG for every owner image (data URL decoded). The protected image cache serves it. */
+const OWNER_PNG = Buffer.from('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='.split(',')[1]!, 'base64');
+const ownerImage = (placement: string, design: string) => ({ placement, design, size: 'large', resolution: null,
+  url: `/v1/vehicle-image-cache/owner-vehicle/${placement}-${design}.png`, metadata: { source: 'vehicle:photo' } });
+/** The owner's Rivian images with several placements, in API order (not turning order). */
+const OWNER_IMAGES = {
+  all: ['overhead', 'side-charging', 'rear', 'side', 'front', 'front-three-quarter'].flatMap(placement => ['light', 'dark'].map(design => ownerImage(placement, design))),
+  side: { light: ownerImage('side', 'light').url, dark: ownerImage('side', 'dark').url },
+};
 
 /** Boxes of every visible text, chip and dock element that overlap the visible car image. */
 async function carOverlaps(page: Page) {
@@ -164,25 +175,44 @@ test('the data story runs on the first view of a session only, and never with re
   await expect(page.locator('[data-animate], .now-viz-wipe')).toHaveCount(0);
 });
 
-test('the owner artwork rests on the car and cross-fades to the frames while the car turns', async ({ page }) => {
+test('the R2 turns through the owner images only: drag changes the angle and Home returns to the side', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await page.emulateMedia({ reducedMotion: 'reduce' });
+  const packs: string[] = [];
+  page.on('request', request => {
+    // Dev-server module imports (`?import`) are not frame or poster loads.
+    const url = new URL(request.url());
+    if (/\/r2-(orbit|hero)/.test(url.pathname) && !url.searchParams.has('import')) packs.push(request.url());
+  });
   await installRFixture(page, { mode: 'dark' });
   await installNowData(page, { ownerArtwork: true });
   await page.goto('/');
   const car = page.locator('.now-car');
-  await expect(car).toHaveAttribute('data-rest', 'artwork');
-  await expect(car.locator('.now-car-artwork')).toHaveAttribute('src', '/vehicle-images/fallbacks/r2s/side.webp');
+  await expect(car).toHaveAttribute('data-mode', 'turn');
   const spin = page.getByRole('slider', { name: 'Your R2, Catalina Cove. Use arrow keys to turn.' });
+  await expect(spin).toHaveAttribute('aria-valuetext', 'Side');
+  await expect(car.locator('img.r-orbit-angle')).toHaveCount(4);
+  await expect(car.locator('img.r-orbit-angle[data-active]')).toHaveAttribute('data-angle', 'side');
+  await expect(car.locator('img.r-orbit-angle[data-active]')).toHaveAttribute('src', /^blob:/);
   const area = (await spin.boundingBox())!;
   await page.mouse.move(area.x + area.width / 2, area.y + area.height / 2);
   await page.mouse.down();
-  await page.mouse.move(area.x + area.width / 2 + 90, area.y + area.height / 2, { steps: 6 });
-  await expect(car).toHaveAttribute('data-rest', 'frames');
+  await page.mouse.move(area.x + area.width / 2 + 110, area.y + area.height / 2, { steps: 6 });
   await page.mouse.up();
+  await expect(spin).toHaveAttribute('aria-valuetext', 'Rear');
+  await expect(car.locator('img.r-orbit-angle[data-active]')).toHaveAttribute('data-angle', 'rear');
+  await spin.press('Home');
+  await expect(spin).toHaveAttribute('aria-valuetext', 'Side');
+  await spin.press('ArrowLeft');
+  await expect(spin).toHaveAttribute('aria-valuetext', 'Front three-quarter');
   await spin.dblclick();
-  await expect(spin).toHaveAttribute('aria-valuenow', '280');
-  await expect(car).toHaveAttribute('data-rest', 'artwork');
+  await expect(spin).toHaveAttribute('aria-valuetext', 'Side');
+  // No bundled R1S frames, poster or canvas for an R2.
+  await expect(page.locator('.now-car canvas, .r-orbit-poster')).toHaveCount(0);
+  expect(packs).toEqual([]);
+  const overlap = await carOverlaps(page);
+  expect(overlap.cars).toBe(1);
+  expect(overlap.hits).toEqual([]);
 });
 
 test('an edited Home layout stays reachable as a custom dashboard', async ({ page }) => {

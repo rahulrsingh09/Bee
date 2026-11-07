@@ -1,7 +1,29 @@
-import { expect, test, type Request } from '@playwright/test';
+import { expect, test, type Page, type Request } from '@playwright/test';
 import { installRFixture } from './r-experience.fixture';
 
-const orbitPackUrl = /\/r2-orbit(?:-[^/?]+)?\.bin(?:\?|$)/;
+
+/** A request for the bundled orbit frames, masks or poster. Dev-server module imports (`?import`) are not image loads. */
+function bundledOrbitAsset(request: Request) {
+  const url = new URL(request.url());
+  return /\/r2-(orbit|hero)/.test(url.pathname) && !url.searchParams.has('import');
+}
+
+/** A small PNG for every owner image (data URL decoded). The protected image cache serves it. */
+const OWNER_PNG = Buffer.from('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='.split(',')[1]!, 'base64');
+
+/** The fixture R2 with the owner's own Rivian images in several placements. */
+async function installOwnerImages(page: Page) {
+  const image = (placement: string, design: string) => ({ placement, design, size: 'large', resolution: null,
+    url: `/v1/vehicle-image-cache/owner-vehicle/${placement}-${design}.png`, metadata: { source: 'vehicle:photo' } });
+  await page.route(/\/v1\/vehicle-image-cache\//, route => route.fulfill({ contentType: 'image/png', body: OWNER_PNG }));
+  await page.route(/\/v1\/vehicles(\?|$)/, route => route.fulfill({ json: { vehicles: [{
+    id: 'owner-vehicle', user_id: '33333333-3333-4333-8333-333333333333', rivian_vehicle_id: 'fixture-r2', vin: null,
+    model: 'R2', year: null, trim: 'Performance', color: 'Catalina Cove', wheel_option: '21" Liquid Tungsten All-Season',
+    interior_color: 'Black Crater Signature', battery_capacity_kwh: 88, is_demo: false, display_name: 'Your Rivian',
+    created_at: '2026-01-01T00:00:00Z', membership_role: 'owner',
+    images: { all: ['overhead', 'rear', 'side', 'front', 'front-three-quarter'].flatMap(placement => ['light', 'dark'].map(design => image(placement, design))) },
+  }] } }));
+}
 
 for (const width of [390, 1280]) {
   for (const mode of ['dark', 'light'] as const) {
@@ -50,37 +72,50 @@ for (const width of [390, 1280]) {
   }
 }
 
-test('vehicle rotation loads once on interaction, has no hint text or toy buttons, and works with reduced motion', async ({ page }) => {
+test('the R2 turns through the owner images, has no hint text or toy buttons, and works with reduced motion', async ({ page }) => {
   await installRFixture(page, { mode: 'dark' });
+  await installOwnerImages(page);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   const packs: string[] = [];
-  page.on('request', request => { if (request.resourceType() === 'fetch' && orbitPackUrl.test(request.url())) packs.push(request.url()); });
+  page.on('request', request => { if (bundledOrbitAsset(request)) packs.push(request.url()); });
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1, name: 'Parked at Home' })).toBeVisible();
   const orbit = page.getByRole('slider', { name: 'Your R2, Catalina Cove. Use arrow keys to turn.' });
   await expect(orbit).toBeVisible();
+  await expect(orbit).toHaveAttribute('aria-valuetext', 'Side');
   await expect(page.getByText(/Drag to turn|double-tap/i)).toHaveCount(0);
   await expect(page.getByRole('button', { name: /^(Front|Reset vehicle view|Replay vehicle rotation)$/ })).toHaveCount(0);
-  expect(packs).toHaveLength(0);
-  await page.emulateMedia({ reducedMotion: 'reduce' });
   await orbit.focus();
-  await page.keyboard.press('Home');
-  await expect(orbit).toHaveAttribute('aria-valuenow', '325');
-  await expect(page.locator('.r-orbit canvas')).toBeVisible();
   await page.keyboard.press('ArrowRight');
-  await expect(orbit).toHaveAttribute('aria-valuenow', '335');
+  await expect(orbit).toHaveAttribute('aria-valuetext', 'Rear');
+  await page.keyboard.press('ArrowRight');
+  await expect(orbit).toHaveAttribute('aria-valuetext', 'Front');
+  await page.keyboard.press('Home');
+  await expect(orbit).toHaveAttribute('aria-valuetext', 'Side');
+  // Reduced motion: the new angle shows at once, with no fade.
+  expect(await page.locator('.now-car img.r-orbit-angle').first().evaluate(element => parseFloat(getComputedStyle(element).transitionDuration))).toBe(0);
   const box = (await orbit.boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
-  await page.mouse.move(box.x + box.width / 2 + 80, box.y + box.height / 2, { steps: 5 });
+  await page.mouse.move(box.x + box.width / 2 - 80, box.y + box.height / 2, { steps: 5 });
   await page.mouse.up();
-  await expect(orbit).not.toHaveAttribute('aria-valuenow', '335');
+  await expect(orbit).toHaveAttribute('aria-valuetext', 'Front three-quarter');
   await orbit.dblclick();
-  await expect(orbit).toHaveAttribute('aria-valuenow', '280');
+  await expect(orbit).toHaveAttribute('aria-valuetext', 'Side');
   await page.getByRole('link', { name: 'Insights', exact: true }).click();
   await page.getByRole('link', { name: 'Now', exact: true }).click();
-  await expect(page.locator('.r-orbit canvas')).toBeVisible();
-  expect(packs).toHaveLength(1);
+  await expect(orbit).toHaveAttribute('aria-valuetext', 'Side');
+  await expect(page.locator('canvas.r-orbit, .r-orbit canvas, .r-orbit-poster')).toHaveCount(0);
+  expect(packs).toEqual([]);
+});
+
+test('the owner-image turn cross-fades in 180 ms without reduced motion', async ({ page }) => {
+  await installRFixture(page, { mode: 'light' });
+  await installOwnerImages(page);
+  await page.goto('/');
+  const layer = page.locator('.now-car img.r-orbit-angle').first();
+  await expect(layer).toHaveCount(1);
+  expect(await layer.evaluate(element => getComputedStyle(element).transition)).toContain('opacity 0.18s');
 });
 
 test('settings navigation, search, units and compatibility URLs have no interface chooser', async ({ page }) => {
@@ -169,26 +204,17 @@ for (const width of [390, 1280]) {
   });
 }
 
-test('failed rotation pauses until the owner turns the car again', async ({ page }) => {
+test('an R2 without owner images shows its packaged R2 artwork, never the bundled orbit frames', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await installRFixture(page);
-  let failedLoads = 0;
-  await page.route(orbitPackUrl, async route => {
-    if (route.request().resourceType() !== 'fetch') return route.fallback();
-    failedLoads++;
-    return route.fulfill({ status: 503, body: 'Unavailable' });
-  });
+  const packs: string[] = [];
+  page.on('request', request => { if (bundledOrbitAsset(request)) packs.push(request.url()); });
   await page.goto('/');
-  const orbit = page.getByRole('slider', { name: /Use arrow keys to turn/ });
-  await orbit.focus();
-  await page.keyboard.press('ArrowRight');
-  await expect(page.locator('.r-orbit [role="status"]')).toHaveText('Rotation unavailable. Drag or press an arrow key to try again.');
-  await expect(orbit).toHaveAccessibleDescription('Rotation unavailable. Drag or press an arrow key to try again.');
-  await expect(page.locator('.r-orbit-poster')).toBeVisible();
-  await page.waitForTimeout(700);
-  expect(failedLoads).toBe(1);
-  await page.keyboard.press('ArrowRight');
-  await expect.poll(() => failedLoads).toBe(2);
+  await expect(page.locator('.now-car')).toHaveAttribute('data-mode', 'static');
+  await expect(page.getByRole('img', { name: 'Your R2, Catalina Cove' })).toHaveAttribute('src', '/vehicle-images/fallbacks/r2s/side.webp');
+  await expect(page.getByRole('slider', { name: /Use arrow keys to turn/ })).toHaveCount(0);
+  await expect(page.locator('.r-orbit canvas, .r-orbit-poster')).toHaveCount(0);
+  expect(packs).toEqual([]);
 });
 
 test('cached vehicle readings retain visible browser reconnection status', async ({ page }) => {

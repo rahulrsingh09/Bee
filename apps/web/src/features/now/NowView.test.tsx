@@ -37,7 +37,9 @@ vi.mock('@riviamigo/hooks', async (importOriginal) => {
     usePhantomDrainPeriods: () => query({ periods: [] }),
     useTripTrack: () => query([]),
     useVehicleArtwork: () => ({ src: mocks.ownerArt, restoring: false, isLoading: false, isError: false }),
-    AuthenticatedVehicleArtwork: (props: { alt: string; className?: string }) => <img alt={props.alt} className={props.className} />,
+    AuthenticatedVehicleArtwork: ({ source, fallbackSource, fallbackProps: _fallbackProps, onFallbackChange: _onFallbackChange, ...props }: React.ImgHTMLAttributes<HTMLImageElement> & {
+      source?: string | null; fallbackSource?: string | null; fallbackProps?: unknown; onFallbackChange?: unknown;
+    }) => <img {...props} src={source ?? fallbackSource ?? undefined} />,
   };
 });
 
@@ -46,6 +48,20 @@ import { NOW_MOTION_SESSION_KEY } from './useNowMotion';
 
 const vehicle = {
   id: 'owner-vehicle', model: 'R2', trim: 'Performance', color: 'Launch Green', display_name: 'Your Rivian', images: null,
+} as unknown as Vehicle;
+const art = (placement: string, design: string, file: string, source = 'vehicle:photo') =>
+  ({ placement, design, size: 'large', resolution: null, url: `/art/${file}.png`, metadata: { source } });
+const turningVehicle = {
+  ...vehicle,
+  images: {
+    all: [
+      art('overhead', 'light', 'overhead-light'), art('side-charging', 'light', 'charging-light'),
+      art('rear', 'light', 'rear-light'), art('side', 'light', 'side-light'), art('front', 'light', 'front-light'),
+      // Light design only: the test theme may be dark, and the other design is used when the theme design is missing.
+      art('front-three-quarter', 'light', 'fq-light'), art('side', 'light', 'side-cel', 'vehicle:cel'),
+    ],
+    side: { light: '/art/side-light.png', dark: '/art/side-light.png' },
+  },
 } as unknown as Vehicle;
 const baseStatus = {
   vehicle_id: 'owner-vehicle', battery_level: 68, battery_limit: 80, range_miles: 218, odometer_miles: 12486,
@@ -82,7 +98,7 @@ function reduceMotion(reduce: boolean) {
 describe('Now page', () => {
   it('orders status, chips, car, battery and range, odometer, then the story rail, with no charts or period picker', () => {
     reduceMotion(true);
-    const { container } = render(<NowView vehicle={vehicle} />);
+    const { container } = render(<NowView vehicle={turningVehicle} />);
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Parked at Home');
     expect(screen.getByText('Your Rivian · R2 Performance · Launch Green')).toBeInTheDocument();
     expect(screen.queryByText(/Catalina Cove/)).toBeNull();
@@ -126,38 +142,66 @@ describe('Now page', () => {
     expect(within(attention).getByRole('link')).toHaveAttribute('href', '/battery/phantom-drain');
   });
 
-  it('rests on the owner artwork and cross-fades to the frames while the car turns', () => {
+  it('turns through the owner images only: rests on the side, steps with arrow keys and wraps around', () => {
     reduceMotion(true);
-    mocks.ownerArt = '/v1/vehicle-image-cache/side.webp';
-    const { container } = render(<NowView vehicle={vehicle} />);
+    const { container } = render(<NowView vehicle={turningVehicle} />);
     const car = container.querySelector('.now-car')!;
-    expect(car).toHaveAttribute('data-rest', 'artwork');
-    expect(car.querySelector('.now-car-artwork')).toHaveAttribute('src', '/v1/vehicle-image-cache/side.webp');
-    const slider = screen.getByRole('slider');
+    expect(car).toHaveAttribute('data-mode', 'turn');
+    expect(car.querySelector('canvas')).toBeNull();
+    expect(car.querySelector('.r-orbit-poster')).toBeNull();
+    const layers = [...car.querySelectorAll('img.r-orbit-angle')];
+    expect(layers.map(layer => layer.getAttribute('src'))).toEqual(['/art/front-light.png', '/art/fq-light.png', '/art/side-light.png', '/art/rear-light.png']);
+    const slider = screen.getByRole('slider', { name: 'Your R2, Launch Green. Use arrow keys to turn.' });
+    expect(slider).toHaveAttribute('aria-valuetext', 'Side');
+    expect(car.querySelector('img[data-active]')).toHaveAttribute('src', '/art/side-light.png');
+    fireEvent.keyDown(slider, { key: 'ArrowLeft' });
+    expect(slider).toHaveAttribute('aria-valuetext', 'Front three-quarter');
+    expect(car.querySelector('img[data-active]')).toHaveAttribute('src', '/art/fq-light.png');
     fireEvent.keyDown(slider, { key: 'ArrowRight' });
-    expect(car).toHaveAttribute('data-rest', 'frames');
-    expect(slider).toHaveAttribute('aria-valuenow', '290');
-    fireEvent.keyDown(slider, { key: 'End' });
-    expect(slider).toHaveAttribute('aria-valuenow', '280');
-    expect(car).toHaveAttribute('data-rest', 'artwork');
+    fireEvent.keyDown(slider, { key: 'ArrowRight' });
+    expect(slider).toHaveAttribute('aria-valuetext', 'Rear');
+    fireEvent.keyDown(slider, { key: 'ArrowRight' });
+    expect(slider).toHaveAttribute('aria-valuetext', 'Front');
+    fireEvent.keyDown(slider, { key: 'Home' });
+    expect(slider).toHaveAttribute('aria-valuetext', 'Side');
+    expect(screen.queryByText(/Drag to turn|double-tap/i)).toBeNull();
   });
 
-  it('turns to the side view on a double-tap', () => {
+  it('turns back to the side view on a double-tap and rounds a drag to the nearest angle', () => {
     reduceMotion(true);
-    mocks.ownerArt = '/v1/vehicle-image-cache/side.webp';
-    const { container } = render(<NowView vehicle={vehicle} />);
+    render(<NowView vehicle={turningVehicle} />);
     const slider = screen.getByRole('slider');
-    fireEvent.keyDown(slider, { key: 'Home' });
-    expect(slider).toHaveAttribute('aria-valuenow', '325');
-    const tap = (type: string) => {
-      const event = new MouseEvent(type, { bubbles: true, clientX: 100, clientY: 100, button: 0 });
+    Object.defineProperty(slider, 'clientWidth', { value: 400 });
+    const pointer = (type: string, clientX: number) => {
+      const event = new MouseEvent(type, { bubbles: true, clientX, clientY: 100, button: 0 });
       Object.assign(event, { pointerId: 1, isPrimary: true });
       fireEvent(slider, event);
     };
-    tap('pointerdown'); tap('pointerup');
-    tap('pointerdown'); tap('pointerup');
-    expect(slider).toHaveAttribute('aria-valuenow', '280');
-    expect(container.querySelector('.now-car')).toHaveAttribute('data-rest', 'artwork');
+    // One step is 100 px at 400 px wide; 130 px rounds to one step.
+    pointer('pointerdown', 100); pointer('pointermove', 180); pointer('pointermove', 230); pointer('pointerup', 230);
+    expect(slider).toHaveAttribute('aria-valuetext', 'Rear');
+    pointer('pointerdown', 100); pointer('pointerup', 100);
+    pointer('pointerdown', 100); pointer('pointerup', 100);
+    expect(slider).toHaveAttribute('aria-valuetext', 'Side');
+  });
+
+  it('shows one owner image with no turn control when fewer than two owner images exist', () => {
+    reduceMotion(true);
+    const single = { ...vehicle, images: { all: [{ placement: 'side', design: 'light', size: 'large', resolution: null, url: '/art/side-light.png' }] } } as unknown as Vehicle;
+    const { container } = render(<NowView vehicle={single} />);
+    expect(container.querySelector('.now-car')).toHaveAttribute('data-mode', 'static');
+    expect(screen.getByRole('img', { name: 'Your R2, Launch Green' })).toHaveAttribute('src', '/art/side-light.png');
+    expect(screen.queryByRole('slider')).toBeNull();
+    expect(container.querySelector('.now-car canvas')).toBeNull();
+  });
+
+  it('never shows the bundled orbit frames for an R2 without owner images', () => {
+    reduceMotion(true);
+    const { container } = render(<NowView vehicle={vehicle} />);
+    expect(container.querySelector('.now-car')).toHaveAttribute('data-mode', 'static');
+    expect(screen.getByRole('img', { name: 'Your R2, Launch Green' })).toHaveAttribute('src', '/vehicle-images/fallbacks/r2s/side.webp');
+    expect(screen.queryByRole('slider')).toBeNull();
+    expect(container.querySelector('.now-car canvas, .r-orbit-poster')).toBeNull();
   });
 
   it('runs the data story on the first view of a session only', () => {

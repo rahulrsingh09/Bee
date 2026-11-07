@@ -1,6 +1,11 @@
 import React from 'react';
-import { createOrbitFrames, DEFAULT_FRAME, FRONT_FRAME, loadArtworkPaint, ORBIT_FRAMES, wrapFrame, type Oklab } from './orbitFrames';
+import { AuthenticatedVehicleArtwork, type ResolvedVehicleArtwork } from '@riviamigo/hooks';
+import {
+  angleForKey, angleStepWidth, createOrbitFrames, DEFAULT_FRAME, FRONT_FRAME, loadArtworkPaint, ORBIT_FRAMES,
+  restAngleIndex, settleAngle, wrapAngleIndex, wrapFrame, type Oklab,
+} from './orbitFrames';
 import heroUrl from './assets/r2-hero.webp';
+import '../now/now.css';
 
 const rememberedAngles = new Map<string, number>();
 
@@ -25,6 +30,114 @@ export interface RVehicleOrbitProps {
 /** Double-tap window and distance for "turn to the side view". */
 const DOUBLE_TAP_MS = 320;
 const DOUBLE_TAP_PX = 24;
+
+type VehicleAngleImage = NonNullable<ResolvedVehicleArtwork['angles']>['light'][number];
+
+export interface RVehicleAnglesProps {
+  /** Accessible name of the turn control, for example "Your R2, Catalina Cove. Use arrow keys to turn." */
+  label: string;
+  /** The owner's own Rivian images in turning order (at least two). */
+  angles: readonly VehicleAngleImage[];
+  /** Packaged model artwork for the side image when the owner image cannot load. */
+  fallbackSource?: string | null;
+}
+
+/**
+ * The owner's own Rivian images as a turn control. The car rests on the side image.
+ * A drag or the arrow keys step through the angles with a short cross-fade; a released
+ * drag rounds to the nearest angle and the set wraps around. A double-tap or Home
+ * returns to the side image. Reduced motion shows each angle at once (no fade, no inertia).
+ */
+export function RVehicleAngles({ label, angles, fallbackSource }: RVehicleAnglesProps) {
+  const count = angles.length;
+  const rest = restAngleIndex(angles);
+  const [index, setIndex] = React.useState(rest);
+  const current = React.useRef(rest);
+  const lastTap = React.useRef<{ time: number; x: number; y: number } | null>(null);
+  const drag = React.useRef<{ id: number; x: number; y: number; start: number; position: number; time: number; velocity: number; moved: boolean } | null>(null);
+  const reduced = React.useRef(false);
+
+  React.useEffect(() => {
+    const media = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const change = () => { reduced.current = media.matches; };
+    change();
+    media.addEventListener('change', change);
+    return () => media.removeEventListener('change', change);
+  }, []);
+
+  const show = React.useCallback((next: number) => {
+    const wrapped = wrapAngleIndex(next, count);
+    current.current = wrapped;
+    setIndex(wrapped);
+  }, [count]);
+
+  // A new angle set (theme or vehicle change) rests on its side image again.
+  const signature = angles.map(angle => angle.url).join('|');
+  React.useEffect(() => { show(rest); }, [signature, rest, show]);
+
+  function finish(event: React.PointerEvent<HTMLDivElement>, cancelled = false) {
+    const previous = drag.current;
+    if (!previous || previous.id !== event.pointerId) return;
+    drag.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    if (previous.moved) {
+      show(settleAngle(previous.position, cancelled || reduced.current ? 0 : previous.velocity, count));
+      return;
+    }
+    if (cancelled) return;
+    const tap = lastTap.current;
+    const now = performance.now();
+    if (tap && now - tap.time < DOUBLE_TAP_MS && Math.hypot(event.clientX - tap.x, event.clientY - tap.y) < DOUBLE_TAP_PX) {
+      lastTap.current = null;
+      show(rest);
+    } else {
+      lastTap.current = { time: now, x: event.clientX, y: event.clientY };
+    }
+  }
+
+  const active = angles[index] ?? angles[0]!;
+  return (
+    <div className="r-orbit r-orbit-turn">
+      <div className="r-orbit-stage" role="slider" tabIndex={0} aria-label={label}
+        aria-valuemin={0} aria-valuemax={count - 1} aria-valuenow={index} aria-valuetext={active.label}
+        data-angle={active.angle}
+        onKeyDown={event => {
+          const next = angleForKey(event.key, current.current, count, rest);
+          if (next === null) return;
+          event.preventDefault();
+          show(next);
+        }}
+        onPointerDown={event => {
+          if (!event.isPrimary || event.button !== 0) return;
+          drag.current = { id: event.pointerId, x: event.clientX, y: event.clientY, start: current.current, position: current.current, time: performance.now(), velocity: 0, moved: false };
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }}
+        onPointerMove={event => {
+          const previous = drag.current;
+          if (!previous || previous.id !== event.pointerId) return;
+          const dx = event.clientX - previous.x;
+          const dy = event.clientY - previous.y;
+          if (!previous.moved && Math.abs(dy) > Math.abs(dx) + 6) { finish(event, true); return; }
+          if (!previous.moved && Math.abs(dx) < 6) return;
+          previous.moved = true;
+          const position = previous.start + dx / angleStepWidth(event.currentTarget.clientWidth);
+          const now = performance.now();
+          previous.velocity = (position - previous.position) / Math.max(1, now - previous.time);
+          previous.position = position;
+          previous.time = now;
+          if (wrapAngleIndex(position, count) !== current.current) show(position);
+        }}
+        onPointerUp={event => finish(event)} onPointerCancel={event => finish(event, true)}>
+        {angles.map((angle, position) => (
+          <AuthenticatedVehicleArtwork key={angle.url} source={angle.url}
+            fallbackSource={angle.angle === 'side' ? fallbackSource : null}
+            className="r-orbit-angle" data-angle={angle.angle} data-active={position === index || undefined}
+            alt="" aria-hidden="true" draggable={false} />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export function RVehicleOrbit({ vehicleId, label = 'Rotate vehicle. Use arrow keys to turn.', autoTurn = true, onTurnStart, onRest, paintSource }: RVehicleOrbitProps) {
   const hintId = React.useId();

@@ -1,4 +1,4 @@
-import type { VehicleImage, VehicleImages } from '@riviamigo/types';
+import type { VehicleImage, VehicleImagePair, VehicleImages } from '@riviamigo/types';
 
 export type VehicleArtworkUsage = 'overview' | 'charging' | 'health' | 'vehicle-card';
 export type VehicleArtworkFallbackModel = 'r1s' | 'r1t' | 'r2';
@@ -50,7 +50,31 @@ export interface ResolvedVehicleArtwork {
   light: string | null;
   dark: string | null;
   fallback: string | null;
+  /**
+   * The owner's own Rivian images in turning order, one set per design. Only
+   * the `vehicle-card` usage fills this; the sets are empty without API images.
+   */
+  angles?: { light: VehicleAngleImage[]; dark: VehicleAngleImage[] };
 }
+
+/** A turn angle of the owner's Rivian artwork, in turning order. */
+export type VehicleTurnAngle = 'front' | 'front-three-quarter' | 'side' | 'rear-three-quarter' | 'rear';
+
+export interface VehicleAngleImage {
+  angle: VehicleTurnAngle;
+  /** Name of the angle for assistive technology, for example "Front three-quarter". */
+  label: string;
+  url: string;
+}
+
+const TURN_ORDER: readonly VehicleTurnAngle[] = ['front', 'front-three-quarter', 'side', 'rear-three-quarter', 'rear'];
+const TURN_LABELS: Record<VehicleTurnAngle, string> = {
+  front: 'Front',
+  'front-three-quarter': 'Front three-quarter',
+  side: 'Side',
+  'rear-three-quarter': 'Rear three-quarter',
+  rear: 'Rear',
+};
 
 function normalizedPlacement(image: VehicleImage) {
   return image.placement.trim().toLowerCase().replace(/[_\s]+/g, '-');
@@ -110,6 +134,78 @@ function findPlacement(images: VehicleImages | null | undefined, placements: str
     if (match) return match.url;
   }
   return null;
+}
+
+/** The turn angle of one Rivian placement. Overhead, charging and unknown placements are not turn angles. */
+function turnAngle(image: VehicleImage): VehicleTurnAngle | null {
+  const placement = normalizedPlacement(image).replace(/-/g, '');
+  if (/charg|overhead|top|bird|interior|cabin/.test(placement)) return null;
+  const rear = /rear|back/.test(placement);
+  if (placement.includes('quarter')) return rear ? 'rear-three-quarter' : 'front-three-quarter';
+  if (placement.includes('side') || placement.includes('profile')) return 'side';
+  if (placement.includes('front')) return 'front';
+  return rear ? 'rear' : null;
+}
+
+function imageDesign(image: VehicleImage): 'light' | 'dark' | null {
+  const design = image.design?.toLowerCase() ?? '';
+  return design.includes('dark') ? 'dark' : design.includes('light') ? 'light' : null;
+}
+
+/** Rivian sends a photo and a cel art set ("vehicle:photo", "order:cel"). Keep one style in one turn. */
+function imageStyle(image: VehicleImage) {
+  const source = (image.metadata as { source?: unknown } | null | undefined)?.source;
+  return typeof source === 'string' ? source.split(':').pop() ?? '' : '';
+}
+
+/**
+ * The owner's Rivian images in turning order: front, front three-quarter, side,
+ * rear three-quarter, rear. Overhead and charging images are excluded. Only
+ * placements that exist are returned, at most one image per angle, all from one
+ * design and one art style. The requested design wins; the other design is used
+ * only when the requested design has no turn image. The first image per angle
+ * wins, so the API order (large size first) decides between sizes.
+ */
+export function resolveVehicleAngleSet(
+  images: VehicleImages | null | undefined,
+  design: 'light' | 'dark',
+): VehicleAngleImage[] {
+  const groups = new Map<string, { design: 'light' | 'dark' | null; images: Map<VehicleTurnAngle, string> }>();
+  for (const image of images?.all ?? []) {
+    const angle = turnAngle(image);
+    if (!angle || !image.url) continue;
+    const imageDesignValue = imageDesign(image);
+    const key = `${imageStyle(image)}|${imageDesignValue ?? ''}`;
+    const group = groups.get(key) ?? { design: imageDesignValue, images: new Map() };
+    groups.set(key, group);
+    if (!group.images.has(angle)) group.images.set(angle, image.url);
+  }
+  if (groups.size === 0) {
+    // Older responses carry only the typed pairs.
+    const pairs: Array<[VehicleTurnAngle, VehicleImagePair | null | undefined]> = [
+      ['front', images?.front], ['side', images?.side], ['rear', images?.rear],
+    ];
+    const pick = (wanted: 'light' | 'dark') => new Map(pairs.flatMap(([angle, pair]) => {
+      const url = pair?.[wanted];
+      return url ? [[angle, url] as [VehicleTurnAngle, string]] : [];
+    }));
+    groups.set('typed|light', { design: 'light', images: pick('light') });
+    groups.set('typed|dark', { design: 'dark', images: pick('dark') });
+  }
+  const rank = (group: { design: 'light' | 'dark' | null }) => (group.design === design ? 2 : group.design === null ? 1 : 0);
+  let best: { design: 'light' | 'dark' | null; images: Map<VehicleTurnAngle, string> } | null = null;
+  for (const group of groups.values()) {
+    if (group.images.size === 0) continue;
+    if (!best
+      || rank(group) > rank(best)
+      || (rank(group) === rank(best) && group.images.size > best.images.size)) best = group;
+  }
+  if (!best) return [];
+  const chosen = best.images;
+  return TURN_ORDER.flatMap((angle) => {
+    const url = chosen.get(angle);
+    return url ? [{ angle, label: TURN_LABELS[angle], url }] : [];
+  });
 }
 
 export function resolveVehicleArtwork(
@@ -175,5 +271,8 @@ export function resolveVehicleArtwork(
     light: light ?? null,
     dark: dark ?? null,
     fallback: getVehicleArtworkFallback(model, usage),
+    angles: usage === 'vehicle-card'
+      ? { light: resolveVehicleAngleSet(images, 'light'), dark: resolveVehicleAngleSet(images, 'dark') }
+      : { light: [], dark: [] },
   };
 }

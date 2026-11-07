@@ -20,7 +20,9 @@ for (const width of [393, 1280]) for (const mode of ['dark', 'light'] as const) 
     await expect.poll(() => shackle.evaluate(e => getComputedStyle(e).transform)).not.toBe('none');
     expect(await shackle.evaluate(e => getComputedStyle(e).transitionDuration)).toBe('0.36s');
     await expect(page.locator('.r-door-status, .r-door-sheet, .r-orbit-openings')).toHaveCount(0);
-    await expect(page.getByRole('slider', { name: 'Your R2, Catalina Cove. Use arrow keys to turn.', exact: true })).toBeVisible();
+    // The fixture R2 has no owner images: it shows its packaged R2 artwork, never the bundled orbit frames.
+    await expect(page.getByRole('img', { name: 'Your R2, Catalina Cove', exact: true })).toBeVisible();
+    await expect(page.locator('.now-car canvas, .r-orbit-poster')).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath('vehicle-unlocked.png') });
     await page.emulateMedia({ reducedMotion: 'reduce' });
     expect(await shackle.evaluate(e => parseFloat(getComputedStyle(e).transitionDuration))).toBeLessThanOrEqual(0.001);

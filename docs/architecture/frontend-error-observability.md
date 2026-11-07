@@ -17,6 +17,27 @@ MapLibre tile failure, transport failure, and React Query failure do not flood
 the console. Existing feature-level error states and toasts remain responsible
 for user-facing recovery guidance.
 
+## Toast rule
+
+The transport sends a toast only for a mutation failure and for `AUTH_EXPIRED`.
+A mutation 404 names the action, for example "Could not save the charge cost".
+
+- `shouldToastFailure()` in `packages/hooks/src/api/transport.ts` applies the
+  rule. A `GET`, `HEAD` or `OPTIONS` request is a background read. A read-only
+  `POST` (`/v1/metrics/batch`) is also a background read.
+- A background read never sends a toast. The component that made the read
+  shows the error in its own card, for example "Unable to load chart data."
+  and "Retry".
+- The session-expired toast shows one time. A new token or sign-in resets it.
+- The feed-health alert (`useRConnection`) is a separate toast with a
+  15-minute cooldown for each vehicle and reason. It is not a transport toast.
+- The diagnostic record is the same for every failure, with or without a toast.
+- Queries do not retry on 401, 403, `AUTH_EXPIRED`, 404 or 429. Other failures
+  retry up to 2 times (`shouldRetryQuery()` in `apps/web/src/queryClient.ts`).
+
+The toast pattern (roles, 7 s auto-dismiss, merge and the limit of 3) is in
+[`docs/branding.md`](../branding.md#toasts).
+
 ## Coverage
 
 - `QueryCache` and `MutationCache` report failures after their normal retry

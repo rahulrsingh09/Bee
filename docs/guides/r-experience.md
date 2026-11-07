@@ -1,37 +1,108 @@
 ---
-title: Using R in the private fork
-description: Navigate the R interface, inspect trips and find settings.
+title: Using the R tabs
+description: Find your way through Now, Activity, Insights and Car, enter a charge cost, and open custom dashboards.
 ---
 
-# Using R in the private fork
+# Using the R tabs
 
-R is the interface for this fork. Navigation appears at the top on desktop and
-bottom on mobile. The header sun/moon control changes light/dark mode. There is
-no separate Appearance page or interface selector.
+R is the interface for this fork. It has four tabs: **Now**, **Activity**,
+**Insights** and **Car**. On a phone the tabs are in a dock at the bottom of the
+screen. On a wider screen they are in the top bar.
 
-The overview combines the selected vehicle's latest readings with mileage,
-trips and charging for the selected period. Energy, Cabin and Tires change the
-readings above the car. Supported artwork can be dragged to rotate, turned to
-the front, reset or replayed. Arrow keys, Home and End provide keyboard control;
-reduced-motion preferences are respected.
+The top bar also shows the R mark and the data freshness, for example
+"Updated 2 min ago". When the car sends no data for some time, an amber dot and
+"No data for 3 h" show. Select the R mark to go back to Now.
 
-Open a trip and tap or drag on the main map to select a recorded point. Use
-**Pan map** to move the map, then **Inspect route** to resume selection. Arrow
-keys step through recorded points. Charts and route selection share the time.
+R uses the mode that is saved on your account. To change it, open Car →
+Settings → Units & time → Appearance and select System, Light or Dark. System
+follows your device.
 
-**Explore** opens Vehicle health, Battery, the dashboard library and all settings.
+## Now
 
-Vehicle health starts with four status tiles: data connection, 12V battery,
-HV thermal and software. Tires, doors and locks, diagnostics, signal details and
-software history follow. Doors and locks show one summary row. Diagnostics list
-only the sensors that the vehicle reports. When a drive has telemetry but no
-trip, a **Possible missed drive** card appears at the top, and Trips shows a
-short banner that opens it; see
+Now answers "is my car OK". It shows, from the top:
+
+1. A status title, and one line of status chips: lock, plug and charge schedule.
+2. Your car. Drag the car, or use the arrow keys, to turn it through your own
+   Rivian images. Press Home to go back to the side view.
+3. Battery % and Range, with the charge limit. When there is enough history,
+   a line tells you how many days of your usual driving the range is enough for.
+4. The odometer, with this week's miles and drives and a bar for each of the
+   last 7 days.
+5. **Needs a look**, only when something needs your attention.
+6. The latest drive, charge and park.
+
+Now has no charts. The charts are in Insights.
+
+## Activity
+
+Activity opens the trips list. Select a row (or a card on a phone) to open the
+trip. Use the checkbox at the start of a row to select a trip for the map or
+for tags.
+
+A trip opens with its map first. Tap or drag on the map, the replay scrubber or
+a chart to select a point of the drive. The other views show the same point.
+Select **Play** to replay the drive in 10 seconds. Use **Pan map** to move the
+map, then **Inspect route** to select points again.
+
+## Insights
+
+Insights is a list of analysis pages:
+
+- **Cost**: charges, energy added and what they cost.
+- **Battery**: battery health, level and range.
+- **Parked loss**: the battery that the car loses while it is parked.
+- **Efficiency**: mi/kWh trends, temperature and trip comparisons.
+- **Custom dashboards**: your saved layouts and views.
+
+### Custom dashboards
+
+Select **Insights → Custom dashboards** to open the dashboard library. Your
+saved dashboards are there, with Open, Edit and Export. Dashboards that you
+saved before this release still work and keep their layout.
+
+## Car
+
+Car opens Vehicle health. It starts with four status tiles: data connection,
+12 V battery, Battery thermal and Software. Tires, doors and locks, diagnostics,
+signal details and software history follow. When a drive has telemetry but no
+trip, a **Possible missed drive** card shows at the top; see
 [Recover a missed drive](./extended-vehicle-telemetry.md#recover-a-missed-drive).
-**Open full dashboard** on the overview opens the editable data workspace.
 
-Settings form a searchable directory. Existing vehicle, chart, dashboard,
-charging, place, API and operational settings remain available according to
-account permissions. **Units & time** contains unit, timezone and available
-map-style controls. API keys, backups and authentication retain their existing
-confirmation and permission flows.
+### Settings and Sign out
+
+The **Settings** row is at the bottom of the Car tab. Settings is a searchable
+directory of vehicle, place, charging, dashboard, chart, unit, API and data
+settings. Your role controls which settings you can see.
+
+To sign out, open **Settings → Account** and select **Sign out**.
+
+## Enter the cost of a charge
+
+When Rivian sends no price for a charge, the charge page asks for it.
+
+1. Open the charge from **Insights → Cost**, then select the charge in the
+   list.
+2. In **Add the cost of this charge**, select **Total paid** or
+   **Rate per kWh**.
+3. Enter the total from your receipt, or the rate. The line below the field
+   shows the result, for example "= 50¢ per kWh for 28.6 kWh".
+4. Optional: with a rate, select **Use this rate for my next charges at this
+   charger**. The app saves the rate to a saved place at that charger, so the
+   next charges there get the same price.
+5. Select **Save cost**.
+
+To change a saved price, select **Edit** on the charge page. Edit also has
+**Mark free** and, for a price that you entered, **Use the automatic price**.
+
+Each price names its method: Billed by Rivian, Your home rate, Place rate,
+Your price, Free, No price or Price pending.
+
+### Set a place rate or a home price
+
+1. Open **Settings → Places**.
+2. Edit the place, for example your home.
+3. In **Charging Rates**, enter the rate in $/kWh, or a schedule of rates.
+4. Save the place.
+
+Charges at that place then use its rate. A public DC charge never uses your
+home rate.

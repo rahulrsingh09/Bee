@@ -107,13 +107,17 @@ live completions also take, and saves nothing when a completion is pending
 owner-driven repair. Do not run `rebuild_vehicle_history` against production:
 it clears all trips first.
 
-## Missing trip speed histogram
+## Missing "Time at each speed" data
+
+Trip detail shows the speed distribution as "Time at each speed" (one bar per
+10 mph band, in minutes). This section covers a trip where that card is empty or
+shows little recorded time.
 
 Trip detection may use inferred movement while stored `speed_mph` remains null.
 The trip detail view preserves that raw series and can display a separately
 labelled GPS estimate calculated from consecutive historical positions. The
-histogram weights accepted intervals by elapsed time, clips to the trip window,
-and gives recorded speed (including zero) precedence. Odometer values are never
+"Time at each speed" card weights accepted intervals by elapsed time, clips to
+the trip window, and gives recorded speed (including zero) precedence. Odometer values are never
 used for these estimates.
 
 The display accepts GPS intervals between 5 and 90 seconds, rejects coordinate

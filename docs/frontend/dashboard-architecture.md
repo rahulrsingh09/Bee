@@ -129,6 +129,21 @@ Conditional variants may intentionally share grid coordinates. Keep the always-v
 
 In view mode, `DashboardRenderer` resolves visibility from live status. In edit mode it owns a temporary, named scenario preview state, filters both the canvas and dashboard-wide data requirements to preview-visible widgets, and keeps the complete draft in `GridEditor`. The editor drawer presents the active scenario prominently, for example `Previewing: Vehicle plugged in`, and lets the user switch between registered condition values. Preview state never persists or enters the dashboard schema. Legacy `options.chargingConnectionVisibility` values are normalized to typed rules at API/import boundaries and are written in the typed form on the next save.
 
+#### View-grid collapse (`collapseHiddenWidgets`)
+
+`DashboardGrid` (view mode only) closes the gaps that empty widgets leave. Each cell watches its own subtree after its data loads:
+
+- A sensor tile with no value renders `[data-sensor-empty="hidden"]`. The cell collapses and leaves the layout.
+- A chart with no data renders `[data-chart-empty-row]` (56–64 px). On mobile the cell gets auto height. On desktop it gets the rows that `rowsForHeight` computes for the measured height, and at least `EMPTY_CHART_MIN_ROWS` (2).
+
+`collapseHiddenWidgets(widgets, hiddenIds, heights)` in `packages/dashboards/src/DashboardGrid.tsx` builds the view layout in three steps:
+
+1. Tile-row width share. A tile row is a set of widgets with the same `y` and `h` that sit side by side with no space between them. When a tile row loses a hidden widget, the widgets that stay share the full width of the row. The share keeps the ratio of their saved widths, and the last widget takes the remainder. A row with a gap between its widgets, or a row where all widgets are hidden, keeps its widths.
+2. Smaller heights. A widget in `heights` (an empty chart row) gets that smaller height. A height is never increased.
+3. Vertical compaction. In saved order (`y`, then `x`), each visible widget moves up until it touches a widget above or row 0. This is the same compaction that the grid editor applies.
+
+With no hidden widget and no smaller height, the function returns the saved layout unchanged. The editor (`GridEditor`) always shows every widget at its saved size, with its reason line, so the owner can edit it. The collapse never writes to the saved configuration. Tests: `apps/web/src/test/dashboardGridCollapse.test.tsx`.
+
 ### 5. Widget Layer
 
 Widgets belong in `packages/dashboards/src/widgets`.

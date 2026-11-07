@@ -21,4 +21,12 @@ Riviamigo is a self-hosted web application for authenticated Rivian owners to un
 
 ## Visual authority
 
-The incumbent tokenized interface, shared primitives, `docs/branding.md`, and approved brand geometry are authoritative. Theme additions extend this system rather than replacing its interaction patterns or information architecture.
+The incumbent tokenized interface, shared primitives, `docs/branding.md`, and approved brand geometry are authoritative. Theme additions extend this system and do not replace its interaction patterns.
+
+## Information architecture
+
+- The R experience has four tabs: Now, Activity, Insights and Car.
+- Now (`/`) answers "is my car OK". It has no charts and no period picker.
+- Release 1 maps Activity to the trips list (`/trips`) and Insights to a hub (`/insights`). The hub links to Cost, Battery, Parked loss, Efficiency and Custom dashboards. Car is Vehicle health (`/vehicle-health`), with the Settings entry at the bottom.
+- Saved custom dashboards stay backward-compatible. They live under Insights → Custom dashboards.
+- Old links stay valid. `/explore` redirects to `/insights`.

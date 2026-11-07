@@ -5,9 +5,10 @@ description: Choose an account theme, customize chart colors, and work safely wi
 
 # Appearance and custom themes
 
-> Private fork: R is the only interface. Use the header sun/moon control for
-> light/dark and Units & time for map style. The gallery instructions below
-> describe retained upstream behavior. See [Using R](./r-experience.md).
+> Private fork: R is the only interface. R uses the mode that is saved on your
+> account. To change it, open Car → Settings → Units & time → Appearance and
+> select System, Light or Dark. Use Units & time for map style too. The gallery instructions below describe retained upstream
+> behavior. See [Using the R tabs](./r-experience.md).
 
 Open **Settings → Appearance** to change how Riviamigo looks. Your choices are
 saved to your account and follow you across supported browsers and devices.

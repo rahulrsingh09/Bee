@@ -149,3 +149,41 @@ packages/
 - Visual system: [`docs/branding.md`](./docs/branding.md)
 - Architecture: [`docs/architecture/overview.md`](./docs/architecture/overview.md)
 - Backend data flow: [`docs/architecture/backend-data-flow.md`](./docs/architecture/backend-data-flow.md)
+
+## Rules learned in the UX revamp run
+
+These rules come from the R UX revamp (release 1, 2026-11). Each rule prevents
+a failure that the run found.
+
+- **Gate each change in isolation.** When several agents edit one worktree,
+  check each change in a clean worktree at the branch head, with only that
+  change's files copied in. Then another change's unfinished edits cannot make
+  the check pass or fail.
+- **Gate coupled changes as one batch.** When the tests of one change assert
+  the strings or assets of another change (copy, e2e specs, artwork), check
+  them together. After the batch passes, commit each change on its own.
+- **Split a "wait for the upstream release" gate in two.** "Code merged" opens
+  build work. "Live" opens only the release. Build work does not need
+  production state.
+- **Check the release controller, not only the service.** A Northflank verified
+  release can fail at the controller step after preflight and backup pass. Read
+  the `verified-release-controller` job runs.
+- **Give each parallel Playwright run its own port and output folder.**
+  `E2E_PORT=<port> pnpm --filter @riviamigo/web exec playwright test <specs> --workers=1 --output=/tmp/pw-<name>`.
+  A shared port or output folder lets one run read or delete the files of
+  another.
+- **Do not add a migration under `apps/api/migrations` without a namespace
+  review.** The private fork maps upstream numbers into its own range (for
+  example, upstream 0031 becomes 1000031). A new private schema change can
+  collide with it. Read
+  [`docs/architecture/private-deployment.md`](./docs/architecture/private-deployment.md)
+  first; until the review is done, store the value with the current schema.
+- **Tests that assert copy must use the glossary.** Write expected strings with
+  the terms in [`docs/branding.md`](./docs/branding.md) ("Copy glossary and trip
+  list"): Battery, not SoC; "→", not "->"; Efficiency, not Consumption.
+  Otherwise the copy pass breaks the tests.
+- **A hooks normalizer must pass new additive fields.** When the API adds a
+  field, update `packages/hooks/src/api/normalization.ts` so the field reaches
+  the UI, and extend `apps/web/src/test/normalizationPassthrough.test.ts`.
+  A normalizer that copies only known fields drops the new field without an
+  error.

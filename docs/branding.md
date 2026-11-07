@@ -14,9 +14,10 @@ This fork presents **R** as its only interface. The upstream reference below is
 retained for synchronization; these R rules take precedence for the running fork.
 There is no appearance gallery, Theme Studio entry or interface selector.
 
-- Use the R mark and approved Option B: an open vehicle stage, the car above
-  its reading cards, and compact linked summaries below; stack these on mobile.
-  Keep the complete vehicle silhouette visible.
+- Use the R mark, neutral surfaces and quiet borders. Each tab has one job: Now
+  answers "is my car OK", Activity lists what the car did, Insights holds the
+  analysis pages, and Car holds vehicle health and Settings. See
+  [R navigation](#r-navigation) and [Now](#now).
 - Use neutral surfaces, restrained borders and `--r-signal`. Cove teal, lime,
   caliper gold and supporting cool series colors form the fixed R data palette.
   Status colors retain their meaning. R overrides belong in the existing token
@@ -28,6 +29,9 @@ There is no appearance gallery, Theme Studio entry or interface selector.
     (WCAG 2.2 1.4.11). Do not use `--rm-border-default` as the only edge of a
     control. Cards and dividers can keep `--rm-border-default` because their
     edge is decoration (1.4–1.9:1).
+  - Inputs, selects and the date-range trigger use `border.control`
+    (`--rm-border-control`). Outside R the value falls back to
+    `--rm-border-strong`: `var(--rm-border-control, var(--rm-border-strong))`.
   - `--rm-text-disabled` is at least 4.5:1 on surface and elevated. Also show
     the disabled state with a second cue, for example no hover change and
     `aria-disabled`.
@@ -62,32 +66,33 @@ There is no appearance gallery, Theme Studio entry or interface selector.
 - Efficiency bars use the chart accent in both layouts; untagged categories
   remain neutral. Column headers, values, distance and speed metadata follow
   the selected units.
-- The owner's R2 Performance uses the approved Catalina Cove, 21-inch-wheel,
-  black-interior artwork even when live paint metadata is missing. Other vehicle
-  models keep their own artwork. Lead the overview with trip distance, total
-  trips and efficiency for the selected period. Keep odometer secondary and
-  battery range separately labeled as an estimate.
-  Use the approved closer, soft-light presentation: a uniform 1.1 scale for
-  both the poster and rotation frames, with a quiet token-colored radial light
-  behind the car. Preserve the image aspect ratio and complete silhouette.
-- Navigation is at the top on desktop and bottom on mobile. Settings use grouped
-  full-width rows, in two desktop columns and one mobile column. Hover covers
-  the whole row through its divider.
+- Vehicle artwork in R. Never show the wrong model as the owner's car.
+  - An R2 turns only through the owner's real Rivian account images
+    (`vehicle.images`), in this order: front, front three-quarter, side, rear
+    three-quarter, rear. Overhead and charging images are excluded. The car
+    rests on the side image. The images cross-fade from one angle to the next.
+    A double-tap or the Home key returns to the side image.
+  - With fewer than 2 owner images, the car is one still image with no turn
+    control. With no owner image, the R2 shows its packaged Catalina Cove,
+    21-inch-wheel artwork as that still image.
+  - The bundled 72-frame 360° pack shows an R1S body. It is a fallback for
+    other models only, and is never shown for an R2. In release 1 no surface
+    calls it; it is kept as a documented fallback. See
+    [Vehicle orbit tint](./frontend/vehicle-orbit-tint.md).
+  - Rivian configurator frames are not used. The Rivian terms of use do not
+    allow copying them into the app.
+  - Keep the complete silhouette visible and preserve the image aspect ratio.
+    Nothing covers the car: no hint text, no toy buttons, no status chips.
+  - The stage subtitle uses the real model, trim and color.
+- Settings use grouped full-width rows, in two desktop columns and one mobile
+  column. Hover covers the whole row through its divider.
 - Light/dark uses the existing account preference and applies to the car stage,
-  menus, dialogs, charts and authentication pages.
+  menus, dialogs, charts and authentication pages. The R top bar has no mode
+  control.
 - Pointer use leaves no colored focus frame. Keyboard focus and skip navigation
   remain visible; retain existing dialog focus management.
-- Trip inspection shares one sample between the map, drive, temperature,
-  elevation and tire-pressure graphs. Tapping or dragging any plot updates all
-  of them; the selected sample remains when the pointer leaves or the page
-  scrolls. Horizontal touch gestures inspect samples while vertical gestures
-  scroll the page. Selecting another trip clears the sample. Independent
-  analytics charts retain their own time ranges and zoom behavior. Trip speed,
-  histogram ranges, elevation, temperature and pressure follow unit preferences.
-- Page entry takes 220 ms. Rotation uses a deferred, same-origin frame pack with
-  bounded decoding and one 3.6-second turn on first visible entry. Touch, pointer
-  and keyboard interaction interrupt it. Reduced motion uses direct changes
-  and defers loading until interaction. Do not animate page backgrounds through white.
+- Page entry takes 220 ms. Reduced motion removes all animation and
+  transitions. Do not animate page backgrounds through white.
 - On phones, headings and actions form intentional separate rows. When a vehicle
   picker is present, allow the date control onto another row instead of scrolling
   or squeezing the header; retain 44px touch targets. Sensor titles,
@@ -100,7 +105,7 @@ There is no appearance gallery, Theme Studio entry or interface selector.
   Long option labels wrap. Escape closes the picker before its parent dialog;
   keyboard focus returns to the trigger.
 - Preserve canonical charts, settings operations, permissions and map panning.
-- Phantom Drain uses compact summaries and expandable parked-period cards below
+- Parked loss uses compact summaries and expandable parked-period cards below
   768px. Each card leads with date, duration, battery loss, hourly drain and sleep;
   its details retain the desktop table's readings and unknown-state explanations.
   Search, sorting and pagination remain available. Desktop keeps the table.
@@ -109,46 +114,85 @@ There is no appearance gallery, Theme Studio entry or interface selector.
   External Connections wraps provider names in visible rows; Jobs uses labeled
   mobile rows with its Run action in view instead of a horizontally scrolled table.
 - Rich time-series plots measure the actual card width, including below 320px.
-  Keep readable axis text; Phantom Drain uses concise percentage ticks and
+  Keep readable axis text; Parked loss uses concise percentage ticks and
   preserves daily loss/session calculations. Embedded plots support touch tap
   and horizontal scrubbing while allowing vertical page scrolling. Tooltips stay
   within the card; wrapping legends reserve their measured height.
-- Home is the complete dashboard; the former `/d/dashboard` landing page
-  redirects there. Keep the approved open car stage and quiet surfaces. Place
-  the car above trip distance, total trips and efficiency. SOC, estimated
-  remaining range and charging use a second row of matching surface cards,
-  with the same column widths and radius. Energy-card labels and values share
-  aligned rows even when text wraps. Follow those with linked
-  summaries for drive mode/speed/altitude, cabin/outside temperature, tires and
-  software. Do not append a separate telemetry table. Odometer and snapshot
-  time form a secondary footer. Summary links lead to existing detail pages.
-  Keep one vehicle lock-status icon beside the car. Give it an accessible label
-  and hover title; it is not clickable and opens no modal. The overall API lock
-  reading controls it, with an unknown state for missing/unavailable readings.
-  Do not show individual door/frunk/gate indicators or an open count. Preserve
-  the clean photographic rotation without opening effects or cutout overlays.
-  Desktop places the car and readings on the left and recent trips/charging
-  on the right. Period-total cards form a two-column grid beneath that activity,
-  filling the right column. Charts span the space below both columns.
-  Mobile orders the car, trip cards, energy cards, detail summaries, period
-  totals, recent trips/charging, then charts. The optional Overview Charts
-  catalog stays last; charts never displace recent activity.
-  Home groups saved widgets into vehicle, totals and chart sections, each
-  using the normal dashboard renderer. Home has no Edit dashboard control,
-  including when the account enables dashboard edit shortcuts. Editing remains
-  in the dashboard library under Settings, retaining add/remove, sizes and options;
-  removing the car removes its summary from Home. Dashboard tools retain
-  duplication, export and import. Imported dashboards open as personal copies
-  after confirmation. Untouched bundled dashboards flow to fit content;
-  Home's vehicle expands to its content without an inner scrollbar, including
-  when the saved widget is short. Custom dashboard pages and the editor
-  retain saved geometry and constrained-widget scrolling.
+- Custom dashboards (`/d/<slug>`) keep their saved geometry and
+  constrained-widget scrolling. The dashboard library is in Settings →
+  Dashboards; Insights → Custom dashboards opens it. Editing keeps add and
+  remove, sizes and options. Dashboard tools keep duplication, export and
+  import. An imported dashboard opens as a personal copy after confirmation.
 - Multi-trip maps assign colors before filtering selection so a route keeps its
   color when other routes are added or removed. Use sixteen token-based colors,
   numbered route keys with dates and destinations, and a tap-to-highlight action
   that dims other routes without clearing the selection. The key scrolls within
   its own bounded area on mobile. There is no fixed selection cap; colors repeat
   after sixteen routes, so labels and highlighting remain necessary.
+
+### R navigation
+
+- The R shell has four tabs: Now (`/`), Activity, Insights (`/insights`) and
+  Car (`/vehicle-health`). In release 1, Activity opens the trips list
+  (`/trips`). The phone dock and the desktop pill navigation show the same four
+  tabs, each with its icon and its label. Labels are always visible.
+- A detail page keeps the tab of the list that opens it:
+  - Activity: `/trips`, a trip (`/trips/<id>`) and a charge
+    (`/charging/<id>`).
+  - Insights: `/insights`, `/charging`, `/battery` and its sections,
+    `/efficiency`, custom dashboards (`/d/<slug>`) and `/settings/charts`.
+  - Car: `/vehicle-health` and the other Settings pages.
+- Up to 900 px wide, the tabs are a dock at the bottom of the screen. The dock
+  is 66 px tall, at most 410 px wide, and sits above the safe area. Each tab is
+  at least 44 px wide and 54 px tall. The page has bottom padding equal to the
+  dock height and its offset, so the dock never covers page content. Wider
+  screens show the tabs as a pill row in the top bar.
+- The top bar shows only the R mark (a link to Now) and the data freshness:
+  "Updated 2 min ago", or an amber dot and "No data for 3 h" when telemetry is
+  stale. The top bar has no theme, Settings or Sign out icons.
+- The Insights hub is one list of rows (title and one line): Cost, Battery,
+  Parked loss, Efficiency and Custom dashboards. Lifetime is added when its
+  page exists.
+- Settings is a labelled row at the bottom of the Car tab. Sign out is in
+  Settings → Account.
+- `/explore` redirects to `/insights`. There is no Explore tab.
+- The R dock replaces the upstream full-screen navigation sheet that is
+  described in [Responsive Control Surfaces](#responsive-control-surfaces).
+
+### Now
+
+Now (`/`) answers "is my car OK". The order is fixed:
+
+1. The status title (`h1`).
+2. One line of status chips (lock, plug, charge schedule). The chips are never
+   over the car.
+3. The car in its own area, turning through the owner's real Rivian images.
+   There is no hint text and there are no toy buttons.
+4. The Battery % and Range heroes, with the limit bar and "enough for about
+   N days". That sentence shows only when its rule fires.
+5. The Odometer card, with "This week" and 7 day bars.
+6. "Needs a look", only when a rule fires.
+7. The Today/Latest rail: the latest drive, charge and park.
+
+Now has no charts, no period picker and no chart picker. Motion runs on the
+first view of a session only. It uses transform and opacity only. With reduced
+motion, there is no motion.
+
+### Trip detail
+
+- Trip detail is map first. On a phone the map is full width and a summary
+  sheet covers its lower edge. At 1024 px and wider, the map and charts are on
+  the left and the summary is on the right.
+- One sample is shared by the map dot, the replay scrubber and readout, the
+  power and elevation charts, and the speed band. Tap or drag on any of them to
+  select a sample; the selection stays. Horizontal touch gestures select
+  samples and vertical gestures scroll the page.
+- Play replays the drive in 10 s and never starts by itself.
+- Charts have one axis, and time axes read "0 min, 10 min".
+- Temperature, cabin, elevation change, tires and drive mode are one
+  Conditions list.
+- The elevation chart shows only for a change of more than 100 ft.
+- Trip speed, elevation, temperature and pressure follow unit preferences.
 
 See [R integration](./architecture/r-experience.md) for module boundaries.
 
@@ -284,7 +328,7 @@ Common usage:
 ## Icon And Control Rules
 
 - Preserve icon family consistency inside a page and within shared admin/dashboard surfaces.
-- Use the full battery glyph for the shared Battery main-navigation destination; reserve level-specific battery glyphs for live status indicators.
+- Use the full battery glyph for the Battery destination (the Insights row and the Battery pages); reserve level-specific battery glyphs for live status indicators.
 - Prefer icon-plus-label patterns already established by shared primitives instead of inventing one-off controls.
 - The sidebar footer places the GitHub Releases download icon at the far right of the Settings row, at the Settings icon's size. Keep both icons together when collapsed and in the mobile navigation drawer; preserve touch-sized link targets and visible keyboard focus. The icon renders only while a newer release exists, in the warning color with a rich tooltip showing the current and latest versions; otherwise the footer shows Settings alone.
 - Keep control order stable when editing existing flows unless the redesign intentionally updates the documented pattern.
@@ -315,12 +359,12 @@ Common usage:
 - The chart editor places its wide production preview before a narrower single-column form on desktop and stacks preview before controls on mobile. Section navigation may scroll horizontally, but form content and save actions must remain viewport-reachable.
 - The chart editor is curve-first. Its ordinary sections are Basics, Curves, Display, and Advanced; source bindings and raw domain fields are implementation details, not primary navigation. The editor derives a compatible shared domain from the chosen curves, keeps incompatible curves searchable with a plain explanation, and puts uncommon data controls in progressive disclosure inside the affected curve. Every curve uses the same card and offers independent mark, fill, color, axis, order, legend, removal, and data controls; changes must update the production preview immediately.
 - Chart settings use one centered, viewport-bounded modal on desktop and mobile. Keep its sections scrollable inside the dialog, keep the header visible, and group display/curve controls and per-axis range controls in collapsible sections. Lay paired numeric range fields out as two distinct columns. Entering Manual range mode seeds empty fields from the chart's currently rendered axis range.
-- Mobile primary navigation is a full-screen sheet, not a scaled-down desktop rail. Keep destination navigation at the top and vehicle/account utilities at the bottom; use an explicit close control, preserve focus on dismissal, and provide at least 44px touch targets (56px for primary destinations).
+- Upstream layout only (R uses the dock in [R navigation](#r-navigation)): mobile primary navigation is a full-screen sheet, not a scaled-down desktop rail. Keep destination navigation at the top and vehicle/account utilities at the bottom; use an explicit close control, preserve focus on dismissal, and provide at least 44px touch targets (56px for primary destinations).
 - In the collapsed desktop sidebar, center the vehicle connection indicator when no live battery indicator is available; use the two-column status layout only when both indicators are present.
 - The dashboard editor follows this rule as a bounded bottom panel on mobile and must reserve enough document space to keep widget controls scrollable above it.
 - Conditional dashboard previews use a compact labeled segmented control in the shared editor drawer. The selected state uses the existing accent treatment, while both choices remain readable and touch-safe on mobile.
 - Compact controls still need touch-safe hit targets, readable labels, and enough spacing for numeric inputs, segmented toggles, and sliders.
-- Every interactive element has a hit area of at least 44 × 44 CSS px at 390px and 1280px. Inline text links inside sentences are exempt. `Input`, `SelectPicker` (both sizes), the date-range trigger, search fields, table pagination buttons, and the efficiency toggle are 44px tall. A control that must stay visually smaller (sensor help icon, table row link, tag count button, trip checkbox) keeps its look and gets the full target from its own `::before` (absolute, centred, no `pointer-events: none`) or, for checkboxes, from a 44px input that draws a 16px box (`TripSelectCheckbox`). Do not use a child element for the hit area; the UX audit counts only the element and its pseudo-elements.
+- Every interactive element has a hit area of at least 44 × 44 CSS px at 390px and 1280px. Inline text links inside sentences are exempt. `Input`, `SelectPicker` (both sizes), the date-range trigger, search fields, table pagination buttons, and the efficiency toggle are 44px tall. Date picker month buttons and day cells have a 44 px hit area. A control that must stay visually smaller (sensor help icon, table row link, tag count button, trip checkbox) keeps its look and gets the full target from its own `::before` (absolute, centred, no `pointer-events: none`) or, for checkboxes, from a 44px input that draws a 16px box (`TripSelectCheckbox`). Do not use a child element for the hit area; the UX audit counts only the element and its pseudo-elements.
 - Reusable settings panels should stay within shared seams such as `packages/ui`, dashboard widgets, or shared shell controls rather than route-local popovers.
 
 ## Shared Component Patterns
@@ -332,16 +376,18 @@ Common usage:
 - Compact card badges should use the shared `Badge` primitive instead of ad hoc border pills.
 - Only show timeframe badges when the timeframe itself adds meaning. For battery and charging summary cards, omit `Current` labels and use a small `Lifetime` badge only on lifetime-scoped history cards.
 - Multi-day time-series axes use concise calendar-date labels with no repeated dates. Preserve exact timestamps in the hover tooltip; only intraday axes show clock times.
+- A tile never shows "-". With no value it hides, or shows one short reason or action line (Total Cost: "Add a home price" → Settings → Places). The editor always shows the tile with its reason. Loading is a skeleton line with `aria-busy`. Numbers use primary ink; the series color is only for the icon, sprite and border. Help icons have a 44 × 44 hit area.
+- In view mode, a hidden sensor tile collapses its grid cell, and an empty chart row takes its own height. The editor keeps the saved size. See `collapseHiddenWidgets` in [Dashboard architecture](./frontend/dashboard-architecture.md).
 - Range-scoped sensor cards must display a server-calculated value for the selected dashboard timeframe, never the last point from their background sparkline. Use the shared tooltip trigger beside a compact domain-specific label when a derived value needs a short explanation.
 
 ### Charts
 
 - Fixed and assignment-driven dashboard catalogs use one shared chart frame. Overview must retain the same picker, settings, plot spacing, mobile viewer, focus behavior, and production renderer as the same chart on Battery, Charging, Efficiency, or Trips.
-- Dashboard sensor sprites and time-series charts use the editor-selected curve color. For sensor cards, that explicit choice carries through the metric icon, sprite, and accent border; light-mode data-colored values use a readable companion from the same selected color. Automatic returns the card to its theme-assigned slot. Canvas renderers must resolve theme tokens such as `var(--rm-accent)` before drawing.
+- Dashboard sensor sprites and time-series charts use the editor-selected curve color. For sensor cards, the sensor "Accent color" sets the metric icon, sprite, and border. It does not change the number, which stays in primary ink. Automatic returns the card to its theme-assigned slot. Canvas renderers must resolve theme tokens such as `var(--rm-accent)` before drawing.
 - The shared display control is **Display filter**, not geometric curve smoothing. Its time-window choices are `Raw`, `15 min`, `1 hr`, `6 hr`, `24 hr`, `3 days`, and `7 days`; sprites default to `24 hr` and dashboard charts to `15 min`. Dashboard filtering and curve smoothness apply to every compatible curve in the active chart. A bar sprite sums its source values into non-overlapping time bins, so activity totals remain truthful while the card is easier to read; `Raw` remains available when individual events matter.
 - Eligible line and area views expose **Curve smoothness** with three independently persisted positions: `Straight`, `Gentle` (the default), and `Smooth`. This renderer-only path shaping preserves recorded timestamps, tooltip values, point counts, and null-gap behavior. `Straight` draws hard point-to-point corners. `Gentle` blends halfway from those straight controls toward the shape-preserving curve. `Smooth` uses the full irregular-time-aware curve for the strongest rounded, hilly appearance. Both curved positions keep Bezier handles inside each timestamp segment and cannot rise above or fall below its adjacent recorded values. Bars, scatter, stepped charts, non-smoothable supporting series, and categories bypass smoothing; surfaces without chart settings do not expose the control.
 - Ordinary quantitative bars use the shared filled-bar treatment from `CHART_BAR_STYLE`: semantic chart colors, quiet gridlines, consistent width/opacity, and rounded tops where the renderer supports them. Outline-only bars are not the default dashboard treatment.
-- Trip speed histograms show source and time coverage above the plot. GPS interval averages carry a **GPS estimated** label and use a separate stack/legend when mixed with recorded speed. Missing time is stated explicitly. The Drive Chart displays GPS averages as dots with their averaging windows; its speed series retain missing values in both paths and tooltips independently of power-series gap settings.
+- "Time at each speed" (trip detail) shows one bar per 10 mph band, in minutes, and one coverage line inside the trip duration ("Speed recorded for 30 of 30 min."). A GPS estimate is named in that line. The Drive Chart displays GPS averages as dots with their averaging windows; its speed series retain missing values in both paths and tooltips independently of power-series gap settings.
 - Dense categorical and daily bar charts preserve every mark and full interaction target while adaptively reducing only visible text. X-axis labels use the established chart font, retain the first and last categories when they fit, and choose the densest evenly distributed non-overlapping set with at least 12 px between labels. Bar-value labels are selected by descending value with 6 px collision padding so the most useful values remain visible. Do not aggregate, rotate, truncate, scroll, or narrow the default time range to solve label collisions. Recharts axes default to `preserveStartEnd` with a 40 px minimum tick gap; small specialized categories such as the rotated Speed Histogram may document an exception.
 - Every interactive bar chart must expose the date/category and formatted metric value on hover. Stacked bars must also provide a legend and keep hover/click hit-testing on the full bar rather than individual visual segments. Daily charge-session composition clips the full stack to one rounded outer silhouette so its segments remain flush and visually consistent.
 - Timeline interval bars follow the same filled-bar treatment and expose the complete bar as a 44px keyboard/touch hit target. Their horizontal position and width always use the interval's actual timestamps. Overlapping intervals are stacked into visual lanes, not summed; reserve a compact bottom band (about 30% of the plot) so interval context does not overpower a primary trend. Hover and focus show the trip route, time, duration, and distance, and Enter/Space activates the trip.
@@ -350,13 +396,14 @@ Common usage:
 - The charge detail curve ("How it charged") is one line on one kW y-axis, in the charge type color (`--rm-charging-dc` or `--rm-charging-ac`). The x-axis is battery % by default; the **Battery % | Time** toggle morphs the same points between battery % and minutes. On first view the line draws, then the peak marker, the taper shading and the lowest point appear, in that order. Reduced motion shows that final state at once. The usual DC band is a neutral fill behind the line in battery % view only. Phase cards (Climb, Peak, Taper) select one sentence for the story line above the plot. Drag or arrow keys read kW · battery % · minute in a tooltip that stays inside the card. A charge with no curve shows one compact row.
 - Every charge price shows its method: Billed by Rivian, Your home rate, Place rate, Your price (with the derived ¢/kWh), Free, No price or Price pending. An unpriced charge has an attention-bordered cost box with a **Total paid | Rate per kWh** segmented control, a preview line ("= 50¢ per kWh for 28.6 kWh" or "= $14.30") and one optional checkbox that saves the rate to a saved place at that charger.
 - A pinned dashboard chart is one card: the title and an optional insight sentence are inside the card, above the plot. The card has one "⋯" button (label "Chart options", 44 px hit area) with "Chart settings" and "Full screen". Do not add icon-only buttons next to it. Chart controls keep the global keyboard focus ring; do not remove it with `outline-none` or `ring-0` overrides.
-- Chart errors stay in their card: "Unable to load chart data." and "Retry". A chart that still loads after 15 s shows "Still loading · Retry". A chart with no data in the period is a compact empty row (at most 64 px) with the chart name, the reason, and when it shows. Toasts are only for owner actions.
+- Chart errors stay in their card: "Unable to load chart data." and "Retry". A chart that still loads after 15 s shows "Still loading · Retry". A chart with no data in the period is a compact empty row (at most 64 px) with the chart name, the reason, and when it shows. A chart failure never shows a toast; see [Toasts](#toasts).
 - "Full screen" opens the dashboard chart viewer on every screen size. The expanded viewer is an opaque, safe-area-aware fullscreen surface: its picker and close controls are anchored to opposite viewport edges so they do not consume chart height. They fade after the viewer first becomes available and return on a chart tap or Enter/Space, while the viewer uses a solid accent rotate prompt with large iconography before landscape exploration. The viewer must prevent page scroll, overscroll, and background interaction until it closes.
 - Time and numeric charts support horizontal range selection, touch-first pan and pinch exploration in the viewer, and a conditional top-right icon-only reset control that returns to the full range. Categorical charts keep full category/value detail and touch-safe selection rather than simulating a meaningless zoom level.
 
 ### Vehicle artwork
 
 - Rivian API artwork remains the primary source. Local model artwork is the final fallback for missing image metadata, protected-image fetch failures, browser image errors, and demo/test vehicles. Packaged fallbacks support R1S, R1T, and R2; the legacy R2S model value resolves to the same R2 artwork while existing `r2s/` asset URLs remain stable. Unsupported models keep the neutral vehicle icon.
+- The R2 turn uses the owner's own Rivian image set (`resolveVehicleArtwork(…).angles`: front, front three-quarter, side, rear three-quarter, rear; overhead excluded). It rests on the side image and never uses the bundled 360° frames. Fewer than 2 owner images give one still image. The bundled orbit (`RVehicleOrbit`) has no caller in release 1 and is kept as a documented fallback for other models; see [Vehicle orbit tint](./frontend/vehicle-orbit-tint.md).
 - Resolve every consumer through `resolveVehicleArtwork(images, model, usage)` and render protected sources through `AuthenticatedVehicleArtwork` using its returned `fallback`. Do not hard-code route-local paths or implement a second placement picker.
 - Surface priority is part of the contract: Overview uses API overhead then the model overview; Charging uses API side-charging then the model charging composition; Health uses an explicit hero or three-quarter image, plain side, front, then the model health hero; Settings uses API side, model side, then the neutral icon. Local artwork never invents open-door or charging overlays.
 - Source renders under `assets/vehicles_generated` are not presentation assets. Regenerate the transparent, normalized files under `apps/web/public/vehicle-images/fallbacks` with `scripts/build_vehicle_fallback_artwork.py`.
@@ -364,12 +411,23 @@ Common usage:
 - API and local charging artwork intentionally use different presentation rules. Put fallback-only class and style changes in `fallbackProps` instead of adding model-specific CSS guesses to route code. R1 source crops focus on the front charge port, while the R2 source crop focuses on its rear charge port.
 - Keep the transparent canvas and visible bounds consistent across models. Validate changes on both light and dark surfaces and run the artwork build in check mode before review.
 
+### Toasts
+
+- A toast is only for an owner action (save, delete) and for session expiry.
+  The feed-health alert in [Runtime Health Indicators](#runtime-health-indicators)
+  is the one other toast, with its own cooldown.
+- A background read shows its error in its own card.
+- Errors use `role=alert`; other toasts use `role=status`.
+- Auto-dismiss is 7 s and pauses on hover and focus.
+- Duplicates merge and show a count.
+- A maximum of 3 toasts are visible.
+
 ### Empty, loading, and error states
 
 - Use `<EmptyState>` and `<Skeleton>` from shared primitives when they fit.
 - Error states should use the established inline treatment rather than plain text.
 - Loading and empty states must match the surrounding page tone and spacing.
-- Shared status sensors should not drift between `Needs data`, raw `undefined`, and placeholder dashes. Use the blue `Unavailable` chip for never-seen data, and prefer last-known values plus a small `Last updated ...` line when historical data exists.
+- Shared status sensors should not drift between `Needs data`, raw `undefined`, and placeholder dashes. Value tiles follow the tile rule in [Cards](#cards). Status sensors use the blue `Unavailable` chip for never-seen data, and prefer last-known values plus a small `Last updated ...` line when historical data exists.
 
 ### Page composition
 
@@ -481,37 +539,28 @@ for the map and for tag edits. Numbers use tabular figures in the app font, not
 monospace. The Mode chip and column show only for a mode that is not the
 default (All-Purpose). Phones show no Rows select; the paging buttons stay.
 
-### Default analytics and Battery navigation
+### Battery section navigation and default analytics
 
-R treats Battery as a primary destination alongside Charging. Battery overview
-and Parked loss use a restrained, underlined section navigation with 44px
-minimum targets. Section links use exact route matching so only one is active.
-The primary bar stays at the top on desktop and bottom on
-mobile. Mobile shows five labeled destinations: Home, Trips, Charging,
-Battery and Explore. Efficiency remains available from Home and Explore; on
-that route the mobile bar selects Explore. Desktop retains all six destinations.
-Targets stay at least 44px wide at 320px; labels remain visible.
-The first tab reads Home; the dashboard remains the overview at `/`. Mobile
-highlights only the active icon, with the label outside that highlight. The
-five equal targets use 11px labels in a bar inset 12px from narrow screens.
-Desktop tabs size to their text with horizontal padding instead of squeezing
-longer labels into equal-width compartments.
+Battery overview and Parked loss use a restrained, underlined section
+navigation with 44px minimum targets. Section links use exact route matching,
+so only one is active. Both pages select the Insights tab; see
+[R navigation](#r-navigation).
 
 Default analytics use individual, editable chart cards instead of hiding the
-entire set behind a picker. Below the vehicle and recent activity, Home includes SOC, capacity and odometer, projected
-full-charge range, battery health, parked drain, charging, efficiency and tires.
-Charging and Efficiency show their remaining specialized graphs by default.
-Related cards share a two-column desktop grid where the chart permits it; mobile
-stacks full-width cards without scaling down labels. Keep the optional chart
-catalog for additional assigned charts. Pinned chart titles appear once.
+entire set behind a picker. Battery, Charging and Efficiency show their
+specialized graphs by default. Related cards share a two-column desktop grid
+where the chart permits it; mobile stacks full-width cards without scaling down
+labels. Keep the optional chart catalog for additional assigned charts. Pinned
+chart titles appear once. Now shows no charts.
 
-The single vehicle lock icon reflects the overall lock reading independently
-of physical door position. The shackle turns when a known lock reading changes;
+The single vehicle lock icon (the first Now status chip) reflects the overall
+lock reading independently of physical door position. It is not a button and
+opens no modal. The shackle turns when a known lock reading changes;
 reduced motion makes that change immediate. Unknown readings use the question
 icon and an explicit accessible label. There is no door-status modal or
 individual closure UI.
 
-While charging, a restrained highlight travels across the SOC bar three times
-when the charging state appears. The percentage, remaining range, charge limit
+On the dashboard vehicle widget, while charging, a restrained highlight
+travels across the Battery bar three times when the charging state appears. The percentage, remaining range, charge limit
 and estimated completion remain readable throughout. Reduced motion disables
 the highlight. A connected cable alone must not trigger the charging animation.

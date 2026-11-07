@@ -29,6 +29,7 @@ Riviamigo's repository documentation is the source of truth for the application,
 | See what Riviamigo currently supports | [Features](./guides/features.md) |
 | Understand privacy and external requests | [Privacy](./privacy.md) |
 | Review deployment security | [Security](./security.md) |
+| Find Now, Activity, Insights, Car, Settings or Sign out, or enter a charge cost | [Using the R tabs](./guides/r-experience.md) |
 | Customize an installed dashboard | [Using Riviamigo](./using-riviamigo.md) |
 | Choose or create an account theme | [Appearance and custom themes](./guides/themes.md) |
 | Update or recover an installation | [Operations](./operations.md) |

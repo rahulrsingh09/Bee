@@ -12,13 +12,16 @@ discovery, the vehicle stage, motion and scoped CSS. Existing hooks own auth,
 account preferences, vehicle selection, cache keys and API transport. Existing
 dashboard/settings controllers retain editing, permissions, queries and mutations.
 The canonical bundled-chart renderer is unchanged. Only analytics matching the
-bundled widget geometry use compact R spacing. Home groups its saved widgets
-into the responsive sections described below; custom dashboard pages and editing
+bundled widget geometry use compact R spacing. Now (`/`) is its own page in
+`apps/web/src/features/now`, not a dashboard. Custom dashboard pages and editing
 mode retain saved positions and sizes.
 
 | Shared seam | Purpose |
 | --- | --- |
 | `routes/__root.tsx` | Apply R across routes, authentication and portals |
+| `features/r-experience/RAppLayout.tsx` | The four tabs, the active-tab map (`rNavigationTab`) and the top-bar freshness (`rFreshness`) |
+| `features/now` | The Now page at `/` |
+| `features/insights/InsightsHub.tsx` and `routes/insights.tsx` | The Insights hub at `/insights` |
 | `components/layout/AppLayout.tsx` | Export R under the existing layout contract |
 | `components/layout/vehicleConnection.ts` | Neutral helpers shared with retained upstream layout |
 | `components/dashboard/DashboardPageShell.tsx` | Pass existing state/actions to R composition |
@@ -33,52 +36,32 @@ mode retain saved positions and sizes.
 | TripMapChart and trip-detail composition | Optional point inspection; proxy policy unchanged |
 | SelectPicker | Shared viewport placement and keyboard dismissal across settings and dashboard menus |
 
-The overview uses actual existing metrics, trips, charging and vehicle status.
-Selected-vehicle identity and placeholder checks prevent displaying another
-vehicle's cached readings. Missing readings remain unknown, not zero. Home
-incorporates the chart workspace and dashboard tools; `/d/dashboard` redirects
-to `/` unless an exact dashboard ID or editing query was requested.
-The R2 vehicle widget owns the interactive stage and compact status summaries.
-Its poster and rotation canvas share a uniform 1.1 scale and a theme-token
-radial backdrop. This closer, soft-light treatment adds no assets or requests.
-The car precedes period trip distance, total trips and efficiency cards; SOC,
-estimated range and charging use a matching second card row. Linked drive, climate,
-tire and software summaries open Vehicle health. A single vehicle lock icon
-reflects the overall `doors_locked` reading, with an accessible label and hover
-title. Missing or unavailable readings show an unknown icon. The shackle follows
-known lock changes and respects reduced motion. It is not a button or a vehicle
-command; there is no door/frunk/gate modal, open count or individual indicator.
-The presentation provider also applies inside dashboard copies and editing
-previews; other models retain their model-specific artwork.
+Now uses actual existing vehicle status, trips, charges, parks and insight
+rules. Selected-vehicle identity and placeholder checks prevent displaying
+another vehicle's cached readings. Missing readings remain unknown, not zero.
+The order and the motion rules are in [`docs/branding.md`](../branding.md#now).
+Now has no charts, no period picker and no dashboard tools. A single vehicle
+lock icon (the first status chip) reflects the overall `doors_locked` reading,
+with an accessible label. Missing or unavailable readings show an unknown icon.
+It is not a button or a vehicle command; there is no door/frunk/gate modal,
+open count or individual indicator. Do not infer the overall lock state from
+individual closure fields.
 
-The main car uses the unchanged photographic rotation. Opening outlines,
-cutout effects and recorded opening clips are intentionally omitted. Do not
-infer physical opening or overall lock state from individual closure fields.
+The bundled Dashboard (`/d/dashboard`) is now a normal custom dashboard page.
+Its R2 vehicle widget keeps the stage and compact status summaries, and the
+presentation provider also applies inside dashboard copies and editing
+previews. Other models retain their model-specific artwork.
 
 Assigned chart catalogs initialize their selection after saved favorites load.
 Without a saved favorite, the configured chart is selected and starred by
 default. Changing that favorite leaves independently pinned graph cards intact.
 
-Home groups the saved configuration into the first vehicle widget, sensor
-totals and remaining analysis widgets. Each section uses `DashboardRenderer`;
-the original configuration remains the source for editing, export and writes.
-The vehicle occupies the left desktop column. Recent activity and a two-column
-grid of totals share the right column; charts span the row below both.
-Without a vehicle widget, totals retain their full-width layout.
-Mobile orders vehicle/readings, totals,
-recent trips/charging, then charts. Relative widget rows are normalized within
-each section without mutating saved geometry. No vehicle is injected if absent.
-The first vehicle widget supplies the page heading through app-local context;
-removing it leaves a Home heading and dashboard tools. Visibility rules, addition,
-removal and widget options remain owned by the shared renderer. Home's vehicle
-section uses content height, including for previously shortened widgets.
-Other custom dashboard pages and the editor retain saved dimensions and ordering.
 The bundled distance sensor uses `trip_miles` as total trip distance instead of
-cumulative `total_miles`. View, export and editing use the same saved config;
-there is no additional Home-only metric projection. Import validates existing YAML and
-creates a uniquely named personal copy through the existing dashboard API after
-the user confirms. Unit subscriptions retain the full preference object so
-changing efficiency display updates cards, charts and tables without a reload.
+cumulative `total_miles`. View, export and editing use the same saved config.
+Import validates existing YAML and creates a uniquely named personal copy
+through the existing dashboard API after the user confirms. Unit subscriptions
+retain the full preference object so changing efficiency display updates cards,
+charts and tables without a reload.
 
 R fixes all series, status, map and drive-mode tokens in both appearance modes.
 Its data palette provider selects categorical sensor slots consistently and reads
@@ -94,18 +77,21 @@ unchanged.
 
 ## Routes and settings
 
-Desktop primary navigation has Home, Trips, Charging, Battery, Efficiency
-and Explore. Mobile uses five equally sized, labeled tabs: Home, Trips,
-Charging, Battery and Explore. Efficiency is reached from the Home summary or
-Explore and keeps Explore selected on mobile. Resizing restores its direct
-desktop tab without changing the route.
-Battery overview and Phantom drain share a visible section navigation, and both
-keep Battery selected in the primary bar. Exact section-route matching prevents
-the overview link from remaining active on Phantom drain. Explore retains direct Battery and
-Phantom drain links alongside Vehicle health, dashboard library, settings and
-permission-gated account administration.
+The R shell has four tabs: Now (`/`), Activity (`/trips` in release 1),
+Insights (`/insights`) and Car (`/vehicle-health`). The phone dock and the
+desktop pill navigation show the same four tabs. `rNavigationTab()` maps every
+URL to one tab: trips and a charge detail select Activity; the Insights hub,
+`/charging`, Battery, Efficiency, custom dashboards and `/settings/charts`
+select Insights; everything else selects Car. `/explore` redirects to
+`/insights`. Release 2 replaces Activity with the merged log and adds the new
+Insights pages. The full rules are in
+[`docs/branding.md`](../branding.md#r-navigation).
+Battery overview and Parked loss share a visible section navigation. Exact
+section-route matching prevents the overview link from remaining active on
+Parked loss. The Car tab (`RVehicleHealth`) passes `RSettingsEntry` to the
+`RAppLayout` `footer` slot, so Settings is a labelled row at the bottom of Car.
 
-System dashboard baseline 9 adds nine pinned Home charts, five Battery charts,
+System dashboard baseline 9 adds nine pinned charts to the bundled Dashboard, five Battery charts,
 four Charging charts and four Efficiency charts. The existing catalog remains
 for additional assigned charts. Every original Overview chart type is pinned on
 at least one default page. Pinned widgets use a single assigned chart slug with
@@ -128,7 +114,9 @@ Authentication. Existing roles determine availability. Map controls move to
 Units & time. `?section=appearance` opens Units & time; `/settings/themes/:id`
 redirects to the directory. Stored theme records and light/dark preference remain
 compatible with upstream, but R overrides the interface palette and exposes no
-theme chooser.
+theme chooser. The R top bar has no light/dark control. Sign out is in
+Settings → Account. The running version is the About row in the Settings
+directory.
 
 The R route-coverage contract enumerates every registered route, including auth,
 focused editors and compatibility URLs. An upstream route addition requires a
@@ -137,30 +125,37 @@ editing, map inspection and authentication separately.
 
 ## Artwork and motion
 
-The owner's R2 Performance presentation is fixed to Catalina Cove, 21-inch wheels
-and black interior, including when live paint or wheel metadata is missing.
-This is an explicit owner configuration, not inferred telemetry. Other vehicles use the existing authenticated
-artwork resolver and fallback. Artwork is presentation, not a live sensor reading.
-Health and Settings → Vehicles share `RConfiguredVehicleArtwork`; Overview uses
-the same image while its rotation frames load.
+Never show the wrong model as the owner's car (owner decision, 2026-11-07).
 
-The poster is approximately 153 KB. The 72-frame rotation pack is 3,460,102 bytes,
-fetched once per document when the visible car begins its first automatic turn,
-on interaction, or on restoration of an angle already selected in that document.
-The entrance turn runs once for 3.6 seconds and yields immediately to interaction.
-Six decoded frames are retained per mounted viewer.
-Images and animation frames are released on exit; fast drags draw the latest
-requested frame. Failed loads stop motion until another explicit attempt.
+- An R2 turns only through the owner's real Rivian account images
+  (`vehicle.images`, from Rivian's mobile images). `resolveVehicleArtwork(…).angles`
+  returns them in turning order: front, front three-quarter, side, rear
+  three-quarter, rear; overhead is excluded. `RVehicleAngles` rests on the side
+  image and cross-fades between angles.
+- With fewer than 2 owner images, the car is one still image with no turn
+  control. Without owner images, the owner's R2 Performance shows the packaged
+  Catalina Cove, 21-inch-wheel, black-interior artwork. This is an explicit
+  owner configuration, not inferred telemetry.
+- The bundled 72-frame rotation pack (3,460,102 bytes) shows an R1S body. It is
+  a fallback for other models only and is never shown for an R2. In release 1
+  no surface calls the bundled orbit; it is kept as a documented fallback. Its paint tint
+  is described in [Vehicle orbit tint](../frontend/vehicle-orbit-tint.md).
+- Rivian configurator frames are not bundled. The Rivian terms of use do not
+  allow copying them or automated access.
+- Health and Settings → Vehicles share `RConfiguredVehicleArtwork`. Other
+  vehicles use the existing authenticated artwork resolver and fallback.
+  Artwork is presentation, not a live sensor reading.
 
-There is no CDN, remote model request or new animation dependency. Assets use
-the existing app origin/security policy. Reduced motion removes the automatic
-turn and inertia, deferring the frame pack until direct interaction. Leaving the
-viewport, hiding the tab or unmounting stops motion.
+On Now, motion runs on the first view of a session only, with transform and
+opacity only, and not at all with reduced motion. There is no CDN, remote model
+request or new animation dependency. Assets use the existing app
+origin/security policy. Leaving the viewport, hiding the tab or unmounting
+stops motion.
 
 ## Security and cost boundaries
 
-Home disables the shared shell's edit shortcut and omits the dashboard-tools
-edit action. The Settings dashboard library still opens the canonical editor.
+Now has no dashboard editing. The Settings dashboard library (Insights →
+Custom dashboards) still opens the canonical editor.
 Direct edit routes wait for the saved API configuration before creating a draft;
 they must not capture the bundled fallback while a saved layout is loading.
 

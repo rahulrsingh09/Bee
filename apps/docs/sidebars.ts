@@ -110,6 +110,7 @@ const sidebars: SidebarsConfig = {
         'architecture/r-experience',
         'architecture/unification-baseline',
         'architecture/theming',
+        'architecture/insights',
         'architecture/frontend-error-observability',
         'frontend/dashboard-architecture',
         'frontend/chart-architecture',

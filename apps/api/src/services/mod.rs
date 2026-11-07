@@ -17,6 +17,7 @@ pub mod demo_seed;
 pub mod external_connections;
 pub mod geofences;
 pub mod ingestion_capture;
+pub mod insights;
 pub mod nominatim;
 pub mod oidc;
 pub mod outbound;

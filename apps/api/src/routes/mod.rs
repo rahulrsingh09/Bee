@@ -41,6 +41,7 @@ pub mod external_connections;
 pub mod grafana;
 pub mod health;
 pub mod idle_drain;
+pub mod insights;
 pub mod live;
 pub mod locations;
 pub mod metrics;
@@ -294,6 +295,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(state_timeline::router())
         .merge(health::router())
         .merge(idle_drain::router())
+        .merge(insights::router())
         .merge(locations::router())
         .merge(grafana::router())
         .merge(auth::protected_router())

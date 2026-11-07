@@ -37,6 +37,7 @@ Riviamigo's repository documentation is the source of truth for the application,
 | Trace frontend request, map, and render failures | [Frontend error observability](./architecture/frontend-error-observability.md) |
 | Build or manage charts | [Chart architecture](./frontend/chart-architecture.md) |
 | Extend app themes or color authoring | [Theme architecture](./architecture/theming.md) |
+| Add or change an insight rule | [Insights rules](./architecture/insights.md) |
 | Verify chart migration and editor preview compatibility | [Chart compatibility testing](./frontend/chart-compatibility-testing.md) |
 | Look up APIs, metrics, or dashboard data | [Reference](./reference.md) |
 

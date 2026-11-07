@@ -148,6 +148,13 @@ The shared chart widget owns reusable chart display controls.
 
 - Fixed and assignment-driven catalogs are data providers for one shared chart frame; they must not fork picker, settings, measured plot, mobile viewer, or focus behavior. The persisted Overview slug `dashboard` resolves chart assignments through the runtime placement `overview`, but that mapping does not authorize Overview-specific chart chrome or rendering.
 - Persist chart display settings per chart ID inside widget `options.chartSettings`, not as route-local state.
+- The shared frame owns the chart-card states. Each chart source passes its queries to one boundary in `DashboardChartWidget.tsx`:
+  - A failed query shows "Unable to load chart data." and a "Retry" button inside the card. Retry refetches the chart queries. Chart failures never use a toast.
+  - A chart that still loads after 15 s (`CHART_LOADING_TIMEOUT_MS`) shows "Still loading · Retry" inside the card.
+  - A chart with no data in the period shows one compact empty row (56–64 px): the chart name, its existing empty copy, and "Shows when this period has data." The frame hides its title row with CSS `:has([data-chart-empty-row])`, so the source stays mounted. A widget with a visible picker keeps the picker. Outside a dashboard frame (for example the chart editor preview), the renderer keeps its own empty state.
+- The card header has one "⋯" button (`aria-label="Chart options"`, 44 px) that opens a menu with "Chart settings" and "Full screen". Focus returns to that button when the menu, the settings dialog, or the full-screen viewer closes.
+- Pinned charts show their title inside the card. An optional insight sentence shows under the title. Set it with widget `options.insight`, or wrap the page in `DashboardChartInsightProvider` and return a string for each `chartId`.
+- Set `showChartPicker: false` in widget options, or on the widget context, to hide the chart picker ("Search charts" and the selector). The widget then shows its active chart as a titled card. Custom dashboards keep the picker by default.
 - Keep legacy `curveSmoothing` read compatibility, but write new edits through the per-chart settings map.
 - The shared settings panel groups display filtering, curve shaping, and supported axis ranges into collapsible sections. Display filtering and smoothing apply to every compatible curve in the active chart; a series may opt out only when its data semantics require it.
 - Treat dashboard edit mode as the only persistent write seam. In edit mode, widget-level settings changes should flow back through the dashboard shell's local config update path. In view mode, the same UI can preview changes locally, but those changes should not autosave.

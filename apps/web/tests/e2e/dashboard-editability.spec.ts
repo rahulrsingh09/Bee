@@ -309,7 +309,8 @@ test.describe('mobile dashboard chart viewer', () => {
     await page.goto('/efficiency');
     const chartCatalog = page.locator('[data-widget-id="d3000003-0000-0000-0000-000000000005"]');
     await chartCatalog.scrollIntoViewIfNeeded();
-    await chartCatalog.getByRole('button', { name: 'Expand chart' }).click();
+    await chartCatalog.getByRole('button', { name: 'Chart options' }).click();
+    await page.getByRole('menuitem', { name: 'Full screen' }).click();
     await expect(page.getByText('Rotate for a wider chart')).toBeVisible();
 
     await page.setViewportSize({ width: 844, height: 390 });

@@ -110,8 +110,8 @@ export function ChartPicker<TValue extends string = string>({
           aria-expanded={isOpen}
           onClick={() => setIsOpen((current) => !current)}
           className={cn(
-            'flex h-10 max-w-[min(16rem,calc(100vw-8rem))] items-center justify-between gap-2 rounded-lg border border-border bg-bg-surface px-3 text-left text-sm font-medium text-fg',
-            'transition-colors hover:border-border-strong focus:border-accent focus:outline-none focus:ring-0 focus-visible:!outline-none focus-visible:!outline-offset-0 focus-visible:ring-0',
+            'flex h-11 max-w-[min(16rem,calc(100vw-8rem))] items-center justify-between gap-2 rounded-lg border border-border bg-bg-surface px-3 text-left text-sm font-medium text-fg',
+            'transition-colors hover:border-border-strong focus:border-accent',
           )}
         >
           <span className="truncate">{selectedOption?.label ?? 'Select chart'}</span>
@@ -166,9 +166,9 @@ export function ChartPicker<TValue extends string = string>({
           }}
           placeholder={searchPlaceholder}
           className={cn(
-            'h-11 sm:h-9 w-full rounded-lg border border-border bg-bg-surface pl-9 pr-3 text-sm text-fg',
+            'h-11 w-full rounded-lg border border-border bg-bg-surface pl-9 pr-3 text-sm text-fg',
             'placeholder:text-fg-tertiary transition-colors',
-            'hover:border-border-strong focus:border-accent focus:outline-none focus:ring-0 focus-visible:!outline-none focus-visible:!outline-offset-0 focus-visible:ring-0',
+            'hover:border-border-strong focus:border-accent',
           )}
         />
       </label>
@@ -181,8 +181,8 @@ export function ChartPicker<TValue extends string = string>({
           aria-expanded={isOpen}
           onClick={() => setIsOpen((current) => !current)}
           className={cn(
-            'flex min-h-11 sm:min-h-9 w-full items-center justify-between gap-2 rounded-lg border border-border bg-bg-surface px-3 py-2 sm:py-1 text-left text-sm text-fg',
-            'transition-colors hover:border-border-strong focus:border-accent focus:outline-none focus:ring-0 focus-visible:!outline-none focus-visible:!outline-offset-0 focus-visible:ring-0',
+            'flex min-h-11 w-full items-center justify-between gap-2 rounded-lg border border-border bg-bg-surface px-3 py-2 text-left text-sm text-fg',
+            'transition-colors hover:border-border-strong focus:border-accent',
           )}
         >
           <span className="min-w-0 break-words">{selectedOption?.label ?? 'Select chart'}</span>

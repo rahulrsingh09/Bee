@@ -128,7 +128,8 @@ test.describe('phone chart gestures', () => {
       await cdp.detach();
     }
     await expect(chart.getByRole('button', { name: 'Return to full chart view' })).toHaveCount(0);
-    await page.getByTestId('phantom-drain-chart-section').getByRole('button', { name: 'Expand chart' }).click();
+    await page.getByTestId('phantom-drain-chart-section').getByRole('button', { name: 'Chart options' }).click();
+    await page.getByRole('menuitem', { name: 'Full screen' }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath('expanded-chart.png') });
   });

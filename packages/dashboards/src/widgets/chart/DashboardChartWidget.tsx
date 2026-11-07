@@ -1,6 +1,6 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, Maximize2, SlidersHorizontal, X } from 'lucide-react';
+import { ChevronDown, Maximize2, MoreHorizontal, SlidersHorizontal, X } from 'lucide-react';
 import { useNavigate } from '@tanstack/react-router';
 import {
   useBatteryMileage,
@@ -99,6 +99,13 @@ interface DashboardChartOptions {
   chartSettings?: Record<string, DashboardChartDisplaySettings>;
   /** Optional subtitle shown in the compact header when showPicker is false. */
   headerSubtitle?: string;
+  /**
+   * Set to false to hide the chart picker ("Search charts" and the selector).
+   * The widget then shows its active chart as a titled chart card.
+   */
+  showChartPicker?: boolean;
+  /** Optional one-sentence insight shown under the chart title. */
+  insight?: string;
 }
 
 type DashboardChartAxisMode = 'auto' | 'manual';
@@ -128,9 +135,18 @@ interface ResolvedDashboardChartOptions {
   legacySmoothness: CurveSmoothness;
   chartSettings: Record<string, DashboardChartDisplaySettings>;
   headerSubtitle?: string;
+  insight?: string;
+  /** True when a page or widget flag (`showChartPicker: false`) hides the picker. */
+  pickerHiddenByFlag: boolean;
   catalogMode: 'assigned' | 'fixed' | 'legacy';
   requiredChartSlugs: string[];
 }
+
+/**
+ * Page-level chart flags. A dashboard page can add these to the widget context;
+ * a widget option with the same name has the same effect.
+ */
+type DashboardChartPageCtx = WidgetCtx & { showChartPicker?: boolean };
 
 const LEGACY_CHART_ID_ALIASES: Record<string, string> = {
   'range-history': 'soc-history',
@@ -146,8 +162,11 @@ function chartDefaultStorageKey(ctx: WidgetCtx, instance: WidgetInstance) {
   return dashboardId ? `${slug}:${dashboardId}:${instance.id}` : `${slug}:${instance.id}`;
 }
 
-function readOptions(instance: WidgetInstance): ResolvedDashboardChartOptions {
+function readOptions(instance: WidgetInstance, ctx?: WidgetCtx): ResolvedDashboardChartOptions {
   const options = (instance.options ?? {}) as DashboardChartOptions;
+  const pickerHiddenByFlag =
+    options.showChartPicker === false ||
+    (ctx as DashboardChartPageCtx | undefined)?.showChartPicker === false;
   const managed = instance.managed === true || options.managed === true;
   const page = isDashboardChartPage(options.page) ? options.page : undefined;
   const catalogMode =
@@ -183,7 +202,8 @@ function readOptions(instance: WidgetInstance): ResolvedDashboardChartOptions {
   return {
     chartId,
     chartIds: fallbackIds,
-    showPicker: options.showPicker ?? fallbackIds.length > 1,
+    showPicker: pickerHiddenByFlag ? false : (options.showPicker ?? fallbackIds.length > 1),
+    pickerHiddenByFlag,
     legacyTimeFilter: normalizeTimeFilter(
       options.timeFilter,
       legacySmoothingToTimeFilter(options.curveSmoothing)
@@ -196,6 +216,9 @@ function readOptions(instance: WidgetInstance): ResolvedDashboardChartOptions {
     ...(page ? { page } : {}),
     ...(typeof options.headerSubtitle === 'string'
       ? { headerSubtitle: options.headerSubtitle }
+      : {}),
+    ...(typeof options.insight === 'string' && options.insight.trim()
+      ? { insight: options.insight.trim() }
       : {}),
     catalogMode,
     requiredChartSlugs: Array.isArray(options.requiredChartSlugs)
@@ -218,7 +241,7 @@ export function DashboardChartWidget({
   instance: WidgetInstance;
   ctx: WidgetCtx;
 }) {
-  const options = readOptions(instance);
+  const options = readOptions(instance, ctx);
   const assignedPlacement =
     options.page === 'overview' ? 'overview' : options.page ?? ctx.dashboardSlug ?? null;
   const assignedCatalog = useEffectiveCharts(
@@ -298,6 +321,8 @@ export function DashboardChartWidget({
           assignedCatalog.isError ? 'Unable to load assigned charts.' : 'Loading assigned charts…'
         }
         error={assignedCatalog.isError}
+        loading={!assignedCatalog.isError}
+        onRetry={() => void assignedCatalog.refetch?.()}
       />
     );
   }
@@ -357,11 +382,23 @@ function DashboardChartCatalogState({
   instance,
   message,
   error = false,
+  loading = false,
+  onRetry,
 }: {
   instance: WidgetInstance;
   message: string;
   error?: boolean;
+  loading?: boolean;
+  onRetry?: () => void;
 }) {
+  const [attempt, setAttempt] = React.useState(0);
+  const timedOut = useChartLoadingTimeout(loading && !error, attempt);
+  const retry = onRetry
+    ? () => {
+        setAttempt((value) => value + 1);
+        onRetry();
+      }
+    : undefined;
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden">
       {instance.title ? (
@@ -371,15 +408,220 @@ function DashboardChartCatalogState({
           </p>
         </div>
       ) : null}
-      <div
-        role={error ? 'alert' : 'status'}
-        className="flex min-h-32 flex-1 items-center justify-center rounded-lg border border-dashed border-border p-4 text-sm text-fg-tertiary"
-      >
-        {message}
+      {timedOut && retry ? (
+        <ChartStillLoading onRetry={retry} className="min-h-32 flex-1" />
+      ) : (
+        <div
+          role={error ? 'alert' : 'status'}
+          className="flex min-h-32 flex-1 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border p-4 text-sm text-fg-tertiary"
+        >
+          <p>{message}</p>
+          {error && retry ? <ChartRetryButton onRetry={retry} /> : null}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** A chart that is still loading after this time shows "Still loading" and Retry. */
+export const CHART_LOADING_TIMEOUT_MS = 15_000;
+
+function useChartLoadingTimeout(loading: boolean, attempt: number) {
+  const [timedOut, setTimedOut] = React.useState(false);
+  React.useEffect(() => {
+    setTimedOut(false);
+    if (!loading) return undefined;
+    const timer = window.setTimeout(() => setTimedOut(true), CHART_LOADING_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [loading, attempt]);
+  return loading && timedOut;
+}
+
+function ChartRetryButton({
+  onRetry,
+  disabled = false,
+  tone = 'neutral',
+}: {
+  onRetry: () => void;
+  disabled?: boolean;
+  tone?: 'neutral' | 'danger';
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onRetry}
+      disabled={disabled}
+      className={cn(
+        'min-h-11 min-w-11 rounded-lg border px-3 text-sm font-medium transition-colors disabled:opacity-60',
+        tone === 'danger'
+          ? 'border-status-danger/40 text-status-danger hover:bg-status-danger/10'
+          : 'border-border text-fg hover:border-border-strong'
+      )}
+    >
+      Retry
+    </button>
+  );
+}
+
+function ChartStillLoading({
+  onRetry,
+  height,
+  className,
+}: {
+  onRetry: () => void;
+  height?: number;
+  className?: string;
+}) {
+  return (
+    <div
+      role="status"
+      data-chart-state="timeout"
+      className={cn(
+        'flex items-center justify-center gap-2 rounded-lg border border-dashed border-border px-4 text-sm text-fg-secondary',
+        className
+      )}
+      style={height ? { height } : undefined}
+    >
+      <span>Still loading</span>
+      <span aria-hidden="true">·</span>
+      <ChartRetryButton onRetry={onRetry} />
+    </div>
+  );
+}
+
+function ChartLoadError({
+  onRetry,
+  retrying,
+  height,
+}: {
+  onRetry: () => void;
+  retrying: boolean;
+  height: number;
+}) {
+  return (
+    <div
+      role="alert"
+      data-chart-state="error"
+      className="flex flex-col items-center justify-center gap-3 rounded-lg border border-status-danger/30 bg-status-danger/10 px-4 text-center text-sm text-status-danger"
+      style={{ height }}
+    >
+      <p>{retrying ? 'Loading chart data…' : 'Unable to load chart data.'}</p>
+      <ChartRetryButton onRetry={onRetry} disabled={retrying} tone="danger" />
+    </div>
+  );
+}
+
+/** Hides frame chrome (title row, options menu) while the card shows the empty row. */
+const HIDE_WHEN_EMPTY = 'group-has-[[data-chart-empty-row]]/chart-frame:hidden';
+
+/** The copy that tells the owner when an empty chart will show. */
+const CHART_EMPTY_WHEN = 'Shows when this period has data.';
+
+/** A compact row (at most 64 px) that replaces a chart card with no data. */
+function ChartEmptyRow({ title, reason, when }: { title: string; reason: string; when: string }) {
+  return (
+    <div
+      role="status"
+      data-chart-empty-row="true"
+      className="flex min-h-14 max-h-16 items-center overflow-hidden rounded-xl border border-border bg-bg-surface px-4 py-1.5 text-sm sm:py-2"
+    >
+      <div className="min-w-0 flex-1 sm:flex sm:items-baseline sm:gap-3">
+        <p className="truncate font-medium leading-5 text-fg sm:shrink-0">{title}</p>
+        <p className="line-clamp-2 text-xs leading-4 text-fg-secondary sm:text-sm sm:leading-5">
+          <span>{reason}</span>
+          <span aria-hidden="true"> · </span>
+          <span className="text-fg-tertiary">{when}</span>
+        </p>
       </div>
     </div>
   );
 }
+
+/** A query result shape shared by the chart data hooks. */
+interface ChartQueryLike {
+  data?: unknown;
+  isLoading?: boolean;
+  isError?: boolean;
+  isFetching?: boolean;
+  refetch?: () => unknown;
+}
+
+interface ChartCardContextValue {
+  chartTitle: string;
+}
+
+/**
+ * Set by the chart frame so that chart sources can show card-level states.
+ * The frame reacts to the empty row with CSS (`:has`), so no state flows back up.
+ */
+const ChartCardContext = React.createContext<ChartCardContextValue | null>(null);
+
+/**
+ * Card-level query states for one chart: an in-card error with Retry, a
+ * "Still loading" state after the loading timeout, and the compact empty row.
+ * Outside a dashboard chart frame (for example the chart editor preview), an
+ * empty chart keeps the renderer's own empty state.
+ */
+function ChartQueryBoundary({
+  queries,
+  error,
+  empty,
+  emptyTitle,
+  chartTitle,
+  height,
+  presentation,
+  children,
+}: {
+  queries: ChartQueryLike[];
+  error?: boolean;
+  empty: boolean;
+  emptyTitle?: string | undefined;
+  chartTitle: string;
+  height: number;
+  presentation: 'embedded' | 'mobile-viewer';
+  children: () => React.ReactNode;
+}) {
+  const card = React.useContext(ChartCardContext);
+  const [attempt, setAttempt] = React.useState(0);
+  const loading = queries.some((query) => query.isLoading === true);
+  const failed =
+    error ?? queries.some((query) => query.isError === true && query.data === undefined);
+  const retrying = failed && queries.some((query) => query.isFetching === true);
+  const timedOut = useChartLoadingTimeout(loading && !failed, attempt);
+  const showEmptyRow = card !== null && presentation === 'embedded' && empty && !loading && !failed;
+
+  const retry = () => {
+    setAttempt((value) => value + 1);
+    for (const query of queries) void query.refetch?.();
+  };
+
+  if (failed) return <ChartLoadError onRetry={retry} retrying={retrying} height={height} />;
+  if (timedOut) return <ChartStillLoading onRetry={retry} height={height} />;
+  if (showEmptyRow) {
+    return (
+      <ChartEmptyRow
+        title={card?.chartTitle || chartTitle}
+        reason={emptyTitle ?? 'No data for this period'}
+        when={CHART_EMPTY_WHEN}
+      />
+    );
+  }
+  return <>{children()}</>;
+}
+
+/** Lets a page give a chart card its one-sentence insight. */
+export type DashboardChartInsightResolver = (input: {
+  chartId: string;
+  chartTitle: string;
+  instance: WidgetInstance;
+}) => string | null | undefined;
+
+const DashboardChartInsightContext = React.createContext<DashboardChartInsightResolver | null>(
+  null
+);
+
+/** Pages wrap dashboards in this provider to fill the chart-card insight slot. */
+export const DashboardChartInsightProvider = DashboardChartInsightContext.Provider;
 
 interface DashboardChartFrameProps {
   instance: WidgetInstance;
@@ -400,6 +642,120 @@ interface DashboardChartFrameProps {
     updater: (current: DashboardChartDisplaySettings) => DashboardChartDisplaySettings
   ) => void;
   renderChart: (height: number, presentation?: 'embedded' | 'mobile-viewer') => React.ReactNode;
+}
+
+/** One "⋯" button that opens Chart settings and Full screen. */
+function ChartOptionsMenu({
+  triggerRef,
+  onOpenSettings,
+  onOpenFullScreen,
+}: {
+  triggerRef: React.RefObject<HTMLButtonElement | null>;
+  onOpenSettings: () => void;
+  onOpenFullScreen: () => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const rootRef = React.useRef<HTMLDivElement | null>(null);
+  const menuRef = React.useRef<HTMLDivElement | null>(null);
+  const menuId = React.useId();
+
+  const close = React.useCallback(
+    (restoreFocus: boolean) => {
+      setOpen(false);
+      if (restoreFocus) triggerRef.current?.focus();
+    },
+    [triggerRef]
+  );
+
+  React.useEffect(() => {
+    if (!open) return undefined;
+    menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node | null)) close(false);
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [open, close]);
+
+  const onMenuKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const items = Array.from(
+      menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []
+    );
+    const index = items.indexOf(document.activeElement as HTMLButtonElement);
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      close(true);
+    } else if (event.key === 'Tab') {
+      close(false);
+    } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const step = event.key === 'ArrowDown' ? 1 : -1;
+      items[(index + step + items.length) % items.length]?.focus();
+    } else if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault();
+      items[event.key === 'Home' ? 0 : items.length - 1]?.focus();
+    }
+  };
+
+  const itemClassName =
+    'flex min-h-11 w-full items-center gap-2 rounded-md px-3 text-left text-sm text-fg transition-colors hover:bg-bg-elevated';
+
+  return (
+    <div ref={rootRef} className="relative shrink-0">
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-label="Chart options"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        onClick={() => setOpen((value) => !value)}
+        className={cn(
+          'flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border bg-bg-surface text-fg-tertiary transition-colors',
+          'hover:border-border-strong hover:text-fg',
+          open && 'border-border-strong text-fg'
+        )}
+      >
+        <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+      </button>
+      {open ? (
+        <div
+          ref={menuRef}
+          id={menuId}
+          role="menu"
+          aria-label="Chart options"
+          onKeyDown={onMenuKeyDown}
+          className="absolute right-0 top-[calc(100%+0.375rem)] z-40 min-w-44 overflow-hidden rounded-lg border border-border bg-bg-surface p-1 shadow-lg"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            className={itemClassName}
+            onClick={() => {
+              close(false);
+              onOpenSettings();
+            }}
+          >
+            <SlidersHorizontal className="h-4 w-4 text-fg-tertiary" aria-hidden="true" />
+            Chart settings
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className={itemClassName}
+            onClick={() => {
+              close(false);
+              onOpenFullScreen();
+            }}
+          >
+            <Maximize2 className="h-4 w-4 text-fg-tertiary" aria-hidden="true" />
+            Full screen
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 /** Single visual frame shared by assigned and fixed dashboard chart catalogs. */
@@ -423,80 +779,108 @@ function DashboardChartFrame({
 }: DashboardChartFrameProps) {
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const [viewerOpen, setViewerOpen] = React.useState(false);
-  const settingsTriggerRef = React.useRef<HTMLButtonElement | null>(null);
-  const expandTriggerRef = React.useRef<HTMLButtonElement | null>(null);
+  const optionsTriggerRef = React.useRef<HTMLButtonElement | null>(null);
   const { ref, height } = useMeasuredWidgetHeight(260, 160);
-  const controls = (
-    <div className="flex items-center gap-2">
-      <button
-        ref={settingsTriggerRef}
-        type="button"
-        aria-label="Chart settings"
-        aria-haspopup="dialog"
-        aria-expanded={settingsOpen}
-        onClick={() => setSettingsOpen((value) => !value)}
+  const resolveInsight = React.useContext(DashboardChartInsightContext);
+  const cardContext = React.useMemo<ChartCardContextValue>(() => ({ chartTitle }), [chartTitle]);
+  const restoreOptionsFocus = () =>
+    requestAnimationFrame(() => optionsTriggerRef.current?.focus());
+  const pickerVisible = options.showPicker && chartOptions.length > 1;
+  const title = options.pickerHiddenByFlag ? chartTitle : instance.title;
+  const insight =
+    options.insight ?? resolveInsight?.({ chartId, chartTitle, instance })?.trim() ?? undefined;
+  const menu = (
+    <ChartOptionsMenu
+      triggerRef={optionsTriggerRef}
+      onOpenSettings={() => setSettingsOpen(true)}
+      onOpenFullScreen={() => setViewerOpen(true)}
+    />
+  );
+  const hasHeading = Boolean(title || insight || options.headerSubtitle);
+
+  let header: React.ReactNode;
+  if (pickerVisible) {
+    header = (
+      <ChartPicker
+        value={chartId}
+        options={chartOptions}
+        onChange={onChartChange}
+        searchValue={search}
+        onSearchChange={onSearchChange}
+        className="shrink-0"
+        trailing={menu}
+        defaultValue={defaultChartId}
+        onSetDefault={onSetDefault}
+      />
+    );
+  } else if (hasHeading) {
+    header = (
+      <div className={cn('mb-2 flex shrink-0 items-start justify-between gap-3', HIDE_WHEN_EMPTY)}>
+        <div className="min-w-0 pt-0.5">
+          {title ? (
+            <p className="text-sm font-medium uppercase tracking-wider text-fg-secondary">
+              {title}
+            </p>
+          ) : null}
+          {options.headerSubtitle ? (
+            <p className="mt-0.5 text-xs text-fg-tertiary">{options.headerSubtitle}</p>
+          ) : null}
+          {insight ? (
+            <p data-chart-insight="true" className="mt-1 text-[13px] leading-5 text-fg-secondary">
+              {insight}
+            </p>
+          ) : null}
+        </div>
+        {menu}
+      </div>
+    );
+  } else {
+    header = <div className={cn('absolute right-3 top-3 z-10', HIDE_WHEN_EMPTY)}>{menu}</div>;
+  }
+
+  // A chart with no data collapses to the compact empty row. CSS `:has` does
+  // this so the chart source stays mounted and keeps its queries. A picker
+  // keeps its full frame so the owner can choose another chart.
+  return (
+    <div
+      data-chart-frame="true"
+      className={cn(
+        'group/chart-frame relative flex h-full min-h-0 flex-col overflow-hidden',
+        !pickerVisible && 'has-[[data-chart-empty-row]]:h-auto'
+      )}
+    >
+      <div
+        data-chart-card={pickerVisible ? undefined : 'true'}
         className={cn(
-          'flex h-11 w-11 shrink-0 sm:h-9 sm:w-9 items-center justify-center rounded-lg border border-border bg-bg-surface text-fg-tertiary transition-colors',
-          'hover:border-border-strong hover:text-fg focus:outline-none focus:ring-0 focus-visible:!outline-none focus-visible:!outline-offset-0 focus-visible:ring-0',
-          settingsOpen && 'border-accent text-accent'
+          'relative flex min-h-0 flex-1 flex-col',
+          !pickerVisible &&
+            'rounded-xl border border-border bg-bg-surface p-3 has-[[data-chart-empty-row]]:flex-none has-[[data-chart-empty-row]]:border-0 has-[[data-chart-empty-row]]:bg-transparent has-[[data-chart-empty-row]]:p-0'
         )}
       >
-        <SlidersHorizontal className="h-4 w-4" />
-      </button>
-      <button
-        ref={expandTriggerRef}
-        type="button"
-        aria-label="Expand chart"
-        onClick={() => setViewerOpen(true)}
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border bg-bg-surface text-fg-tertiary transition-colors hover:border-border-strong hover:text-fg focus:outline-none focus:ring-0 focus-visible:!outline-none focus-visible:!outline-offset-0 focus-visible:ring-0 sm:hidden"
-      >
-        <Maximize2 className="h-4 w-4" />
-      </button>
-    </div>
-  );
-  return (
-    <div className="relative flex h-full min-h-0 flex-col overflow-hidden">
-      {options.showPicker && chartOptions.length > 1 ? (
-        <ChartPicker
-          value={chartId}
-          options={chartOptions}
-          onChange={onChartChange}
-          searchValue={search}
-          onSearchChange={onSearchChange}
-          className="shrink-0"
-          trailing={controls}
-          defaultValue={defaultChartId}
-          onSetDefault={onSetDefault}
-        />
-      ) : instance.title ? (
-        <div className="mb-2 flex shrink-0 items-start justify-between gap-3">
-          <div>
-            <p className="text-sm font-medium uppercase tracking-wider text-fg-secondary">
-              {instance.title}
-            </p>
-            {options.headerSubtitle ? (
-              <p className="mt-0.5 text-xs text-fg-tertiary">{options.headerSubtitle}</p>
-            ) : null}
+        {header}
+        {!viewerOpen ? (
+          <div
+            ref={ref}
+            className="min-h-0 flex-1 overflow-hidden has-[[data-chart-empty-row]]:flex-none"
+          >
+            <ChartCardContext.Provider value={cardContext}>
+              {renderChart(height)}
+            </ChartCardContext.Provider>
           </div>
-          <div className="shrink-0">{controls}</div>
-        </div>
-      ) : (
-        <div className="absolute right-0 top-0 z-10">{controls}</div>
-      )}
-      {!viewerOpen ? (
-        <div ref={ref} className="min-h-0 flex-1 overflow-hidden">
-          {renderChart(height)}
-        </div>
-      ) : null}
+        ) : null}
+      </div>
       <ChartSettingsPanel
         open={settingsOpen}
-        triggerRef={settingsTriggerRef}
+        triggerRef={optionsTriggerRef}
         chartTitle={chartTitle}
         capabilities={capabilities}
         settings={settings}
         suggestedRanges={activeAxisRanges}
         persistent={persistent}
-        onClose={() => setSettingsOpen(false)}
+        onClose={() => {
+          setSettingsOpen(false);
+          restoreOptionsFocus();
+        }}
         onTimeFilterChange={(next) =>
           onUpdateSettings((current) => ({ ...current, timeFilter: next }))
         }
@@ -549,10 +933,14 @@ function DashboardChartFrame({
           onSetDefault={onSetDefault}
           onClose={() => {
             setViewerOpen(false);
-            requestAnimationFrame(() => expandTriggerRef.current?.focus());
+            restoreOptionsFocus();
           }}
         >
-          {(viewerHeight) => renderChart(viewerHeight, 'mobile-viewer')}
+          {(viewerHeight) => (
+            <ChartCardContext.Provider value={cardContext}>
+              {renderChart(viewerHeight, 'mobile-viewer')}
+            </ChartCardContext.Provider>
+          )}
         </MobileChartViewer>
       ) : null}
     </div>
@@ -794,19 +1182,29 @@ function ManagedDefinitionRuntime({
     ...(ctx.tripTagFilter ? { tripTagFilter: ctx.tripTagFilter } : {}),
   });
   const renderer = getChartRenderer(draft);
+  const queries: ChartQueryLike[] = datasetState.results ?? [];
   return (
-    <>
-      {renderer?.render({
-        definition: draft,
-        datasets: datasetState.datasets,
-        height,
-        loading: datasetState.isLoading,
-        partial: datasetState.isPartial,
-        refreshing: datasetState.isFetching && !datasetState.isLoading,
-        error: datasetState.errors.length > 0 && datasetState.datasets.length === 0,
-        presentation,
-      })}
-    </>
+    <ChartQueryBoundary
+      queries={queries}
+      error={datasetState.errors.length > 0 && datasetState.datasets.length === 0}
+      empty={false}
+      chartTitle={chart.name}
+      height={height}
+      presentation={presentation}
+    >
+      {() =>
+        renderer?.render({
+          definition: draft,
+          datasets: datasetState.datasets,
+          height,
+          loading: datasetState.isLoading,
+          partial: datasetState.isPartial,
+          refreshing: datasetState.isFetching && !datasetState.isLoading,
+          error: datasetState.errors.length > 0 && datasetState.datasets.length === 0,
+          presentation,
+        })
+      }
+    </ChartQueryBoundary>
   );
 }
 
@@ -1023,24 +1421,35 @@ function SocHistorySource({
   presentation,
 }: ActiveDashboardChartSourceProps) {
   const isDark = useDocumentTheme();
-  const { data: soc = [], isLoading: socLoading } = useSocHistory(ctx.vehicleId, ctx.from, ctx.to);
-  const { data: range = [], isLoading: rangeLoading } = useRangeHistory(
-    ctx.vehicleId,
-    ctx.from,
-    ctx.to
-  );
-  return renderSocHistoryChart(
-    definition,
-    chartDefinition,
-    height,
-    socLoading || rangeLoading,
-    soc.map((point) => ({ ts: point.ts, value: point.value })),
-    range.map((point) => ({ ts: point.ts, value: point.value })),
-    timeFilter,
-    smoothness,
-    sourceAxisRanges(settings).yRange,
-    chartInteractionMode(presentation),
-    isDark
+  const socQuery = useSocHistory(ctx.vehicleId, ctx.from, ctx.to);
+  const rangeQuery = useRangeHistory(ctx.vehicleId, ctx.from, ctx.to);
+  const { data: soc = [], isLoading: socLoading } = socQuery;
+  const { data: range = [], isLoading: rangeLoading } = rangeQuery;
+  return (
+    <ChartQueryBoundary
+      queries={[socQuery, rangeQuery]}
+      empty={soc.length === 0}
+      emptyTitle={definition.emptyTitle}
+      chartTitle={definition.title}
+      height={height}
+      presentation={presentation}
+    >
+      {() =>
+        renderSocHistoryChart(
+          definition,
+          chartDefinition,
+          height,
+          socLoading || rangeLoading,
+          soc.map((point) => ({ ts: point.ts, value: point.value })),
+          range.map((point) => ({ ts: point.ts, value: point.value })),
+          timeFilter,
+          smoothness,
+          sourceAxisRanges(settings).yRange,
+          chartInteractionMode(presentation),
+          isDark
+        )
+      }
+    </ChartQueryBoundary>
   );
 }
 
@@ -1054,38 +1463,50 @@ function ChargingSeriesSource({
   sessions,
 }: ActiveDashboardChartSourceProps & { sessions?: boolean }) {
   const isDark = useDocumentTheme();
-  const { data, isLoading } = useChargingChartSeries(ctx.vehicleId, ctx.from, ctx.to);
+  const seriesQuery = useChargingChartSeries(ctx.vehicleId, ctx.from, ctx.to);
+  const { data, isLoading } = seriesQuery;
   const daily = data?.daily ?? [];
+  const dailySessions = data?.daily_sessions ?? [];
   const seriesColor = editedSeriesColor(chartDefinition, 'accent', isDark);
   const configuredYRange =
     sourceAxisRanges(settings).yRange ?? fixedDefinitionRange(chartDefinition.axes.y);
-  if (sessions) {
-    return (
-      <ChargingSessionsChart
-        definition={definition}
-        daily={daily}
-        dailySessions={data?.daily_sessions ?? []}
-        loading={isLoading}
-        height={height}
-        interactionMode={chartInteractionMode(presentation)}
-        selectedDayLocal={ctx.chargeSessionDayLocal ?? null}
-        {...(ctx.setChargeSessionDayLocal ? { onDayClick: ctx.setChargeSessionDayLocal } : {})}
-        {...(seriesColor ? { seriesColor } : {})}
-        {...(configuredYRange ? { yRange: configuredYRange } : {})}
-      />
-    );
-  }
   return (
-    <DailyEnergyChart
-      definition={definition}
-      daily={daily}
-      dailySessions={data?.daily_sessions ?? []}
-      loading={isLoading}
+    <ChartQueryBoundary
+      queries={[seriesQuery]}
+      empty={daily.length === 0 && dailySessions.length === 0}
+      emptyTitle={definition.emptyTitle}
+      chartTitle={definition.title}
       height={height}
-      interactionMode={chartInteractionMode(presentation)}
-      {...(configuredYRange ? { yRange: configuredYRange } : {})}
-      {...(seriesColor ? { seriesColor } : {})}
-    />
+      presentation={presentation}
+    >
+      {() =>
+        sessions ? (
+          <ChargingSessionsChart
+            definition={definition}
+            daily={daily}
+            dailySessions={dailySessions}
+            loading={isLoading}
+            height={height}
+            interactionMode={chartInteractionMode(presentation)}
+            selectedDayLocal={ctx.chargeSessionDayLocal ?? null}
+            {...(ctx.setChargeSessionDayLocal ? { onDayClick: ctx.setChargeSessionDayLocal } : {})}
+            {...(seriesColor ? { seriesColor } : {})}
+            {...(configuredYRange ? { yRange: configuredYRange } : {})}
+          />
+        ) : (
+          <DailyEnergyChart
+            definition={definition}
+            daily={daily}
+            dailySessions={dailySessions}
+            loading={isLoading}
+            height={height}
+            interactionMode={chartInteractionMode(presentation)}
+            {...(configuredYRange ? { yRange: configuredYRange } : {})}
+            {...(seriesColor ? { seriesColor } : {})}
+          />
+        )
+      }
+    </ChartQueryBoundary>
   );
 }
 
@@ -1099,27 +1520,39 @@ function ChargeSessionCurveSource({
   settings,
   presentation,
 }: ActiveDashboardChartSourceProps) {
-  const { data = [], isLoading } = useChargeCurve(
+  const curveQuery = useChargeCurve(
     ctx.chargeSessionId ?? null,
     ctx.vehicleId,
     ctx.chargeSessionActive === true,
   );
+  const { data = [], isLoading } = curveQuery;
   const { yRange, yRightRange } = sourceAxisRanges(settings);
   return (
-    <ChargeSessionCurveChart
-      definition={definition}
-      chartDefinition={chartDefinition}
-      data={data}
-      loading={isLoading}
+    <ChartQueryBoundary
+      queries={[curveQuery]}
+      empty={data.length === 0}
+      emptyTitle={definition.emptyTitle}
+      chartTitle={definition.title}
       height={height}
-      timeFilter={timeFilter}
-      smoothness={smoothness}
-      startedAt={ctx.from || null}
-      sessionEnergyKwh={ctx.chargeSessionEnergyKwh ?? null}
-      interactionMode={chartInteractionMode(presentation)}
-      {...(yRange ? { yRange } : {})}
-      {...(yRightRange ? { yRightRange } : {})}
-    />
+      presentation={presentation}
+    >
+      {() => (
+        <ChargeSessionCurveChart
+          definition={definition}
+          chartDefinition={chartDefinition}
+          data={data}
+          loading={isLoading}
+          height={height}
+          timeFilter={timeFilter}
+          smoothness={smoothness}
+          startedAt={ctx.from || null}
+          sessionEnergyKwh={ctx.chargeSessionEnergyKwh ?? null}
+          interactionMode={chartInteractionMode(presentation)}
+          {...(yRange ? { yRange } : {})}
+          {...(yRightRange ? { yRightRange } : {})}
+        />
+      )}
+    </ChartQueryBoundary>
   );
 }
 
@@ -1131,19 +1564,31 @@ function ChargingCurveAnalysisSource({
   settings,
   presentation,
 }: ActiveDashboardChartSourceProps) {
-  const { data = [], isLoading } = useChargeCurveAnalysis(ctx.vehicleId, ctx.from, ctx.to);
+  const analysisQuery = useChargeCurveAnalysis(ctx.vehicleId, ctx.from, ctx.to);
+  const { data = [], isLoading } = analysisQuery;
   const { xRange, yRange } = sourceAxisRanges(settings);
   return (
-    <ChargingCurveAnalysisChart
-      definition={definition}
-      chartDefinition={chartDefinition}
-      data={data}
-      loading={isLoading}
+    <ChartQueryBoundary
+      queries={[analysisQuery]}
+      empty={data.length === 0}
+      emptyTitle={definition.emptyTitle}
+      chartTitle={definition.title}
       height={height}
-      interactionMode={chartInteractionMode(presentation)}
-      {...(xRange ? { xRange } : {})}
-      {...(yRange ? { yRange } : {})}
-    />
+      presentation={presentation}
+    >
+      {() => (
+        <ChargingCurveAnalysisChart
+          definition={definition}
+          chartDefinition={chartDefinition}
+          data={data}
+          loading={isLoading}
+          height={height}
+          interactionMode={chartInteractionMode(presentation)}
+          {...(xRange ? { xRange } : {})}
+          {...(yRange ? { yRange } : {})}
+        />
+      )}
+    </ChartQueryBoundary>
   );
 }
 
@@ -1157,25 +1602,32 @@ function EfficiencyTrendSource({
   settings,
   presentation,
 }: ActiveDashboardChartSourceProps) {
-  const { data = [], isLoading } = useEfficiencyTrend(
-    ctx.vehicleId,
-    ctx.from,
-    ctx.to,
-    ctx.tripTagFilter
-  );
+  const trendQuery = useEfficiencyTrend(ctx.vehicleId, ctx.from, ctx.to, ctx.tripTagFilter);
+  const { data = [], isLoading } = trendQuery;
   const { yRange } = sourceAxisRanges(settings);
   return (
-    <EfficiencyTrendChart
-      definition={definition}
-      chartDefinition={chartDefinition}
-      trend={data}
-      loading={isLoading}
+    <ChartQueryBoundary
+      queries={[trendQuery]}
+      empty={data.length === 0}
+      emptyTitle={definition.emptyTitle}
+      chartTitle={definition.title}
       height={height}
-      timeFilter={timeFilter}
-      smoothness={smoothness}
-      interactionMode={chartInteractionMode(presentation)}
-      {...(yRange ? { yRange } : {})}
-    />
+      presentation={presentation}
+    >
+      {() => (
+        <EfficiencyTrendChart
+          definition={definition}
+          chartDefinition={chartDefinition}
+          trend={data}
+          loading={isLoading}
+          height={height}
+          timeFilter={timeFilter}
+          smoothness={smoothness}
+          interactionMode={chartInteractionMode(presentation)}
+          {...(yRange ? { yRange } : {})}
+        />
+      )}
+    </ChartQueryBoundary>
   );
 }
 
@@ -1184,21 +1636,29 @@ function EfficiencyTemperatureSource({
   chartDefinition,
   ctx,
   height,
+  presentation,
 }: ActiveDashboardChartSourceProps) {
-  const { data = [], isLoading } = useEfficiencyVsTemp(
-    ctx.vehicleId,
-    ctx.from,
-    ctx.to,
-    ctx.tripTagFilter
-  );
+  const temperatureQuery = useEfficiencyVsTemp(ctx.vehicleId, ctx.from, ctx.to, ctx.tripTagFilter);
+  const { data = [], isLoading } = temperatureQuery;
   return (
-    <EfficiencyTemperatureChart
-      definition={definition}
-      chartDefinition={chartDefinition}
-      data={data}
-      loading={isLoading}
+    <ChartQueryBoundary
+      queries={[temperatureQuery]}
+      empty={data.length === 0}
+      emptyTitle={definition.emptyTitle}
+      chartTitle={definition.title}
       height={height}
-    />
+      presentation={presentation}
+    >
+      {() => (
+        <EfficiencyTemperatureChart
+          definition={definition}
+          chartDefinition={chartDefinition}
+          data={data}
+          loading={isLoading}
+          height={height}
+        />
+      )}
+    </ChartQueryBoundary>
   );
 }
 
@@ -1207,31 +1667,46 @@ function EfficiencyModeSource({
   chartDefinition,
   ctx,
   height,
+  presentation,
 }: ActiveDashboardChartSourceProps) {
-  const { data = [], isLoading } = useEfficiencyByMode(
-    ctx.vehicleId,
-    ctx.from,
-    ctx.to,
-    ctx.tripTagFilter
-  );
+  const modeQuery = useEfficiencyByMode(ctx.vehicleId, ctx.from, ctx.to, ctx.tripTagFilter);
+  const { data = [], isLoading } = modeQuery;
   return (
-    <EfficiencyModeChart
-      definition={definition}
-      chartDefinition={chartDefinition}
-      data={data}
-      loading={isLoading}
+    <ChartQueryBoundary
+      queries={[modeQuery]}
+      empty={data.length === 0}
+      emptyTitle={definition.emptyTitle}
+      chartTitle={definition.title}
       height={height}
-    />
+      presentation={presentation}
+    >
+      {() => (
+        <EfficiencyModeChart
+          definition={definition}
+          chartDefinition={chartDefinition}
+          data={data}
+          loading={isLoading}
+          height={height}
+        />
+      )}
+    </ChartQueryBoundary>
   );
 }
 
-function EfficiencyTagsSource({ chartDefinition, ctx, height }: ActiveDashboardChartSourceProps) {
-  const { data = [], isLoading } = useEfficiencyByTag(
+function EfficiencyTagsSource({
+  definition,
+  chartDefinition,
+  ctx,
+  height,
+  presentation,
+}: ActiveDashboardChartSourceProps) {
+  const tagEfficiencyQuery = useEfficiencyByTag(
     ctx.vehicleId,
     ctx.from,
     ctx.to,
     ctx.tripTagFilter
   );
+  const { data = [], isLoading } = tagEfficiencyQuery;
   const tags = useTripTags(ctx.vehicleId);
   if (tags.isError) {
     return <EfficiencyTagsCatalogError height={height} onRetry={() => void tags.refetch()} />;
@@ -1241,13 +1716,23 @@ function EfficiencyTagsSource({ chartDefinition, ctx, height }: ActiveDashboardC
   }
   const hasTagFilter = Boolean(ctx.tripTagFilter?.tagIds.length || ctx.tripTagFilter?.untagged);
   return (
-    <EfficiencyTagsChart
-      data={data}
-      loading={isLoading || tags.isLoading}
+    <ChartQueryBoundary
+      queries={[tagEfficiencyQuery, tags]}
+      empty={false}
+      chartTitle={definition.title}
       height={height}
-      hasTagFilter={hasTagFilter}
-      chartDefinition={chartDefinition}
-    />
+      presentation={presentation}
+    >
+      {() => (
+        <EfficiencyTagsChart
+          data={data}
+          loading={isLoading || tags.isLoading}
+          height={height}
+          hasTagFilter={hasTagFilter}
+          chartDefinition={chartDefinition}
+        />
+      )}
+    </ChartQueryBoundary>
   );
 }
 
@@ -1292,23 +1777,35 @@ function PhantomDrainSource({
   presentation,
 }: ActiveDashboardChartSourceProps) {
   const isDark = useDocumentTheme();
-  const { data, isLoading } = usePhantomDrainPeriods(ctx.vehicleId, ctx.from, ctx.to, 500, 6);
+  const drainQuery = usePhantomDrainPeriods(ctx.vehicleId, ctx.from, ctx.to, 500, 6);
+  const { data, isLoading } = drainQuery;
   const seriesColor = editedSeriesColor(chartDefinition, 'accent', isDark);
   return (
-    <PhantomDrainChart
-      periods={data?.periods ?? []}
-      loading={isLoading}
+    <ChartQueryBoundary
+      queries={[drainQuery]}
+      empty={(data?.periods ?? []).length === 0}
+      emptyTitle={definition.emptyTitle ?? 'No phantom drain data for this period'}
+      chartTitle={definition.title}
       height={height}
-      emptyTitle={definition.emptyTitle}
-      yUnit={chartDefinition.axes.y.unit ?? definition.yUnit}
-      yRange={
-        sourceAxisRanges(settings).yRange ??
-        fixedDefinitionRange(chartDefinition.axes.y) ??
-        definition.yRange
-      }
-      interactionMode={chartInteractionMode(presentation)}
-      {...(seriesColor ? { seriesColor } : {})}
-    />
+      presentation={presentation}
+    >
+      {() => (
+        <PhantomDrainChart
+          periods={data?.periods ?? []}
+          loading={isLoading}
+          height={height}
+          emptyTitle={definition.emptyTitle}
+          yUnit={chartDefinition.axes.y.unit ?? definition.yUnit}
+          yRange={
+            sourceAxisRanges(settings).yRange ??
+            fixedDefinitionRange(chartDefinition.axes.y) ??
+            definition.yRange
+          }
+          interactionMode={chartInteractionMode(presentation)}
+          {...(seriesColor ? { seriesColor } : {})}
+        />
+      )}
+    </ChartQueryBoundary>
   );
 }
 
@@ -1323,18 +1820,32 @@ function BatteryDegradationSource({
   presentation,
 }: ActiveDashboardChartSourceProps) {
   const isDark = useDocumentTheme();
-  const { data = [], isLoading } = useDegradation(ctx.vehicleId, ctx.from, ctx.to);
-  return renderSingleChart(
-    definition,
-    chartDefinition,
-    height,
-    isLoading,
-    data.map((point) => ({ ts: point.ts, value: point.capacity_pct ?? null })),
-    timeFilter,
-    sourceAxisRanges(settings).yRange,
-    chartInteractionMode(presentation),
-    smoothness,
-    isDark
+  const degradationQuery = useDegradation(ctx.vehicleId, ctx.from, ctx.to);
+  const { data = [], isLoading } = degradationQuery;
+  return (
+    <ChartQueryBoundary
+      queries={[degradationQuery]}
+      empty={data.length === 0}
+      emptyTitle={definition.emptyTitle}
+      chartTitle={definition.title}
+      height={height}
+      presentation={presentation}
+    >
+      {() =>
+        renderSingleChart(
+          definition,
+          chartDefinition,
+          height,
+          isLoading,
+          data.map((point) => ({ ts: point.ts, value: point.capacity_pct ?? null })),
+          timeFilter,
+          sourceAxisRanges(settings).yRange,
+          chartInteractionMode(presentation),
+          smoothness,
+          isDark
+        )
+      }
+    </ChartQueryBoundary>
   );
 }
 
@@ -1360,23 +1871,35 @@ function BatteryMileageSource({
   presentation,
   onResolvedAxisRanges,
 }: ActiveDashboardChartSourceProps) {
-  const { data, isLoading } = useBatteryMileage(ctx.vehicleId, ctx.from, ctx.to);
+  const mileageQuery = useBatteryMileage(ctx.vehicleId, ctx.from, ctx.to);
+  const { data, isLoading } = mileageQuery;
   const { xRange, yRange, yRightRange } = sourceAxisRanges(settings);
   return (
-    <BatteryCapacityMileageChart
-      definition={definition}
-      chartDefinition={chartDefinition}
-      loading={isLoading}
+    <ChartQueryBoundary
+      queries={[mileageQuery]}
+      empty={(data ?? []).length === 0}
+      emptyTitle={definition.emptyTitle}
+      chartTitle={definition.title}
       height={height}
-      points={mileagePoints(data)}
-      timeFilter={timeFilter}
-      smoothness={smoothness}
-      interactionMode={chartInteractionMode(presentation)}
-      {...(xRange ? { xRange } : {})}
-      {...(yRange ? { yRange } : {})}
-      {...(yRightRange ? { yRightRange } : {})}
-      {...(onResolvedAxisRanges ? { onResolvedAxisRanges } : {})}
-    />
+      presentation={presentation}
+    >
+      {() => (
+        <BatteryCapacityMileageChart
+          definition={definition}
+          chartDefinition={chartDefinition}
+          loading={isLoading}
+          height={height}
+          points={mileagePoints(data)}
+          timeFilter={timeFilter}
+          smoothness={smoothness}
+          interactionMode={chartInteractionMode(presentation)}
+          {...(xRange ? { xRange } : {})}
+          {...(yRange ? { yRange } : {})}
+          {...(yRightRange ? { yRightRange } : {})}
+          {...(onResolvedAxisRanges ? { onResolvedAxisRanges } : {})}
+        />
+      )}
+    </ChartQueryBoundary>
   );
 }
 
@@ -1391,23 +1914,35 @@ function ProjectedRangeMileageSource({
   presentation,
   onResolvedAxisRanges,
 }: ActiveDashboardChartSourceProps) {
-  const { data, isLoading } = useBatteryMileage(ctx.vehicleId, ctx.from, ctx.to);
+  const mileageQuery = useBatteryMileage(ctx.vehicleId, ctx.from, ctx.to);
+  const { data, isLoading } = mileageQuery;
   const { xRange, yRange, yRightRange } = sourceAxisRanges(settings);
   return (
-    <ProjectedRangeMileageChart
-      definition={definition}
-      chartDefinition={chartDefinition}
-      loading={isLoading}
+    <ChartQueryBoundary
+      queries={[mileageQuery]}
+      empty={(data ?? []).length === 0}
+      emptyTitle={definition.emptyTitle}
+      chartTitle={definition.title}
       height={height}
-      points={mileagePoints(data)}
-      timeFilter={timeFilter}
-      smoothness={smoothness}
-      interactionMode={chartInteractionMode(presentation)}
-      {...(xRange ? { xRange } : {})}
-      {...(yRange ? { yRange } : {})}
-      {...(yRightRange ? { yRightRange } : {})}
-      {...(onResolvedAxisRanges ? { onResolvedAxisRanges } : {})}
-    />
+      presentation={presentation}
+    >
+      {() => (
+        <ProjectedRangeMileageChart
+          definition={definition}
+          chartDefinition={chartDefinition}
+          loading={isLoading}
+          height={height}
+          points={mileagePoints(data)}
+          timeFilter={timeFilter}
+          smoothness={smoothness}
+          interactionMode={chartInteractionMode(presentation)}
+          {...(xRange ? { xRange } : {})}
+          {...(yRange ? { yRange } : {})}
+          {...(yRightRange ? { yRightRange } : {})}
+          {...(onResolvedAxisRanges ? { onResolvedAxisRanges } : {})}
+        />
+      )}
+    </ChartQueryBoundary>
   );
 }
 
@@ -1420,12 +1955,13 @@ function TirePressureTripsSource({
   presentation,
 }: ActiveDashboardChartSourceProps) {
   const isDark = useDocumentTheme();
-  const { data, isLoading } = useTirePressureTimeline(
+  const pressureQuery = useTirePressureTimeline(
     ctx.vehicleId,
     ctx.from,
     ctx.to,
     ctx.tripTagFilter
   );
+  const { data, isLoading } = pressureQuery;
   const { data: vehicles } = useVehicles();
   const navigate = useNavigate();
   const activeVehicle = vehicles?.find((vehicle) => vehicle.id === ctx.vehicleId);
@@ -1459,25 +1995,36 @@ function TirePressureTripsSource({
     sourceAxisRanges(settings).yRange ?? fixedDefinitionRange(chartDefinition.axes.y);
 
   return (
-    <TirePressureTripsChart
-      samples={data?.samples ?? []}
-      trips={data?.trips ?? []}
-      targetPressure={activeVehicle?.target_tire_pressure_psi ?? DEFAULT_TARGET_TIRE_PRESSURE_PSI}
-      pressureFactor={pressureFactor}
-      pressureUnit={pressureUnit}
-      loading={isLoading}
+    <ChartQueryBoundary
+      queries={[pressureQuery]}
+      empty={(data?.samples ?? []).length === 0 && (data?.trips ?? []).length === 0}
+      emptyTitle={definition.emptyTitle ?? 'No tire pressure or trip data for this period'}
+      chartTitle={definition.title}
       height={height}
-      {...(definition.emptyTitle ? { emptyTitle: definition.emptyTitle } : {})}
-      interactionMode={chartInteractionMode(presentation)}
-      seriesStyles={seriesStyles}
-      {...(configuredYRange ? { yRange: configuredYRange } : {})}
-      showLegend={chartDefinition.display.legend !== 'hide'}
-      showGrid={chartDefinition.display.grid}
-      showTooltip={chartDefinition.display.tooltip}
-      showPoints={chartDefinition.display.showPoints ?? false}
-      {...(chartDefinition.axes.y.label ? { yAxisLabel: chartDefinition.axes.y.label } : {})}
-      onTripClick={(tripId) => void navigate({ to: '/trips/$tripId', params: { tripId } })}
-    />
+      presentation={presentation}
+    >
+      {() => (
+        <TirePressureTripsChart
+          samples={data?.samples ?? []}
+          trips={data?.trips ?? []}
+          targetPressure={activeVehicle?.target_tire_pressure_psi ?? DEFAULT_TARGET_TIRE_PRESSURE_PSI}
+          pressureFactor={pressureFactor}
+          pressureUnit={pressureUnit}
+          loading={isLoading}
+          height={height}
+          {...(definition.emptyTitle ? { emptyTitle: definition.emptyTitle } : {})}
+          interactionMode={chartInteractionMode(presentation)}
+          seriesStyles={seriesStyles}
+          {...(configuredYRange ? { yRange: configuredYRange } : {})}
+          showLegend={chartDefinition.display.legend !== 'hide'}
+          showGrid={chartDefinition.display.grid}
+          showTooltip={chartDefinition.display.tooltip}
+          showPoints={chartDefinition.display.showPoints ?? false}
+          {...(chartDefinition.axes.y.label ? { yAxisLabel: chartDefinition.axes.y.label } : {})}
+          onTripClick={(tripId) => void navigate({ to: '/trips/$tripId', params: { tripId } })}
+        />
+      )}
+    </ChartQueryBoundary>
   );
 }
 

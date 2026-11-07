@@ -81,7 +81,7 @@ routes.
 | Battery | `GET /v1/battery/soc`, `/range`, `/capacity`, `/health`, `/mileage`, `/phantom-drain`, `/degradation` |
 | Metrics | `GET /v1/metrics/catalog`, `/value`, `/series`; `POST /v1/metrics/batch` |
 | Trips | `GET /v1/trips`, `/trips/map`, and `/trips/{id}` with `/detail`, `/track`, `/speed`, `/elevation`, `/power`, or `/series`; `GET /v1/vehicles/{id}/drives/{trip_id}/power` is the path-scoped power alias. Trip rows from `GET /v1/trips`, `/trips/{id}`, and the `trip` object of `/trips/{id}/detail` include `start_odometer_mi` and `end_odometer_mi`: the odometer at trip start and end, in miles, or `null` when the trip has no reading. Vehicle members may read `/v1/vehicles/{id}/trip-tags`; owners and managers may create, update, delete, and batch-assign those shared tags. |
-| Charging | `GET /v1/charging`, `/summary`, `/chart-series`, `/curve-analysis`, and individual session/curve routes; path-scoped aliases are available below `/v1/vehicles/{id}/charging-sessions` and `/costs`. Managers may patch a session with additive `location_mode` (`automatic`, `saved_place`, `none`) and `cost_mode` (`automatic`, `free`, `manual`); legacy `{ place_id }` requests remain supported. `GET/PATCH /v1/vehicles/{id}/charging-networks` exposes only networks already observed for that vehicle and lets managers mark their automatic cost as Free. |
+| Charging | `GET /v1/charging`, `/summary`, `/chart-series`, `/curve-analysis`, and individual session/curve routes; path-scoped aliases are available below `/v1/vehicles/{id}/charging-sessions` and `/costs`. Managers may patch a session with additive `location_mode` (`automatic`, `saved_place`, `none`) and `cost_mode` (`automatic`, `free`, `manual` with `cost_usd`); legacy `{ place_id }` requests remain supported. `GET/PATCH /v1/vehicles/{id}/charging-networks` exposes only networks already observed for that vehicle and lets managers mark their automatic cost as Free. See [Charge cost](#charge-cost). |
 | Efficiency | `GET /v1/efficiency/summary`, `/by-mode`, `/by-tag`, `/trend`, `/vs-temp`, `/range-vs-temp` |
 | Overview | `GET /v1/dashboard/overview/{vehicle_id}` and `GET /v1/vehicles/{id}/live-session` |
 | Grafana compatibility | `GET /v1/grafana`; `POST /v1/grafana/search`, `/query`, `/annotations`, `/tag-keys`, `/tag-values` |
@@ -118,6 +118,40 @@ groups the selected trip cohort by every assigned tag and includes a nullable
 `tag_id` `Untagged` row where applicable; rows are not additive for trips with
 multiple tags. `POST /v1/metrics/batch` accepts the same fields and applies
 them only to trip-derived metrics.
+
+### Charge cost
+
+The API computes the cost of a charge when the session ends, and again when
+an owner or manager changes a price. The first rule that applies sets the
+cost. The rule is in `cost_method` on each session in the list and detail
+responses:
+
+| Order | `cost_method` | Rule |
+|---|---|---|
+| 1 | `user_free`, `user_manual` | The correction on the charge: free, or a total (`cost_usd`). |
+| 2 | `network_free` | The network of the charge is marked Free. |
+| 3 | `rivian_free_session` | Rivian marks the charge free. |
+| 4 | `rivian_paid_total` | Rivian sends a paid total for a known paid network, and the charge is not at home. |
+| 5 | `profile`, `profile_pending` | A cost profile: the profile on the charge, then the place profile, then the vehicle default profile. `profile_pending` means that the profile applies but the inputs for the cost are not available yet. |
+| 6 | `unknown` | No rule applies. `cost_usd` is `null`. |
+
+The vehicle default profile does not price a public DC charge: a charge with
+charger type DC that is not at home. A charge with an unknown home status is
+not at home. Such a charge stays `unknown` until the owner enters a price or
+links a place that has a price. A place profile still prices a DC charge at
+that place. The API keeps the profile that priced a charge on the charge. When
+that profile is the vehicle default, the API treats it as the vehicle default,
+so the rule also applies to an older charge when the API computes its cost
+again.
+
+Session list and detail rows also include:
+
+- `cost_method`: `null` while the session is open, as `cost_usd` is.
+- `cost_rate_per_kwh`: a derived display value for `user_manual` only. It is
+  `cost_usd` divided by the energy added that the row shows (`kwh_added`). It
+  is `null` when that energy is 0 or not known, and for all other methods. The
+  API does not store a rate. A client that takes a rate for one charge saves
+  it as a total (rate × energy added).
 
 ## Raw telemetry explorer
 

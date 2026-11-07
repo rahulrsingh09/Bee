@@ -146,6 +146,18 @@ impl NetworkCostMode {
     }
 }
 
+/// Cost fields for session list and detail. `cost_method` follows `cost_usd`
+/// and stays `null` while the session is open. `cost_rate_per_kwh` is a
+/// derived display value for `user_manual`: the total divided by the energy
+/// added that the session shows (`kwh_added`), `null` when that energy is 0 or
+/// missing. The web app saves a rate entered on a charge as such a total.
+pub(crate) const COST_RESOLUTION_SQL: &str = "\
+    CASE WHEN cs.ended_at IS NULL THEN NULL ELSE cs.cost_method END AS cost_method, \
+    CASE WHEN cs.ended_at IS NOT NULL AND cs.cost_method = 'user_manual' \
+              AND COALESCE(cs.kwh_added, cs.energy_added_wh / 1000.0) > 0 \
+         THEN cs.cost_usd / COALESCE(cs.kwh_added, cs.energy_added_wh / 1000.0) \
+    END AS cost_rate_per_kwh";
+
 #[derive(Debug, Serialize, sqlx::FromRow)]
 struct ChargingNetworkPreferenceRow {
     network_vendor: String,
@@ -181,6 +193,10 @@ struct SessionRow {
     cost_override_mode: Option<String>,
     #[sqlx(default)]
     cost_override_usd: Option<f64>,
+    #[sqlx(default)]
+    cost_method: Option<String>,
+    #[sqlx(default)]
+    cost_rate_per_kwh: Option<f64>,
     location_name: Option<String>,
     is_home: Option<bool>,
     charger_type: Option<String>,
@@ -279,6 +295,18 @@ mod timeframe_tests {
             super::cost_profile_for_location(super::LocationOverrideMode::None, None),
             None,
         );
+    }
+
+    #[test]
+    fn session_rows_select_the_cost_method_and_derived_rate() {
+        for field in [
+            "AS cost_method",
+            "AS cost_rate_per_kwh",
+            "cs.cost_method = 'user_manual'",
+            "COALESCE(cs.kwh_added, cs.energy_added_wh / 1000.0) > 0",
+        ] {
+            assert!(super::COST_RESOLUTION_SQL.contains(field), "{field}");
+        }
     }
 }
 
@@ -1015,7 +1043,7 @@ async fn list_sessions_response(
             TO_CHAR((cs.started_at AT TIME ZONE COALESCE((SELECT value FROM riviamigo.system_config WHERE key = 'app_timezone'), 'UTC'))::date, 'YYYY-MM-DD') AS session_day_local, \
             cs.ended_at, cs.location_lat, cs.location_lng, \
                 cs.source_location_lat, cs.source_location_lng, cs.location_override_mode, \
-                cs.cost_override_mode, cs.cost_override_usd, \
+                cs.cost_override_mode, cs.cost_override_usd, {}, \
                 COALESCE(g.name, a.display_name, CASE WHEN cs.is_home THEN 'Home' END) AS location_name, \
                 cs.is_home, {} AS charger_type, \
                 COALESCE(cs.kwh_added, cs.energy_added_wh / 1000.0) AS kwh_added, cs.soc_start, cs.soc_end, \
@@ -1031,7 +1059,7 @@ async fn list_sessions_response(
             WHERE cs.vehicle_id=$1 AND cs.started_at>=$2 AND cs.started_at<=$3 \
               AND ($6 IS NULL OR TO_CHAR((cs.started_at AT TIME ZONE COALESCE((SELECT value FROM riviamigo.system_config WHERE key = 'app_timezone'), 'UTC'))::date, 'YYYY-MM-DD') = $6) \
             ORDER BY cs.started_at DESC, cs.id DESC LIMIT $4 OFFSET $5",
-        crate::charger_type_sql!("cs"), c::COST, c::LIST, c::LATEST,
+        COST_RESOLUTION_SQL, crate::charger_type_sql!("cs"), c::COST, c::LIST, c::LATEST,
     )))
         .bind(vehicle_id)
         .bind(from)
@@ -1216,7 +1244,7 @@ async fn get_session_response(
             TO_CHAR((cs.started_at AT TIME ZONE COALESCE((SELECT value FROM riviamigo.system_config WHERE key = 'app_timezone'), 'UTC'))::date, 'YYYY-MM-DD') AS session_day_local, \
             cs.ended_at, cs.location_lat, cs.location_lng, \
                 cs.source_location_lat, cs.source_location_lng, cs.location_override_mode, \
-                cs.cost_override_mode, cs.cost_override_usd, \
+                cs.cost_override_mode, cs.cost_override_usd, {}, \
                 COALESCE(g.name, a.display_name, CASE WHEN cs.is_home THEN 'Home' END) AS location_name, \
                 cs.is_home, {} AS charger_type, \
                 COALESCE(cs.kwh_added, cs.energy_added_wh / 1000.0) AS kwh_added, cs.soc_start, cs.soc_end, \
@@ -1237,7 +1265,7 @@ async fn get_session_response(
          ) telem ON true \
          {} \
             WHERE cs.id=$1 AND cs.vehicle_id=$2",
-        crate::charger_type_sql!("cs"), c::COST, c::DETAIL, c::TELEM,
+        COST_RESOLUTION_SQL, crate::charger_type_sql!("cs"), c::COST, c::DETAIL, c::TELEM,
     )))
         .bind(id)
         .bind(vehicle_id)

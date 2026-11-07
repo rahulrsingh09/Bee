@@ -337,9 +337,9 @@ describe('AppLayout sidebar collapse', () => {
       </AppLayout>
     );
 
-    expect(screen.getByText('Phantom Drain')).toBeInTheDocument();
+    expect(screen.getByText('Parked loss')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('Phantom Drain'));
+    fireEvent.click(screen.getByText('Parked loss'));
 
     expect(navigate).toHaveBeenCalledWith({ to: '/battery/phantom-drain' });
   });
@@ -351,7 +351,7 @@ describe('AppLayout sidebar collapse', () => {
       </AppLayout>
     );
 
-    expect(screen.queryByText('Phantom Drain')).not.toBeInTheDocument();
+    expect(screen.queryByText('Parked loss')).not.toBeInTheDocument();
   });
 
   it('opens a full-screen mobile navigation sheet with touch-safe destinations and utilities', async () => {

@@ -39,7 +39,7 @@ export function ChargeCurveChart({
           tickLine={false}
           axisLine={false}
           tickFormatter={(v: number) => `${Math.round(v)}%`}
-          label={{ value: 'State of Charge', position: 'insideBottom', offset: -2, ...TICK_STYLE }}
+          label={{ value: 'Battery', position: 'insideBottom', offset: -2, ...TICK_STYLE }}
         />
         <YAxis
           tick={TICK_STYLE}
@@ -54,7 +54,7 @@ export function ChargeCurveChart({
               formatter={(v, name) =>
                 name === 'power_kw'
                   ? [formatKwh(v ?? 0), 'Power']
-                  : [formatPercent(v ?? 0), 'SoC']
+                  : [formatPercent(v ?? 0), 'Battery']
               }
             />
           }

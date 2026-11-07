@@ -81,7 +81,7 @@ export function ParkedEnergyPanel({
           </div>
         ) : !sample ? (
           <div className="rounded-xl border border-dashed border-border p-5 text-sm text-fg-secondary">
-            Start the optional Parallax collector to populate Rivian&apos;s parked-energy breakdown.
+            Start the optional live stream collector to populate Rivian&apos;s parked-energy breakdown.
           </div>
         ) : (
           <div className="grid gap-5">

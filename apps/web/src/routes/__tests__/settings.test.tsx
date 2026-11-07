@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -676,9 +676,14 @@ describe('Settings page', () => {
     expect(screen.getAllByText('Vehicles').length).toBeGreaterThan(0);
   });
 
-  it('shows the running version in a Settings-only link to GitHub Releases', async () => {
+  it('shows the running version in a Settings → About row that links to GitHub Releases', async () => {
     settingsMocks.auth.accessToken = 'session-token';
-    renderSettings();
+    renderSettings('directory');
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
+    expect(screen.getByText('Your vehicle, places and account.')).toBeInTheDocument();
+    const about = screen.getByTestId('settings-about');
+    expect(within(about).getByRole('heading', { name: 'About' })).toBeInTheDocument();
 
     const versionLink = await screen.findByRole('link', { name: /^2026\.09\.4\+dev\. Update checks off/i });
     expect(versionLink).toHaveAttribute('href', 'https://github.com/bballdavis/Riviamigo/releases');
@@ -686,6 +691,16 @@ describe('Settings page', () => {
     expect(versionLink).toHaveAttribute('rel', 'noopener noreferrer');
     expect(versionLink).toHaveTextContent('2026.09.4+dev');
     expect(versionLink).toHaveTextContent('Update checks off');
+    expect(about).toContainElement(versionLink);
+  });
+
+  it('leaves no blank update subtitle while the update-check setting is unknown', async () => {
+    settingsMocks.auth.accessToken = 'session-token';
+    hooksMocks.getUpdateCheckSettings.mockReturnValue(new Promise(() => undefined));
+    renderSettings('directory');
+
+    const link = await screen.findByRole('link', { name: /^2026\.09\.4\+dev\. View GitHub releases$/ });
+    expect(link.querySelector('small')).toBeNull();
   });
 
   it('shows up to date or the newer remote version as the version subtitle', async () => {
@@ -695,12 +710,12 @@ describe('Settings page', () => {
       lastAttemptAt: 1, lastSuccessfulAt: 1, latestVersion, updateAvailable, error: null,
     });
     localStorage.setItem('rm-github-release-check-v1', snapshot('2026.09.4', false));
-    const { unmount } = renderSettings();
+    const { unmount } = renderSettings('directory');
     expect(await screen.findByRole('link', { name: /Up to date/ })).toBeInTheDocument();
     unmount();
 
     localStorage.setItem('rm-github-release-check-v1', snapshot('2026.10.1', true));
-    renderSettings();
+    renderSettings('directory');
     expect(await screen.findByRole('link', { name: /2026\.10\.1 available/ })).toBeInTheDocument();
     localStorage.removeItem('rm-github-release-check-v1');
   });
@@ -712,13 +727,13 @@ describe('Settings page', () => {
       lastAttemptAt: Date.now(), lastSuccessfulAt: Date.now(),
       latestVersion: '2026.10.2', updateAvailable: true, error: null,
     });
-    const { queryClient } = renderSettings();
+    const { queryClient } = renderSettings('directory');
     expect(await screen.findByRole('link', { name: /2026\.10\.2 available/ })).toBeInTheDocument();
     act(() => queryClient.setQueryData(['app-version'], { version: '2026.10.2' }));
 
     const link = await screen.findByRole('link', { name: /^2026\.10\.2\. Up to date\./ });
     expect(link).not.toHaveTextContent('available');
-    expect(screen.getByText('Up to date')).toHaveClass('text-fg-tertiary');
+    expect(screen.getByText('Up to date')).not.toHaveClass('text-status-warning');
   });
 
   it.each(['2026.09.4', '2026.10.2'])('shows checks off ahead of the cached %s result', async (latestVersion) => {
@@ -727,11 +742,11 @@ describe('Settings page', () => {
       lastAttemptAt: Date.now(), lastSuccessfulAt: Date.now(),
       latestVersion, updateAvailable: true, error: null,
     });
-    renderSettings();
+    renderSettings('directory');
 
     const link = await screen.findByRole('link', { name: /Update checks off/ });
     expect(link).not.toHaveTextContent(/Up to date|available/);
-    expect(screen.getByText('Update checks off')).toHaveClass('text-fg-tertiary');
+    expect(screen.getByText('Update checks off')).not.toHaveClass('text-status-warning');
   });
 
   it.each([null, '2026.09.4', '2026.10.2'])('shows a failed check ahead of the cached %s result', async (latestVersion) => {
@@ -741,7 +756,7 @@ describe('Settings page', () => {
       lastAttemptAt: Date.now(), lastSuccessfulAt: latestVersion ? Date.now() - 1000 : null,
       latestVersion, updateAvailable: latestVersion ? true : null, error: 'GitHub returned HTTP 403.',
     });
-    renderSettings();
+    renderSettings('directory');
 
     const link = await screen.findByRole('link', { name: /Update check failed/ });
     expect(link).not.toHaveTextContent(/Up to date|available/);
@@ -755,7 +770,7 @@ describe('Settings page', () => {
       lastAttemptAt: Date.now(), lastSuccessfulAt: Date.now(),
       latestVersion: '2026.09.4', updateAvailable: false, error: null,
     });
-    renderSettings();
+    renderSettings('directory');
 
     expect(await screen.findByRole('link', { name: /Update status unavailable/ })).not.toHaveTextContent('Up to date');
   });
@@ -763,7 +778,7 @@ describe('Settings page', () => {
   it('does not describe an enabled check as running before it starts', async () => {
     settingsMocks.auth.accessToken = 'session-token';
     hooksMocks.getUpdateCheckSettings.mockResolvedValue({ enabled: true, frequency: 'daily' });
-    renderSettings();
+    renderSettings('directory');
 
     expect(await screen.findByRole('link', { name: /Not checked yet/ })).not.toHaveTextContent(/Up to date|Checking for updates/);
   });
@@ -776,7 +791,7 @@ describe('Settings page', () => {
       lastAttemptAt: Date.now(), lastSuccessfulAt: Date.now(),
       latestVersion: '2026.10.2', updateAvailable: false, error: null,
     });
-    renderSettings();
+    renderSettings('directory');
 
     expect(await screen.findByRole('link', { name: /Unable to compare versions/ })).not.toHaveTextContent('Up to date');
   });
@@ -785,7 +800,7 @@ describe('Settings page', () => {
     settingsMocks.auth.accessToken = 'session-token';
     const hooks = await import('@riviamigo/hooks');
     vi.mocked(hooks.api.getAppVersion).mockResolvedValueOnce({ version: 'unknown' });
-    renderSettings();
+    renderSettings('directory');
 
     expect(await screen.findByRole('link', { name: /^Unknown version\./i })).toHaveTextContent('Unknown version');
   });

@@ -2,14 +2,13 @@ import React from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { Eraser, Moon, Plus, Save, Sun } from 'lucide-react';
-import { LuBadgeInfo } from 'react-icons/lu';
 import { PiArrowFatLinesRight } from 'react-icons/pi';
 import { api, useAuth, useBasemapConfig, useTrips, useTripMapRoutes, useUpdateTripTagAssignments, useUserPreferences } from '@riviamigo/hooks';
 import { useDocumentTheme } from '@riviamigo/ui/hooks';
-import { DataTable, createTripColumns, type TripRow } from '@riviamigo/ui/tables';
+import { DataTable, createTripColumns, formatTripBatteryRange, isDefaultTripDriveMode, type TripRow } from '@riviamigo/ui/tables';
 import { Badge, Button, SelectPicker, Tooltip } from '@riviamigo/ui/primitives';
 import { TripMapChart, type TripMapRoute, type MapStyleMode } from '@riviamigo/ui/charts';
-import { formatMiles, formatDuration, formatPercent, formatEfficiency } from '@riviamigo/ui/lib/utils';
+import { formatMiles, formatDuration, formatEfficiency } from '@riviamigo/ui/lib/utils';
 import { formatDriveMode, getDriveModeBadgeClass } from '@riviamigo/ui/lib/driveMode';
 import { formatAppDateTime } from '@riviamigo/ui/lib/dateTime';
 import { registerWidget } from '../../registry';
@@ -35,39 +34,44 @@ function useIsMobile() {
 function TripCard({
   trip,
   isSelected,
-  onClick,
-  onInfoClick,
+  onOpen,
+  onToggleSelect,
 }: {
   trip: TripRow;
   isSelected: boolean;
-  onClick: () => void;
-  onInfoClick: () => void;
+  onOpen: () => void;
+  onToggleSelect: () => void;
 }) {
   const startLabel = trip.start_place ?? trip.start_address;
   const endLabel   = trip.end_place   ?? trip.end_address;
+  const date = formatAppDateTime(trip.started_at);
+  const battery = formatTripBatteryRange(trip.soc_start, trip.soc_end);
+  const showMode = !isDefaultTripDriveMode(trip.drive_mode);
 
   return (
     <div
+      data-trip-card
       className={`relative w-full rounded-xl border px-3 py-2.5 transition-colors ${
         isSelected
           ? 'border-accent/50 bg-accent/10 ring-1 ring-inset ring-accent/30'
           : 'border-border bg-bg-elevated/60 hover:bg-bg-elevated'
       }`}
     >
-      <button
-        type="button"
-        onClick={onInfoClick}
-        className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-md border border-border bg-bg-surface text-fg-tertiary transition-colors hover:border-border-strong hover:text-fg"
-        aria-label="Open trip details"
-      >
-        <LuBadgeInfo className="h-4 w-4" />
-      </button>
-      <button type="button" onClick={onClick} className="w-full text-left pr-9">
+      <label className="absolute right-2 top-2 inline-flex h-7 w-7 cursor-pointer items-center justify-center">
+        <input
+          type="checkbox"
+          className="h-4 w-4 accent-accent"
+          checked={isSelected}
+          onChange={onToggleSelect}
+          aria-label={`Select trip from ${date}`}
+        />
+      </label>
+      <button type="button" onClick={onOpen} className="w-full text-left pr-9" aria-label={`Open trip from ${date}`}>
       <div className="flex items-center justify-between gap-2 mb-1.5">
         <span className="text-xs text-fg-tertiary">
-          {formatAppDateTime(trip.started_at)}
+          {date}
         </span>
-        {trip.drive_mode && (
+        {showMode && trip.drive_mode && (
           <Badge size="sm" className={getDriveModeBadgeClass(trip.drive_mode)}>
             {formatDriveMode(trip.drive_mode)}
           </Badge>
@@ -76,23 +80,23 @@ function TripCard({
       {(startLabel || endLabel) && (
         <div className="flex min-w-0 items-center gap-1 mb-2 text-sm font-medium text-fg">
           {startLabel && <span className="truncate">{startLabel}</span>}
-          {startLabel && endLabel && <PiArrowFatLinesRight className="h-3.5 w-3.5 shrink-0 text-fg-tertiary" />}
+          {startLabel && endLabel && <span aria-hidden="true" className="shrink-0 text-fg-tertiary">→</span>}
           {endLabel && <span className="truncate">{endLabel}</span>}
         </div>
       )}
-      <div className="flex items-center gap-3 text-xs text-fg-secondary flex-wrap">
-        <span className="font-mono font-medium text-fg">{formatMiles(trip.distance_mi)}</span>
+      <div className="flex items-center gap-3 text-xs text-fg-secondary flex-wrap tabular-nums">
+        <span className="font-medium text-fg">{formatMiles(trip.distance_mi)}</span>
         <span className="text-fg-tertiary">·</span>
         <span>{formatDuration(trip.duration_min)}</span>
         {trip.efficiency_wh_mi != null && (
           <>
             <span className="text-fg-tertiary">·</span>
-            <span className="font-mono">{formatEfficiency(trip.efficiency_wh_mi)}</span>
+            <span>{formatEfficiency(trip.efficiency_wh_mi)}</span>
           </>
         )}
-        {trip.soc_start != null && trip.soc_end != null && (
-          <span className="ml-auto font-mono text-fg-tertiary">
-            {formatPercent(trip.soc_start)} <PiArrowFatLinesRight className="inline h-3 w-3" /> {formatPercent(trip.soc_end)}
+        {battery && (
+          <span className="ml-auto text-fg-tertiary">
+            <span className="sr-only">Battery </span>{battery}
           </span>
         )}
       </div>
@@ -250,14 +254,21 @@ export function TripsTableWidget({ ctx }: { instance: WidgetInstance; ctx: Widge
   const totalPages = data ? Math.ceil(data.total / data.per_page) : 1;
   const trips = (data?.items ?? []) as TripRow[];
   const hasVisibleTags = trips.some((trip) => (trip.tags?.length ?? 0) > 0);
+  const hasNonDefaultMode = trips.some((trip) => !isDefaultTripDriveMode(trip.drive_mode));
+  const openTrip = React.useCallback(
+    (tripId: string) => navigate({ to: '/trips/$tripId', params: { tripId } }),
+    [navigate],
+  );
+  const isTripSelected = React.useCallback((tripId: string) => selectedIds.includes(tripId), [selectedIds]);
   const columns = React.useMemo(
     () => createTripColumns(placesQuery.data ?? [], {
       includeTags: hasVisibleTags,
-      onInfoClick: (tripId) => {
-        navigate({ to: '/trips/$tripId', params: { tripId } });
-      },
+      includeMode: hasNonDefaultMode,
+      onOpenTrip: openTrip,
+      onToggleSelect: toggleTripSelection,
+      isSelected: isTripSelected,
     }),
-    [hasVisibleTags, navigate, placesQuery.data],
+    [hasNonDefaultMode, hasVisibleTags, isTripSelected, openTrip, placesQuery.data],
   );
 
   React.useEffect(() => {
@@ -423,8 +434,8 @@ export function TripsTableWidget({ ctx }: { instance: WidgetInstance; ctx: Widge
                   key={trip.id}
                   trip={trip}
                   isSelected={selectedIds.includes(trip.id)}
-                  onClick={() => toggleTripSelection(trip.id)}
-                  onInfoClick={() => navigate({ to: '/trips/$tripId', params: { tripId: trip.id } })}
+                  onOpen={() => openTrip(trip.id)}
+                  onToggleSelect={() => toggleTripSelection(trip.id)}
                 />
               ))
           }
@@ -435,7 +446,7 @@ export function TripsTableWidget({ ctx }: { instance: WidgetInstance; ctx: Widge
           columns={columns}
           loading={isLoading}
           loadingRows={pageSize}
-          onRowClick={(row) => toggleTripSelection(row.original.id)}
+          onRowClick={(row) => openTrip(row.original.id)}
           getRowIsSelected={(row) => selectedIds.includes(row.original.id)}
           emptyTitle="No trips found"
           emptyDescription={deferredSearch.trim() ? 'No trips match that start, destination, or tag.' : 'Trips will appear here once your vehicle has been driven.'}

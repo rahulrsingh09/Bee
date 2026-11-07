@@ -2283,7 +2283,7 @@ function friendlyApiError(detail: ApiFailureDetail): { title: string; message: s
         ? ` Try again in about ${Math.max(1, Math.ceil(detail.retryAfterSeconds))}s.`
         : '';
     if (source === 'nginx') {
-      return { title: 'Too many requests', message: `Edge proxy rate limit reached.${waitHint}` };
+      return { title: 'Too many requests', message: waitHint.trim() || 'Try again in a minute.' };
     }
     if (source === 'api') {
       return { title: 'Too many requests', message: `API rate limit reached.${waitHint}` };

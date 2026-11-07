@@ -13,9 +13,9 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const TABS = [
-  { key: 'soc',     label: 'State of Charge', icon: <Battery className="w-3.5 h-3.5" /> },
+  { key: 'soc',     label: 'Battery level', icon: <Battery className="w-3.5 h-3.5" /> },
   { key: 'range',   label: 'Range',            icon: <Activity className="w-3.5 h-3.5" /> },
-  { key: 'phantom', label: 'Phantom Drain',    icon: <Moon className="w-3.5 h-3.5" /> },
+  { key: 'phantom', label: 'Parked loss',      icon: <Moon className="w-3.5 h-3.5" /> },
   { key: 'degrad',  label: 'Degradation',      icon: <TrendingDown className="w-3.5 h-3.5" /> },
 ];
 

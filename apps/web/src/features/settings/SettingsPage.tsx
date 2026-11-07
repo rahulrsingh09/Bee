@@ -59,7 +59,7 @@ import {
   getRivianCredentialRenewalNotice,
 } from '../../lib/rivianCredentialRenewal';
 import {
-  Car, ChartLine, Clipboard, Database, DatabaseBackup, Download, ExternalLink, Globe2, KeyRound, ListChecks, Lock, LogOut, MapPin, Pencil, Plus, RefreshCw, RotateCcw, Ruler, Save, Search, Star, Trash2, Unlock, Users, X, Zap,
+  Car, ChartLine, Clipboard, Database, DatabaseBackup, Download, ExternalLink, Globe2, Info, KeyRound, ListChecks, Lock, LogOut, MapPin, Pencil, Plus, RefreshCw, RotateCcw, Ruler, Save, Search, Star, Trash2, Unlock, Users, X, Zap,
 } from 'lucide-react';
 
 function dashboardActionId(dashboard: DashboardConfig) {
@@ -513,7 +513,7 @@ export function SettingsContent({ initialSection, oidcFeedback, oidcFeedbackKind
     : updateCheckSettings.isError || appVersion.isError
       ? 'Update status unavailable'
       : updateCheckSettings.data?.enabled !== true
-        ? ' '
+        ? null
         : releaseCheck.checking
           ? 'Checking for updates…'
           : releaseCheck.error
@@ -892,24 +892,7 @@ export function SettingsContent({ initialSection, oidcFeedback, oidcFeedbackKind
     <AppLayout activeKey="settings">
       <PageLayout
         title="Settings"
-        subtitle="Your vehicle, workspace and account."
-        actions={(
-          <a
-            href={RELEASES_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label={`${runningVersionLabel}. ${versionSubtitle}. View GitHub releases`}
-            title="View GitHub releases"
-            className="rounded-md text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-          >
-            <span className="block font-mono text-2xl font-semibold font-display tracking-tight text-fg">
-              {runningVersionLabel}
-            </span>
-            <span className={`mt-0.5 block text-sm ${showUpdateAvailable ? 'text-status-warning' : 'text-fg-tertiary'}`}>
-              {versionSubtitle}
-            </span>
-          </a>
-        )}
+        subtitle="Your vehicle, places and account."
       >
         {oidcFeedback && (
           <p
@@ -921,6 +904,29 @@ export function SettingsContent({ initialSection, oidcFeedback, oidcFeedbackKind
         )}
         <div>
           <RSettingsNavigation sections={sections} active={activeSection} onSelect={selectSettingsSection} />
+          {activeSection === 'directory' && (
+            <section className="r-settings-group" aria-labelledby="settings-about-title" data-testid="settings-about">
+              <h2 id="settings-about-title">About</h2>
+              <div className="r-directory">
+                <a
+                  href={RELEASES_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`${runningVersionLabel}.${versionSubtitle ? ` ${versionSubtitle}.` : ''} View GitHub releases`}
+                  title="View GitHub releases"
+                >
+                  <Info aria-hidden="true" />
+                  <span className="min-w-0 flex-1">
+                    <strong>{runningVersionLabel}</strong>
+                    {versionSubtitle ? (
+                      <small><span className={showUpdateAvailable ? 'text-status-warning' : undefined}>{versionSubtitle}</span></small>
+                    ) : null}
+                  </span>
+                  <ExternalLink aria-hidden="true" />
+                </a>
+              </div>
+            </section>
+          )}
           <div className="r-settings-content min-w-0" key={activeSection}>
             {activeSection === 'vehicles' && (
               <Card>

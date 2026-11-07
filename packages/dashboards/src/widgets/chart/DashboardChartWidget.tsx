@@ -2560,7 +2560,7 @@ function buildChargeCurvePlot(data: ChargeCurveAnalysisPoint[], mode: ChargeCurv
       socPct: point.soc_pct,
       plotSoc: point.soc_pct,
       observedKw: point.charge_rate_kw,
-      observedDetail: `${formatExactSoc(point.soc_pct)} SoC; ${powerMethodLabel([point])}`,
+      observedDetail: `Battery ${formatExactSoc(point.soc_pct)}%; ${powerMethodLabel([point])}`,
       estimatedKw: null,
       estimatedDetail: null,
       summaryKw: null,
@@ -2572,7 +2572,7 @@ function buildChargeCurvePlot(data: ChargeCurveAnalysisPoint[], mode: ChargeCurv
       observedKw: null,
       observedDetail: null,
       estimatedKw: point.charge_rate_kw,
-      estimatedDetail: `${formatExactSoc(point.soc_pct)} SoC; Recorded kW; estimated SoC (excluded from summaries)`,
+      estimatedDetail: `Battery ${formatExactSoc(point.soc_pct)}%; Recorded kW; estimated battery level (excluded from summaries)`,
       summaryKw: null,
       summaryDetail: null,
     })),
@@ -2585,7 +2585,7 @@ function buildChargeCurvePlot(data: ChargeCurveAnalysisPoint[], mode: ChargeCurv
         estimatedKw: null,
         estimatedDetail: null,
         summaryKw: trend.powerKw,
-        summaryDetail: `${formatExactSoc(trend.socPct)} SoC; ${trend.sampleCount} nearby samples; ${mode === 'best-observed' ? 'local upper-quartile regression' : 'local weighted regression'}`,
+        summaryDetail: `Battery ${formatExactSoc(trend.socPct)}%; ${trend.sampleCount} nearby samples; ${mode === 'best-observed' ? 'local upper-quartile regression' : 'local weighted regression'}`,
       };
     }),
   ];
@@ -2751,8 +2751,8 @@ function interpolateHexColor(start: string, end: string, ratio: number) {
 function powerMethodLabel(points: CurvePoint[]) {
   const methods = new Set(points.map((point) => point.power_method));
   if (methods.size === 1 && methods.has('recorded')) return 'Recorded kW';
-  if (methods.size === 1) return 'SoC/time estimate';
-  return 'Recorded and SoC/time estimates';
+  if (methods.size === 1) return 'Estimated from battery level and time';
+  return 'Recorded and estimated kW';
 }
 
 function normalizeChargeCurveType(chargerType: ChargeCurveAnalysisPoint['charger_type']) {

@@ -198,9 +198,9 @@ export const SENSOR_DEFINITIONS: SensorDefinition[] = [
   },
 
   // ── Vehicle status sensors sourced from telemetry (warnings / OTA) ─────────
-  { id: 'hv_thermal', title: 'HV Thermal', dataSource: 'vehicleStatus', valuePath: 'hv_thermal_event', icon: 'lucide:flame', chartType: 'none', valueMode: 'latest', valueColor: 'default' },
-  { id: 'twelve_volt_health', title: '12V Health', dataSource: 'vehicleStatus', valuePath: 'twelve_volt_health', icon: 'lucide:battery-low', chartType: 'none', valueMode: 'latest', valueColor: 'default' },
-  { id: 'ota_current_version', title: 'Current SW', dataSource: 'vehicleStatus', valuePath: 'ota_current_version', icon: 'lucide:cpu', chartType: 'none', valueMode: 'latest', valueColor: 'default' },
+  { id: 'hv_thermal', title: 'Battery thermal', dataSource: 'vehicleStatus', valuePath: 'hv_thermal_event', icon: 'lucide:flame', chartType: 'none', valueMode: 'latest', valueColor: 'default' },
+  { id: 'twelve_volt_health', title: '12 V battery', dataSource: 'vehicleStatus', valuePath: 'twelve_volt_health', icon: 'lucide:battery-low', chartType: 'none', valueMode: 'latest', valueColor: 'default' },
+  { id: 'ota_current_version', title: 'Software', dataSource: 'vehicleStatus', valuePath: 'ota_current_version', icon: 'lucide:cpu', chartType: 'none', valueMode: 'latest', valueColor: 'default' },
   { id: 'ota_available_version', title: 'Available Update', dataSource: 'vehicleStatus', valuePath: 'ota_available_version', icon: 'lucide:download', chartType: 'none', valueMode: 'latest', valueColor: 'default' },
 
   // ── Extended vehicle state sensors (all dataSource: 'vehicleStatus') ──────

@@ -63,7 +63,7 @@ function NotChargingPlaceholder({ soc, range }: { soc: number | null; range: num
         <div className="flex items-center gap-1.5 text-sm">
           <Battery className="h-4 w-4 text-fg-tertiary" />
           <span className="font-mono font-medium text-fg">{Math.round(soc)}%</span>
-          <span className="text-fg-tertiary">SoC</span>
+          <span className="text-fg-tertiary">Battery</span>
         </div>
       )}
       {range !== null && (

@@ -1,9 +1,7 @@
 import * as React from 'react';
 import { createColumnHelper, type ColumnDef } from '@tanstack/react-table';
 import { Tag } from 'lucide-react';
-import { FaInfo } from 'react-icons/fa6';
 import { LuTags } from 'react-icons/lu';
-import { PiArrowFatLinesRight } from 'react-icons/pi';
 import { Badge } from '../primitives/Badge';
 import { Tooltip } from '../primitives/Tooltip';
 import {
@@ -44,24 +42,85 @@ export interface TripRow {
 const col = createColumnHelper<TripRow>();
 
 interface CreateTripColumnsOptions {
-  onInfoClick?: (tripId: string) => void;
+  /** Opens the trip. The row also opens it; this makes the date cell a keyboard target. */
+  onOpenTrip?: (tripId: string) => void;
+  /** Adds a leading checkbox that selects the trip for the map and for tag edits. */
+  onToggleSelect?: (tripId: string) => void;
+  isSelected?: (tripId: string) => boolean;
   includeTags?: boolean;
+  /** Set false when every visible trip uses the default drive mode. */
+  includeMode?: boolean;
+}
+
+/** All-Purpose is the default drive mode. The list shows a mode chip only for other modes. */
+export function isDefaultTripDriveMode(mode: string | null | undefined) {
+  return !mode || formatDriveMode(mode) === 'All-Purpose';
+}
+
+/** Battery at the start and end of a trip, for example "75% → 68%". */
+export function formatTripBatteryRange(start: number | null | undefined, end: number | null | undefined) {
+  if (start == null || end == null) return null;
+  return `${formatPercent(start)} → ${formatPercent(end)}`;
 }
 
 export function createTripColumns(places: Place[] = [], options: CreateTripColumnsOptions = {}) {
   const includeTags = options.includeTags ?? true;
-  const columns: ColumnDef<TripRow, any>[] = [
+  const includeMode = options.includeMode ?? true;
+  const { onOpenTrip, onToggleSelect, isSelected } = options;
+  const columns: ColumnDef<TripRow, any>[] = [];
+  if (onToggleSelect) {
+    columns.push(col.display({
+      id: 'select',
+      header: () => <span className="sr-only">Select</span>,
+      enableSorting: false,
+      meta: {
+        headerClassName: 'w-[3rem] text-center',
+        cellClassName: 'w-[3rem] text-center',
+        headerContentClassName: 'w-full justify-center',
+      },
+      cell: (info) => {
+        const trip = info.row.original;
+        return (
+          <label
+            className="inline-flex h-7 w-7 cursor-pointer items-center justify-center"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-accent"
+              checked={isSelected?.(trip.id) ?? false}
+              onChange={() => onToggleSelect(trip.id)}
+              aria-label={`Select trip from ${formatAppDateTime(trip.started_at)}`}
+            />
+          </label>
+        );
+      },
+    }));
+  }
+  columns.push(
     col.accessor('started_at', {
       header: () => <span>Date</span>,
       meta: {
         headerClassName: 'w-[10.75rem]',
         cellClassName: 'w-[10.75rem]',
       },
-      cell: (info) => (
-        <span className="font-medium text-fg whitespace-nowrap">
-          {formatAppDateTime(info.getValue())}
-        </span>
-      ),
+      cell: (info) => {
+        const label = formatAppDateTime(info.getValue());
+        if (!onOpenTrip) return <span className="font-medium text-fg whitespace-nowrap">{label}</span>;
+        return (
+          <button
+            type="button"
+            className="whitespace-nowrap rounded-sm text-left font-medium text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            aria-label={`Open trip from ${label}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenTrip(info.row.original.id);
+            }}
+          >
+            {label}
+          </button>
+        );
+      },
     }),
     locationColumn('start', 'Start', places),
     locationColumn('end', 'Destination', places),
@@ -82,32 +141,27 @@ export function createTripColumns(places: Place[] = [], options: CreateTripColum
         headerContentClassName: 'w-full justify-center',
       },
       cell: (info) => (
-        <span className="font-mono text-fg">{formatMiles(info.getValue())}</span>
+        <span className="tabular-nums text-fg">{formatMiles(info.getValue())}</span>
       ),
     }),
     col.accessor('soc_start', {
       id: 'soc_range',
-      header: 'SoC',
+      header: 'Battery',
       enableSorting: false,
       meta: {
-        headerClassName: 'w-[5.25rem]',
-        cellClassName: 'w-[5.25rem] whitespace-nowrap text-center',
+        headerClassName: 'w-[6.75rem]',
+        cellClassName: 'w-[6.75rem] whitespace-nowrap text-center',
         headerContentClassName: 'w-full justify-center',
       },
       cell: (info) => {
         const row = info.row.original;
-        if (row.soc_start === null || row.soc_end === null) return <span className="text-fg-tertiary">-</span>;
-        return (
-          <span className="inline-flex items-center gap-1.5 whitespace-nowrap font-mono text-fg">
-            {formatPercent(row.soc_start)}
-            <PiArrowFatLinesRight className="h-3.5 w-3.5 text-fg-tertiary" />
-            {formatPercent(row.soc_end)}
-          </span>
-        );
+        const range = formatTripBatteryRange(row.soc_start, row.soc_end);
+        if (!range) return <span className="text-fg-tertiary">-</span>;
+        return <span className="whitespace-nowrap tabular-nums text-fg">{range}</span>;
       },
     }),
     col.accessor('efficiency_wh_mi', {
-      header: () => <span className="whitespace-nowrap">Avg. Eff.</span>,
+      header: () => <span className="whitespace-nowrap">Efficiency</span>,
       meta: {
         headerClassName: 'w-[8.5rem]',
         cellClassName: 'w-[8.5rem] whitespace-nowrap text-center',
@@ -116,7 +170,7 @@ export function createTripColumns(places: Place[] = [], options: CreateTripColum
       cell: (info) => {
         const v = info.getValue();
         return v !== null ? (
-          <span className="inline-flex items-baseline justify-center gap-1 whitespace-nowrap font-mono text-fg">
+          <span className="inline-flex items-baseline justify-center gap-1 whitespace-nowrap tabular-nums text-fg">
             <span>{formatEfficiencyValue(v)}</span>
             <span className="text-[11px] font-normal text-fg-tertiary">{getEfficiencyUnitLabel()}</span>
           </span>
@@ -125,25 +179,30 @@ export function createTripColumns(places: Place[] = [], options: CreateTripColum
         );
       },
     }),
-    col.accessor('drive_mode', {
-      header: 'Mode',
-      enableSorting: false,
-      meta: {
-        headerClassName: 'w-[6.5rem]',
-        cellClassName: 'w-[6.5rem] text-center',
-        headerContentClassName: 'w-full justify-center',
-      },
-      cell: (info) => {
-        const mode = info.getValue();
-        if (!mode) return <span className="text-fg-tertiary">-</span>;
-        return (
-          <Badge size="sm" className={`mx-auto max-w-[6.5rem] truncate ${getDriveModeBadgeClass(mode)}`} title={formatDriveMode(mode)}>
-            {formatDriveMode(mode)}
-          </Badge>
-        );
-      },
-    }),
-  ];
+  );
+
+  if (includeMode) {
+    columns.push(
+      col.accessor('drive_mode', {
+        header: 'Mode',
+        enableSorting: false,
+        meta: {
+          headerClassName: 'w-[6.5rem]',
+          cellClassName: 'w-[6.5rem] text-center',
+          headerContentClassName: 'w-full justify-center',
+        },
+        cell: (info) => {
+          const mode = info.getValue();
+          if (!mode || isDefaultTripDriveMode(mode)) return null;
+          return (
+            <Badge size="sm" className={`mx-auto max-w-[6.5rem] truncate ${getDriveModeBadgeClass(mode)}`} title={formatDriveMode(mode)}>
+              {formatDriveMode(mode)}
+            </Badge>
+          );
+        },
+      }),
+    );
+  }
 
   if (includeTags) {
     columns.push(
@@ -183,37 +242,6 @@ export function createTripColumns(places: Place[] = [], options: CreateTripColum
             </Tooltip>
           );
         },
-      }),
-    );
-  }
-
-  if (options.onInfoClick) {
-    columns.push(
-      col.display({
-        id: 'details',
-        header: '',
-        enableSorting: false,
-        meta: {
-          headerClassName: 'w-[3.25rem] text-center',
-          cellClassName: 'w-[3.25rem] text-center',
-          headerContentClassName: 'w-full justify-center',
-        },
-        cell: (info) => (
-          <div className="ml-auto mr-1 h-7 w-7">
-            <button
-              type="button"
-              aria-label="Open trip details"
-              title="Open trip details"
-              onClick={(event) => {
-                event.stopPropagation();
-                options.onInfoClick?.(info.row.original.id);
-              }}
-              className="inline-flex h-full w-full items-center justify-center rounded-md border border-border bg-bg-surface p-1 text-fg-tertiary transition-colors hover:border-border-strong hover:text-fg"
-            >
-              <FaInfo className="h-full w-full" />
-            </button>
-          </div>
-        ),
       }),
     );
   }

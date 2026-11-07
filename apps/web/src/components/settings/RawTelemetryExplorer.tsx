@@ -19,7 +19,7 @@ type FieldDefinition = {
 };
 
 const FIELD_DEFINITIONS: FieldDefinition[] = [
-  { key: 'battery_level', label: 'State of charge', group: 'Battery & charging', unit: '%' },
+  { key: 'battery_level', label: 'Battery level', group: 'Battery & charging', unit: '%' },
   { key: 'battery_capacity_wh', label: 'Battery capacity', group: 'Battery & charging', unit: 'Wh' },
   { key: 'distance_to_empty_mi', label: 'Estimated range', group: 'Battery & charging', unit: 'mi' },
   { key: 'battery_limit', label: 'Charge limit', group: 'Battery & charging', unit: '%' },
@@ -68,7 +68,7 @@ const FIELD_DEFINITIONS: FieldDefinition[] = [
   { key: 'ota_status', label: 'OTA status', group: 'Software & health' },
   { key: 'ota_current_status', label: 'OTA detail', group: 'Software & health' },
   { key: 'hv_thermal_event', label: 'High-voltage thermal event', group: 'Software & health' },
-  { key: 'twelve_volt_health', label: '12V health', group: 'Software & health' },
+  { key: 'twelve_volt_health', label: '12 V battery', group: 'Software & health' },
   { key: 'is_online', label: 'Online', group: 'Software & health' },
 ];
 
@@ -161,7 +161,7 @@ export function RawTelemetryExplorer({ vehicles, isAdmin }: { vehicles: Vehicle[
   const laneSeries = React.useMemo(() => {
     const frame = laneQuery.data;
     return [
-      { key: 'battery_level', label: 'State of charge', color: CHART_COLORS.emerald, values: frame?.lanes.battery?.numeric.battery_level ?? [], yScale: 'y' as const },
+      { key: 'battery_level', label: 'Battery level', color: CHART_COLORS.emerald, values: frame?.lanes.battery?.numeric.battery_level ?? [], yScale: 'y' as const },
       { key: 'speed_mph', label: 'Speed', color: CHART_COLORS.sky, values: frame?.lanes.drive?.numeric.speed_mph ?? [], yScale: 'y2' as const },
       { key: 'power_kw', label: 'Power', color: CHART_COLORS.violet, values: frame?.lanes.drive?.numeric.power_kw ?? [], yScale: 'y2' as const },
     ].filter((series) => series.values.some((value) => value !== null));
@@ -343,7 +343,7 @@ function SummaryCard({ label, value, detail }: { label: string; value: string; d
 function TelemetryRecord({ sample, selected, onSelect }: { sample: RawTelemetrySample; selected: boolean; onSelect: () => void }) {
   return <button type="button" onClick={onSelect} aria-pressed={selected} className={['rounded-xl border p-3 text-left transition-colors', selected ? 'border-accent bg-accent/10 ring-1 ring-inset ring-accent/30' : 'border-border bg-bg-elevated/35 hover:bg-bg-elevated'].join(' ')}>
     <div className="flex flex-wrap items-center justify-between gap-2"><span className="font-mono text-xs text-fg">{formatDate(sample.ts)}</span><Badge variant={sample.is_online ? 'success' : 'default'} size="sm">{sample.is_online ? 'Online' : 'Stored'}</Badge></div>
-    <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-fg-secondary sm:grid-cols-4"><span>SOC <strong className="text-fg">{formatValue(sample.battery_level, '%')}</strong></span><span>Range <strong className="text-fg">{formatValue(sample.distance_to_empty_mi, 'mi')}</strong></span><span>Power <strong className="text-fg">{formatValue(sample.power_kw, 'kW')}</strong></span><span className="truncate">{sample.charger_state ?? sample.drive_mode ?? 'No state'}</span></div>
+    <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-fg-secondary sm:grid-cols-4"><span>Battery <strong className="text-fg">{formatValue(sample.battery_level, '%')}</strong></span><span>Range <strong className="text-fg">{formatValue(sample.distance_to_empty_mi, 'mi')}</strong></span><span>Power <strong className="text-fg">{formatValue(sample.power_kw, 'kW')}</strong></span><span className="truncate">{sample.charger_state ?? sample.drive_mode ?? 'No state'}</span></div>
   </button>;
 }
 
@@ -364,7 +364,7 @@ function CopyJson({ label, value }: { label: string; value: unknown }) {
 }
 
 function CollectorDiagnostics({ open, onToggle, data, acquisition, loading, onRefresh }: { open: boolean; onToggle: () => void; data: Awaited<ReturnType<typeof api.getRivianStewardship>> | undefined; acquisition: Awaited<ReturnType<typeof api.getVehicleHealth>>['extended_telemetry'] | undefined; loading: boolean; onRefresh: () => void }) {
-  return <Card><CardHeader><div><CardTitle>Collector diagnostics</CardTitle><p className="mt-1 text-sm text-fg-tertiary">Normalized acquisition metadata and duplicate-suppression health. Parallax protobuf payloads and excluded network identifiers are never exposed here.</p></div><Button variant="secondary" size="sm" iconLeft={<SlidersHorizontal className="h-3.5 w-3.5" />} onClick={onToggle}>{open ? 'Hide diagnostics' : 'Show diagnostics'}</Button></CardHeader>{open ? <CardContent className="grid gap-4"><div className="flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-fg-tertiary">Raw canonical events retained: {formatCount(data?.raw_events_retained)} · Retention: {data?.retention_days ?? 7} days</p><Button variant="secondary" size="sm" loading={loading} onClick={onRefresh}>Refresh</Button></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[['Extended state', acquisition?.parallax?.status], ['Last meaningful frame', formatDate(acquisition?.parallax?.last_meaningful_frame_at)], ['Legacy frame', acquisition?.legacy_charging_session?.classification], ['Decode errors', acquisition?.parallax?.decode_error_count]].map(([label, value]) => <SummaryCard key={String(label)} label={String(label)} value={value == null ? 'Never observed' : String(value)} detail="Selected vehicle" />)}</div><div className="rounded-xl border border-border bg-bg-elevated/25 p-3"><p className="text-xs font-medium uppercase tracking-wide text-fg-tertiary">Normalized charging topics</p><p className="mt-2 break-words font-mono text-xs text-fg-secondary">energy.high_voltage.battery_state · energy_edge_compute.graphs.charging_graph_global · energy_edge_compute.graphs.charge_session_breakdown · charging.session.time_estimation · charging.session.status</p></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[['Active collectors', data?.active_collectors], ['Payload messages', data?.totals_24h.ws_payload_messages_received], ['Writes persisted', data?.totals_24h.telemetry_writes_persisted], ['Writes suppressed', data?.totals_24h.telemetry_writes_suppressed]].map(([label, value]) => <SummaryCard key={String(label)} label={String(label)} value={formatCount(value as number | undefined)} detail="Last 24 hours" />)}</div></CardContent> : null}</Card>;
+  return <Card><CardHeader><div><CardTitle>Collector diagnostics</CardTitle><p className="mt-1 text-sm text-fg-tertiary">Normalized acquisition metadata and duplicate-suppression health. Live stream protobuf payloads and excluded network identifiers are never exposed here.</p></div><Button variant="secondary" size="sm" iconLeft={<SlidersHorizontal className="h-3.5 w-3.5" />} onClick={onToggle}>{open ? 'Hide diagnostics' : 'Show diagnostics'}</Button></CardHeader>{open ? <CardContent className="grid gap-4"><div className="flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-fg-tertiary">Raw canonical events retained: {formatCount(data?.raw_events_retained)} · Retention: {data?.retention_days ?? 7} days</p><Button variant="secondary" size="sm" loading={loading} onClick={onRefresh}>Refresh</Button></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[['Extended state', acquisition?.parallax?.status], ['Last meaningful frame', formatDate(acquisition?.parallax?.last_meaningful_frame_at)], ['Legacy frame', acquisition?.legacy_charging_session?.classification], ['Decode errors', acquisition?.parallax?.decode_error_count]].map(([label, value]) => <SummaryCard key={String(label)} label={String(label)} value={value == null ? 'Never observed' : String(value)} detail="Selected vehicle" />)}</div><div className="rounded-xl border border-border bg-bg-elevated/25 p-3"><p className="text-xs font-medium uppercase tracking-wide text-fg-tertiary">Normalized charging topics</p><p className="mt-2 break-words font-mono text-xs text-fg-secondary">energy.high_voltage.battery_state · energy_edge_compute.graphs.charging_graph_global · energy_edge_compute.graphs.charge_session_breakdown · charging.session.time_estimation · charging.session.status</p></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[['Active collectors', data?.active_collectors], ['Payload messages', data?.totals_24h.ws_payload_messages_received], ['Writes persisted', data?.totals_24h.telemetry_writes_persisted], ['Writes suppressed', data?.totals_24h.telemetry_writes_suppressed]].map(([label, value]) => <SummaryCard key={String(label)} label={String(label)} value={formatCount(value as number | undefined)} detail="Last 24 hours" />)}</div></CardContent> : null}</Card>;
 }
 
 function timeframeBounds(timeframe: Timeframe) {

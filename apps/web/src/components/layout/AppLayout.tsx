@@ -155,7 +155,7 @@ export function UpstreamAppLayout({ children, activeKey }: AppLayoutProps) {
         children: [
           {
             key: 'battery.phantom-drain',
-            label: 'Phantom Drain',
+            label: 'Parked loss',
             href: '/battery/phantom-drain',
             icon: <GiRestingVampire className="h-3.5 w-3.5" />,
           },

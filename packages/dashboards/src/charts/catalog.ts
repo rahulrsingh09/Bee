@@ -347,7 +347,7 @@ export function getChartSettingsCapabilities(
       return {
         timeFilter: true,
         axes: {
-          y: axisCapability('State of Charge', definition.yUnit),
+          y: axisCapability('Battery level', definition.yUnit),
         },
         xDomainSource: 'dashboard-timeframe',
       };

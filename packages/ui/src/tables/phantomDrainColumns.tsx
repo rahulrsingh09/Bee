@@ -1,6 +1,5 @@
 import * as React from 'react';
 import { createColumnHelper } from '@tanstack/react-table';
-import { PiArrowFatLinesRight } from 'react-icons/pi';
 import { Tooltip } from '../primitives/Tooltip';
 import { formatKwh, formatMiles, formatPercent, formatSmartNumber } from '../lib/utils';
 import { formatAppDateTime } from '../lib/dateTime';
@@ -157,33 +156,31 @@ export const phantomDrainColumns = [
   }),
   col.accessor('soc_start', {
     id: 'soc_range',
-    header: 'SoC',
+    header: 'Battery',
     enableSorting: false,
     meta: {
       headerClassName: 'w-[7.75rem] text-center',
       cellClassName: 'w-[7.75rem] whitespace-nowrap text-center',
       headerContentClassName: 'w-full justify-center',
-      columnLabel: 'SoC',
+      columnLabel: 'Battery',
     },
     cell: (info) => {
       const row = info.row.original;
       if (row.soc_start == null || row.soc_end == null) return <span className="text-fg-tertiary">-</span>;
       return (
         <span className="inline-flex items-center gap-1 whitespace-nowrap font-mono text-fg">
-          {formatPercent(row.soc_start, 0)}
-          <PiArrowFatLinesRight className="h-3.5 w-3.5 shrink-0 text-fg-tertiary" />
-          {formatPercent(row.soc_end, 0)}
+          {formatPercent(row.soc_start, 0)} → {formatPercent(row.soc_end, 0)}
         </span>
       );
     },
   }),
   col.accessor('soc_lost_pct', {
-    header: () => infoHeader('SoC Diff', 'Battery percentage dropped during this validated parked session.'),
+    header: () => infoHeader('Battery lost', 'Battery percentage lost during this validated parked session.'),
     meta: {
       headerClassName: 'w-[5.25rem] text-center',
       cellClassName: 'w-[5.25rem] whitespace-nowrap text-center',
       headerContentClassName: 'w-full justify-center',
-      columnLabel: 'SoC Diff',
+      columnLabel: 'Battery lost',
     },
     cell: (info) => {
       const value = info.getValue();
@@ -208,7 +205,7 @@ export const phantomDrainColumns = [
   col.accessor('range_lost_mi', {
     header: () => infoHeader(
       'Range',
-      'Validated range loss from boundary samples. Values are hidden when the range anchors do not agree with the SoC-backed drain math.',
+      'Validated range loss from boundary samples. Values are hidden when the range anchors do not agree with the battery-level drain math.',
     ),
     meta: {
       headerClassName: 'w-[5.75rem] text-center',
@@ -249,7 +246,7 @@ export const phantomDrainColumns = [
   col.accessor('avg_power_w', {
     header: () => infoHeader(
       'Power',
-      'Average power draw inferred from validated SoC loss and estimated battery capacity during this session.',
+      'Average power draw inferred from validated battery loss and estimated battery capacity during this session.',
     ),
     meta: {
       headerClassName: 'w-[5.5rem] text-center',

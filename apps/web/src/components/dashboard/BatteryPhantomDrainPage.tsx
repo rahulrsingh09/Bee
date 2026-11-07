@@ -89,13 +89,9 @@ function PhantomDrainContent({ state }: { state: DashboardPageShellRenderState }
         <ParkedEnergyPanel vehicleId={vehicleId} from={ctx.from} to={ctx.to} />
       ) : null}
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h2 className="text-base font-semibold text-fg">Riviamigo battery-change estimate</h2>
-          <p className="text-xs text-fg-tertiary">
-            Derived from validated parked sessions and retained when Rivian&apos;s breakdown is unavailable.
-          </p>
-        </div>
+      <div data-testid="parked-loss-lead">
+        <p className="text-xs font-medium text-fg-tertiary">Phantom drain</p>
+        <p className="text-sm text-fg-secondary">Battery lost while parked. Estimated from the battery level.</p>
       </div>
 
       <div className="grid min-w-0 grid-cols-2 gap-3 xl:grid-cols-4">
@@ -115,7 +111,9 @@ function PhantomDrainContent({ state }: { state: DashboardPageShellRenderState }
       </div>
 
       <section className="min-w-0" aria-label="Battery history">
-        <p className="mb-2 text-xs text-fg-secondary md:hidden">Tap or drag across the chart for details</p>
+        {!isLoading && periods.length > 0 ? (
+          <p className="mb-2 text-xs text-fg-secondary md:hidden">Tap or drag across the chart for details</p>
+        ) : null}
         <div className="h-[340px] min-w-0 sm:h-[380px]" data-testid="phantom-drain-chart-section">
         <DashboardChartWidget instance={PHANTOM_DRAIN_CHART_INSTANCE} ctx={ctx} />
         </div>
@@ -141,7 +139,7 @@ function PhantomDrainContent({ state }: { state: DashboardPageShellRenderState }
           columns={phantomDrainColumns}
           loading={isLoading}
           loadingRows={pageSize}
-          emptyTitle={search ? 'No matching phantom drain periods' : 'No phantom drain periods'}
+          emptyTitle={search ? 'No matching parked periods' : 'No parked periods'}
           emptyDescription={search ? 'No parked periods match that search.' : 'No qualifying parked periods were found in this date range.'}
           columnVisibilityMenu
           fixedLayout

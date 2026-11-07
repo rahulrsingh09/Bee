@@ -597,7 +597,7 @@ describe('dashboard sensor chips', () => {
       />
     );
 
-    expect(screen.getByTestId('sensor-chip')).toHaveTextContent('68 F');
+    expect(screen.getByTestId('sensor-chip')).toHaveTextContent('68 °F');
     expect(screen.queryByText('62')).not.toBeInTheDocument();
   });
 

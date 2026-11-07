@@ -265,7 +265,7 @@ export function LoginPage() {
           {[
             { icon: Route, label: 'Trip analytics', sub: 'Every drive logged' },
             { icon: Zap, label: 'Charge history', sub: 'Sessions & cost' },
-            { icon: Battery, label: 'Battery health', sub: 'SOC over time' },
+            { icon: Battery, label: 'Battery health', sub: 'Battery level over time' },
           ].map(({ icon: Icon, label, sub }) => (
             <div key={label} className="text-center">
               <div className="flex justify-center mb-1.5">

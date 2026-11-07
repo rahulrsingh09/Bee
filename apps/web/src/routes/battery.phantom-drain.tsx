@@ -9,7 +9,7 @@ export const batteryPhantomDrainRoute = createRoute({
   path: '/battery/phantom-drain',
   component: () => (
     <ProtectedRoute>
-      <BatteryPhantomDrainPage navKey="battery.phantom-drain" slug="battery" title="Phantom Drain" />
+      <BatteryPhantomDrainPage navKey="battery.phantom-drain" slug="battery" title="Parked loss" />
     </ProtectedRoute>
   ),
 });

@@ -187,7 +187,7 @@ export function CurrentVehicleStatePanel({
           </div>
           <div className="flex min-w-0 flex-col justify-between gap-4">
             <div>
-              <span className="text-xs uppercase tracking-[0.16em] text-fg-tertiary">SoC</span>
+              <span className="text-xs uppercase tracking-[0.16em] text-fg-tertiary">Battery</span>
               <p className="mt-1 font-mono text-4xl font-semibold tabular-nums text-fg">{formatPercent(status?.battery_level)}</p>
             </div>
             <div className="grid gap-2 text-sm">

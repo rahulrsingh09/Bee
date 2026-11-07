@@ -502,8 +502,8 @@ describe('DashboardChartWidget - smoothing controls', () => {
     const rendered = renderWidget(instance, { ...CTX, dashboardSlug: 'dashboard' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Chart' }));
-    fireEvent.click(screen.getByRole('option', { name: 'State of Charge' }));
-    expect(screen.getByRole('button', { name: 'Chart' })).toHaveTextContent('State of Charge');
+    fireEvent.click(screen.getByRole('option', { name: 'Battery Level' }));
+    expect(screen.getByRole('button', { name: 'Chart' })).toHaveTextContent('Battery Level');
 
     rendered.rerender(
       <DashboardChartWidget
@@ -512,7 +512,7 @@ describe('DashboardChartWidget - smoothing controls', () => {
       />
     );
 
-    expect(screen.getByRole('button', { name: 'Chart' })).toHaveTextContent('State of Charge');
+    expect(screen.getByRole('button', { name: 'Chart' })).toHaveTextContent('Battery Level');
   });
   it('uses projected range by mileage as the Overview app default', () => {
     const overview = getDefaultBySlug('dashboard');
@@ -579,7 +579,7 @@ describe('DashboardChartWidget - smoothing controls', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Chart' }));
     expect(
-      screen.getByRole('button', { name: 'State of Charge is the default chart' })
+      screen.getByRole('button', { name: 'Battery Level is the default chart' })
     ).toBeDisabled();
     fireEvent.click(
       screen.getByRole('button', { name: 'Set Projected Range by Mileage as default' })
@@ -591,7 +591,7 @@ describe('DashboardChartWidget - smoothing controls', () => {
       key: 'dashboard:test-soc-history',
       chartId: 'projected-range-mileage',
     });
-    expect(screen.getByRole('button', { name: 'Chart' })).toHaveTextContent('State of Charge');
+    expect(screen.getByRole('button', { name: 'Chart' })).toHaveTextContent('Battery Level');
 
     firstRender.unmount();
     renderWidget(instance, ctx);
@@ -622,7 +622,7 @@ describe('DashboardChartWidget - smoothing controls', () => {
       { ...CTX, dashboardSlug: 'dashboard' }
     );
 
-    expect(screen.getByRole('button', { name: 'Chart' })).toHaveTextContent('State of Charge');
+    expect(screen.getByRole('button', { name: 'Chart' })).toHaveTextContent('Battery Level');
   });
 
   it('restores the saved chart when favorites arrive after the assigned catalog', () => {
@@ -636,7 +636,7 @@ describe('DashboardChartWidget - smoothing controls', () => {
     };
     const ctx = { ...CTX, dashboardSlug: 'dashboard', dashboardConfigId: 'dashboard-a' };
     const view = renderWidget(instance, ctx);
-    expect(screen.getByRole('button', { name: 'Chart' })).toHaveTextContent('State of Charge');
+    expect(screen.getByRole('button', { name: 'Chart' })).toHaveTextContent('Battery Level');
     mockFavoriteState.chart_favorites['dashboard:dashboard-a:test-soc-history'] = 'projected-range-mileage';
     mockDashboardChartFavorites.mockReturnValue({ data: mockFavoriteState, isSuccess: true });
     view.rerender(<DashboardChartWidget instance={instance} ctx={ctx} />);
@@ -738,7 +738,7 @@ describe('DashboardChartWidget - smoothing controls', () => {
     fireEvent.click(
       screen.getByRole('button', { name: 'Set Projected Range by Mileage as default' })
     );
-    expect(screen.getByRole('button', { name: 'Chart' })).toHaveTextContent('State of Charge');
+    expect(screen.getByRole('button', { name: 'Chart' })).toHaveTextContent('Battery Level');
 
     firstRender.unmount();
     const dashboardARender = renderWidget(instance, {
@@ -756,7 +756,7 @@ describe('DashboardChartWidget - smoothing controls', () => {
       dashboardSlug: 'dashboard',
       dashboardConfigId: 'dashboard-b',
     });
-    expect(screen.getByRole('button', { name: 'Chart' })).toHaveTextContent('State of Charge');
+    expect(screen.getByRole('button', { name: 'Chart' })).toHaveTextContent('Battery Level');
   });
 
   it('shows the display-filter slider without a chart picker', () => {
@@ -988,12 +988,12 @@ describe('DashboardChartWidget - smoothing controls', () => {
     openChartSettings();
 
     const axisCard = within(screen.getByRole('dialog', { name: 'Chart settings' }))
-      .getByText('State of Charge', { selector: 'p' })
+      .getByText('Battery level', { selector: 'p' })
       .closest('div.rounded-lg');
     expect(axisCard).toBeTruthy();
     fireEvent.click(within(axisCard as HTMLElement).getByRole('button', { name: 'Manual' }));
-    fireEvent.change(screen.getByLabelText('State of Charge minimum'), { target: { value: '10' } });
-    fireEvent.change(screen.getByLabelText('State of Charge maximum'), { target: { value: '90' } });
+    fireEvent.change(screen.getByLabelText('Battery level minimum'), { target: { value: '10' } });
+    fireEvent.change(screen.getByLabelText('Battery level maximum'), { target: { value: '90' } });
 
     expect(screen.getByTestId('rich-chart').getAttribute('data-y-range')).toBe('10|90');
 
@@ -1002,7 +1002,7 @@ describe('DashboardChartWidget - smoothing controls', () => {
     expect(screen.getByTestId('rich-chart').getAttribute('data-y-range')).not.toBe('10|90');
 
     fireEvent.click(screen.getByRole('button', { name: 'Chart' }));
-    fireEvent.click(screen.getByRole('option', { name: /state of charge/i }));
+    fireEvent.click(screen.getByRole('option', { name: /battery level/i }));
     expect(screen.getByTestId('rich-chart').getAttribute('data-y-range')).toBe('10|90');
   });
 });
@@ -1034,7 +1034,7 @@ describe('DashboardChartWidget mobile viewer', () => {
     expect(dialog.className).toContain('touch-none');
     fireEvent.click(screen.getByRole('button', { name: 'Choose chart' }));
     expect(screen.getByRole('option', { name: 'Efficiency by Temperature' })).toBeTruthy();
-    expect(screen.queryByRole('option', { name: 'State of Charge' })).toBeNull();
+    expect(screen.queryByRole('option', { name: 'Battery Level' })).toBeNull();
 
     fireEvent.click(screen.getByRole('option', { name: 'Efficiency by Drive Mode' }));
     expect(
@@ -1932,7 +1932,7 @@ describe('DashboardChartWidget — charging_curve_analysis', () => {
       'Trend: Observed'
     );
     expect(screen.getByTestId('rich-chart').getAttribute('data-tooltip-details')).toContain(
-      'SoC/time estimate'
+      'Estimated from battery level and time'
     );
     expect(screen.getByTestId('rich-chart')).toHaveAttribute('data-x-range', '0|100');
     expect(screen.getByTestId('rich-chart')).toHaveAttribute(
@@ -1956,7 +1956,7 @@ describe('DashboardChartWidget — charging_curve_analysis', () => {
       expect.stringContaining('Observed trend:line')
     );
     expect(screen.getByTestId('rich-chart').getAttribute('data-tooltip-details')).toContain(
-      '25 SoC; SoC/time estimate'
+      'Battery 25%; Estimated from battery level and time'
     );
   });
 
@@ -2661,7 +2661,7 @@ describe('DashboardChartWidget — chart card states', () => {
     expect(screen.queryByLabelText('Search charts')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Chart' })).toBeNull();
     const card = document.querySelector('[data-chart-card="true"]') as HTMLElement;
-    expect(within(card).getByText('State of Charge')).toBeTruthy();
+    expect(within(card).getByText('Battery Level')).toBeTruthy();
     expect(within(card).getByRole('button', { name: 'Chart options' })).toBeTruthy();
   });
 

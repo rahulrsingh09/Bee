@@ -279,7 +279,7 @@ Common usage:
 - Prefer existing primitives and shared dashboard widgets over route-local card systems.
 - Keep route files thin; visual composition belongs in components and shared seams, not branching routes.
 - Use consistent card radius, padding, and surface hierarchy across pages.
-- The Settings page shows the running version as a right-aligned title/subtitle pair mirroring the page heading: the monospaced version, with “Up to date”, the newer version in the warning color, or the update-check state beneath it. Keep it exclusive to Settings and link it to GitHub Releases in a new tab; missing build metadata reads “Unknown version.”
+- The Settings page header is “Settings” with the subtitle “Your vehicle, places and account.” The running version is an **About** row below the settings directory: the version (instance name), with “Up to date”, the newer version in the warning color, or the update-check state beneath it. When the update-check state is not known yet, the row shows no subtitle line. Keep it exclusive to Settings and link it to GitHub Releases in a new tab; missing build metadata reads “Unknown version.”
 
 ## Icon And Control Rules
 
@@ -456,10 +456,34 @@ Trip inspection selects a sample on a tap or horizontal scrub; a vertical touch
 scroll preserves the existing shared selection. Comparison keys use the app time
 zone and scroll within compact saved widgets without covering the map.
 
+### Copy glossary and trip list
+
+User-facing copy follows the release-1 glossary (one term per meaning).
+`tools/forbidden_copy.sh` in the release review folder checks it.
+
+- Battery, not SoC, SOC or State of charge. Show a range as “75% → 68%”, with
+  the “→” character, not “->”, “⇨” or an arrow icon.
+- Efficiency, not Consumption or “Avg. Eff.”, for mi/kWh and Wh/mi.
+- Parked loss, not Phantom drain, as a title. The Parked loss page names
+  “Phantom drain” once, as a subtitle above its lead text.
+- Live stream, not Parallax. Battery thermal, not HV Thermal. 12 V battery,
+  not 12V Health. Software, not Current SW.
+- Temperatures read “72 °F” or “22 °C”, with the degree sign.
+- A rate-limit error reads “Too many requests. Try again in a minute.”
+- Bundled chart series labels, axis units and empty copy are part of the
+  chart contract that the API validates. They keep their existing text until
+  a data migration changes saved charts.
+
+The trip list opens a trip from the whole row (desktop) or the whole card
+(phone). There is no separate details button. A leading checkbox selects a trip
+for the map and for tag edits. Numbers use tabular figures in the app font, not
+monospace. The Mode chip and column show only for a mode that is not the
+default (All-Purpose). Phones show no Rows select; the paging buttons stay.
+
 ### Default analytics and Battery navigation
 
 R treats Battery as a primary destination alongside Charging. Battery overview
-and Phantom drain use a restrained, underlined section navigation with 44px
+and Parked loss use a restrained, underlined section navigation with 44px
 minimum targets. Section links use exact route matching so only one is active.
 The primary bar stays at the top on desktop and bottom on
 mobile. Mobile shows five labeled destinations: Home, Trips, Charging,

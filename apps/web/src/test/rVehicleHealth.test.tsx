@@ -151,7 +151,7 @@ describe('R vehicle health', () => {
   it('warns when Parallax went quiet while the car moved', () => {
     mocks.parallaxQuiet = { last_frame_at: '2026-10-26T00:13:03Z', moved_at: '2026-10-26T04:13:21Z' };
     render(<RVehicleHealth />);
-    expect(screen.getByRole('status')).toHaveTextContent(/Parallax stream has sent nothing/);
+    expect(screen.getByRole('status')).toHaveTextContent(/live stream has sent nothing/);
     expect(within(screen.getByRole('region', { name: 'Status summary' })).getByText('Partial')).toBeInTheDocument();
   });
 

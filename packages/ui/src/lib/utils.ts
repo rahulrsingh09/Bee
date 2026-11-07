@@ -296,6 +296,6 @@ export function formatDuration(minutes: number | null | undefined): string {
 export function formatTemp(celsius: number | null | undefined): string {
   if (celsius === null || celsius === undefined || Number.isNaN(celsius)) return '-';
   const prefs = getUnitPreferences();
-  if (prefs.temperature_unit === 'celsius') return `${Math.round(celsius)} C`;
-  return `${Math.round(celsius * 9 / 5 + 32)} F`;
+  if (prefs.temperature_unit === 'celsius') return `${Math.round(celsius)} °C`;
+  return `${Math.round(celsius * 9 / 5 + 32)} °F`;
 }

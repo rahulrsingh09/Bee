@@ -46,7 +46,7 @@ const WARNINGS: Warning[] = [
   },
   {
     key: 'hv_thermal',
-    label: 'HV Thermal Event',
+    label: 'Battery thermal event',
     icon: <Flame className="h-3.5 w-3.5" />,
     severity: 'error',
     active: (s) => !!(s.hv_thermal_event && s.hv_thermal_event !== 'none' && s.hv_thermal_event !== 'idle'),

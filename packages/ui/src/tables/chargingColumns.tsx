@@ -157,7 +157,7 @@ export const chargingColumns = [
     },
   }),
   col.accessor('soc_start', {
-    header: 'SoC',
+    header: 'Battery',
     enableSorting: false,
     cell: (info) => {
       const row = info.row.original;

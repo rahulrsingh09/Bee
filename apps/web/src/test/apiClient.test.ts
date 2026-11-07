@@ -775,7 +775,8 @@ describe('api client dashboard contracts', () => {
         .map(([event]) => (event as CustomEvent).detail?.message)
         .filter((message): message is string => typeof message === 'string');
 
-      expect(details.some((message) => message.includes('Edge proxy rate limit reached'))).toBe(true);
+      expect(details).toContain('Try again in about 2s.');
+      expect(details.some((message) => message.includes('Edge proxy'))).toBe(false);
       expect(details.some((message) => message.includes('API rate limit reached'))).toBe(true);
     } finally {
       window.removeEventListener('riviamigo:toast', toast as EventListener);

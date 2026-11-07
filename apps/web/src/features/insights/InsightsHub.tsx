@@ -7,7 +7,7 @@ import { RAppLayout } from '../r-experience/RAppLayout';
 export const insightsDestinations = [
   { title: 'Cost', detail: 'Charges, energy added and what they cost', to: '/charging' },
   { title: 'Battery', detail: 'Battery health, level and range', to: '/battery' },
-  { title: 'Parked loss', detail: 'Energy the car uses while parked (phantom drain)', to: '/battery/phantom-drain' },
+  { title: 'Parked loss', detail: 'Battery the car loses while parked', to: '/battery/phantom-drain' },
   { title: 'Efficiency', detail: 'mi/kWh trends, temperature and trip comparisons', to: '/efficiency' },
 ] as const;
 

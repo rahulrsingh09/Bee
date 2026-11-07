@@ -1,7 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { DataTable, createTripColumns, type TripRow } from '@riviamigo/ui/tables';
+import { DataTable, createTripColumns, isDefaultTripDriveMode, type TripRow } from '@riviamigo/ui/tables';
 
 vi.mock('@riviamigo/ui/primitives', async () => {
   const m = await import('./mockPrimitives');
@@ -9,9 +9,53 @@ vi.mock('@riviamigo/ui/primitives', async () => {
 });
 
 describe('trip columns', () => {
-  it('keeps the details action inset from the right edge', () => {
+  it('opens the whole trip from the row or the date, with no separate info button', () => {
     const trip: TripRow = {
       id: 'trip-1',
+      started_at: '2024-01-01T12:00:00Z',
+      ended_at: '2024-01-01T13:00:00Z',
+      distance_mi: 18.3,
+      duration_min: 60,
+      energy_used_kwh: 6.5,
+      efficiency_wh_mi: 355,
+      soc_start: 75,
+      soc_end: 68,
+      drive_mode: 'all_purpose',
+    };
+    const onOpenTrip = vi.fn();
+    const onToggleSelect = vi.fn();
+
+    const { container } = render(
+      <DataTable
+        data={[trip]}
+        columns={createTripColumns([], { onOpenTrip, onToggleSelect, isSelected: () => false })}
+        onRowClick={(row) => onOpenTrip(row.original.id)}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Open trip details' })).not.toBeInTheDocument();
+    expect(container.querySelector('.font-mono')).toBeNull();
+    expect(screen.getByRole('columnheader', { name: 'Battery' })).toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: /SoC|SOC/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Efficiency' })).toBeInTheDocument();
+    expect(screen.getByText('75% → 68%')).toHaveClass('tabular-nums');
+    expect(screen.queryByText('All-Purpose')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Open trip from / }));
+    expect(onOpenTrip).toHaveBeenCalledTimes(1);
+    expect(onOpenTrip).toHaveBeenLastCalledWith('trip-1');
+
+    fireEvent.click(screen.getAllByRole('cell')[3]!);
+    expect(onOpenTrip).toHaveBeenCalledTimes(2);
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /^Select trip from / }));
+    expect(onToggleSelect).toHaveBeenCalledWith('trip-1');
+    expect(onOpenTrip).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows the drive mode chip only for a mode that is not the default', () => {
+    const base: TripRow = {
+      id: 'trip-mode',
       started_at: '2024-01-01T12:00:00Z',
       ended_at: '2024-01-01T13:00:00Z',
       distance_mi: 18.3,
@@ -22,22 +66,16 @@ describe('trip columns', () => {
       soc_end: 68,
     };
 
-    const { container } = render(
-      <DataTable
-        data={[trip]}
-        columns={createTripColumns([], { onInfoClick: vi.fn() })}
-      />,
-    );
+    expect(isDefaultTripDriveMode('All-Purpose')).toBe(true);
+    expect(isDefaultTripDriveMode('everyday')).toBe(true);
+    expect(isDefaultTripDriveMode(null)).toBe(true);
+    expect(isDefaultTripDriveMode('sport')).toBe(false);
 
-    const button = screen.getByRole('button', { name: 'Open trip details' });
-    const wrapper = button.parentElement;
+    render(<DataTable data={[{ ...base, drive_mode: 'sport' }, { ...base, id: 'trip-default', drive_mode: 'All-Purpose' }]} columns={createTripColumns()} />);
+    expect(screen.getByText('Sport')).toBeInTheDocument();
+    expect(screen.queryByText('All-Purpose')).not.toBeInTheDocument();
 
-    if (!wrapper) throw new Error('Expected the info button to have a wrapper element');
-    expect(wrapper).toHaveClass('ml-auto', 'mr-1');
-
-    const detailsHeader = container.querySelector('th:last-child');
-    if (!detailsHeader) throw new Error('Expected the details header cell to render');
-    expect(detailsHeader).toHaveClass('w-[3.25rem]');
+    expect(createTripColumns([], { includeMode: false }).some((column) => column.id === 'drive_mode' || (column as { accessorKey?: string }).accessorKey === 'drive_mode')).toBe(false);
   });
 
   it('uses a compact tag action only when the visible page has tags', () => {

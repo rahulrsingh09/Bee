@@ -224,7 +224,7 @@ export function VehicleHealthContent() {
             <section className="grid gap-4 xl:items-stretch xl:grid-cols-[minmax(0,1.35fr)_minmax(22rem,0.65fr)]">
               <RHealthHero vehicle={activeVehicle} name={vehicleName} model={displayModel} vin={data?.vehicle?.vin} source={heroImageUrl} fallback={fallbackHeroImageUrl}>
                     <HeroMetric label="Collector" state={collector} kind="collector" />
-                    <HeroMetric label="12V" state={twelveVolt} kind="battery" />
+                    <HeroMetric label="12 V" state={twelveVolt} kind="battery" />
                     <HeroMetric label="Thermal" state={thermal} kind="thermal" />
                     <HeroMetric label="Tires" state={tireSummary} kind="tires" />
               </RHealthHero>
@@ -330,7 +330,7 @@ export function VehicleHealthContent() {
             <section className="grid gap-4 lg:grid-cols-3">
               <StatusPanel
                 icon={<BatteryWarning className="h-4 w-4" />}
-                title="12V Battery"
+                title="12 V battery"
                 value={twelveVolt.label}
                 detail="Reported by Rivian telemetry when the vehicle publishes low-voltage battery health."
                 variant={twelveVolt.variant}
@@ -338,9 +338,9 @@ export function VehicleHealthContent() {
               />
               <StatusPanel
                 icon={<Gauge className="h-4 w-4" />}
-                title="HV Thermal Activity"
+                title="Battery thermal activity"
                 titleAccessory={
-                  <Tooltip content="HV thermal events are usually normal battery temperature regulation. High counts alone do not indicate a fault.">
+                  <Tooltip content="Battery thermal events are usually normal battery temperature regulation. High counts alone do not indicate a fault.">
                     <span className="text-fg-tertiary">
                       <Info className="h-3.5 w-3.5" />
                     </span>
@@ -711,8 +711,8 @@ function formatAcquisitionStatusTooltip(extended: VehicleHealth['extended_teleme
   return (
     <div className="grid gap-2 leading-4">
       <div className="grid gap-0.5">
-        <span className="font-medium text-fg">Parallax acquisition</span>
-        <span>This is Riviamigo&apos;s integrated Parallax acquisition WebSocket, separate from the canonical vehicle telemetry connection.</span>
+        <span className="font-medium text-fg">Live stream</span>
+        <span>This is Riviamigo&apos;s integrated live stream connection, separate from the canonical vehicle telemetry connection.</span>
       </div>
       <div className="grid gap-0.5 border-t border-border pt-2">
         <span className="font-medium text-fg">What the status means</span>

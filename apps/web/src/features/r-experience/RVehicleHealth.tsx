@@ -175,7 +175,7 @@ function HealthContent({
   const connection = collector.variant !== 'success'
     ? { value: collector.label, caption: `Last data ${relativeAge(lastEvent) ?? 'unknown'}`, tone: toneOf(collector.variant) }
     : parallaxQuiet
-      ? { value: 'Partial', caption: `Parallax quiet since ${formatAppTime(parallaxQuiet.last_frame_at)}`, tone: 'warn' as Tone }
+      ? { value: 'Partial', caption: `Live stream quiet since ${formatAppTime(parallaxQuiet.last_frame_at)}`, tone: 'warn' as Tone }
       : { value: 'Live', caption: `Last data ${relativeAge(lastEvent) ?? 'unknown'}`, tone: 'good' as Tone };
 
   return (
@@ -185,7 +185,7 @@ function HealthContent({
         <p className="r-health-notice" role="status">
           <TriangleAlert aria-hidden="true" />
           <span>
-            Rivian’s Parallax stream has sent nothing since {formatAppDateTime(parallaxQuiet.last_frame_at)}, but the car moved at{' '}
+            Rivian’s live stream has sent nothing since {formatAppDateTime(parallaxQuiet.last_frame_at)}, but the car moved at{' '}
             {formatAppTime(parallaxQuiet.moved_at)}. Riviamigo keeps reconnecting, and records drives from the odometer meanwhile.
           </span>
         </p>
@@ -193,10 +193,10 @@ function HealthContent({
 
       <section className="r-health-tiles" aria-label="Status summary">
         <Tile icon={<Radio />} label="Data connection" value={connection.value} caption={connection.caption} tone={connection.tone} />
-        <Tile icon={<BatteryWarning />} label="12V battery" value={twelveVolt.label} caption="Low-voltage battery" tone={toneOf(twelveVolt.variant)} />
+        <Tile icon={<BatteryWarning />} label="12 V battery" value={twelveVolt.label} caption="Low-voltage battery" tone={toneOf(twelveVolt.variant)} />
         <Tile
           icon={<Activity />}
-          label="HV thermal"
+          label="Battery thermal"
           value={thermal.label}
           caption={`${data?.thermal_events_30d ?? 0} events in 30 days`}
           tone={toneOf(thermal.variant)}
@@ -246,7 +246,7 @@ function HealthContent({
           <ul className="r-health-list">
             <li><span>Last vehicle event</span><span>{formatWhen(lastEvent)}</span></li>
             <li><span>API snapshot</span><span>{formatWhen(data?.latest?.ts)}</span></li>
-            <li><span>Parallax</span><span>{formatAcquisitionState(extended)}{parallaxFrame ? ` · ${relativeAge(parallaxFrame)}` : ''}</span></li>
+            <li><span>Live stream</span><span>{formatAcquisitionState(extended)}{parallaxFrame ? ` · ${relativeAge(parallaxFrame)}` : ''}</span></li>
           </ul>
         </section>
 

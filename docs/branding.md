@@ -22,6 +22,43 @@ There is no appearance gallery, Theme Studio entry or interface selector.
   Status colors retain their meaning. R overrides belong in the existing token
   owner, `packages/ui/src/tokens/globals.css`; saved account themes must not change
   automatic chart or sensor colors. Explicit chart-color overrides remain valid.
+- R contrast tokens. The R blocks in `globals.css` own these values for both modes:
+  - `--rm-border-control` is the edge of every input, select and date-range
+    trigger. It is at least 3:1 against page, surface and elevated
+    (WCAG 2.2 1.4.11). Do not use `--rm-border-default` as the only edge of a
+    control. Cards and dividers can keep `--rm-border-default` because their
+    edge is decoration (1.4–1.9:1).
+  - `--rm-text-disabled` is at least 4.5:1 on surface and elevated. Also show
+    the disabled state with a second cue, for example no hover change and
+    `aria-disabled`.
+  - `--rm-bg-overlay` is the dialog scrim. Dark mode uses page ink at 72%.
+    Light mode uses primary ink at 40%, so the page stays visible below the
+    dialog.
+  - The focus ring, `--rm-control-focus-ring`, is primary ink and is more than
+    15:1 on page and surface.
+- Number color rule: show values in primary ink (`--rm-text-primary`). Use
+  color only for status dots and chart marks. Do not color a value by its
+  sensor, series or tile accent.
+- R chart series:
+  - `--rm-series-01` to `-04` are signal, cove, water and caliper. AC charging is
+    cove (`--rm-charging-ac`) and DC charging is caliper (`--rm-charging-dc`)
+    in every chart, legend and dot.
+  - Water is lighter and bluer in dark mode and deeper blue in light mode, so
+    it is not mistaken for cove. Light-mode signal is a darker green for the
+    same reason.
+  - `--rm-series-05` to `-16` alternate cool and warm hues at a chroma of at
+    least 0.10 (OKLCH). Their lightness is in the validator band, and each
+    color is at least 4.5:1 on page and surface, so it can be text or a line.
+    Series 05, 06 and 09 are `--rm-chart-violet`, `--rm-chart-rose` and
+    `--rm-chart-indigo`.
+  - Every adjacent pair from 01 to 16 passes the dataviz palette validator in
+    both modes: OKLab ΔE at least 15 for normal vision and at least 8 under
+    protan and deutan simulation (Machado 2009). Pairs that are not adjacent
+    can be close, so a chart shows a maximum of 4 series and labels them
+    directly. A map with more routes uses labels and highlight.
+  - When you change a series value, run the validator on series 01–08 and
+    01–16 with the R surface (`#101212` dark, `#ffffff` light) before you
+    merge.
 - Efficiency bars use the chart accent in both layouts; untagged categories
   remain neutral. Column headers, values, distance and speed metadata follow
   the selected units.
@@ -309,7 +346,9 @@ Common usage:
 - Timeline interval bars follow the same filled-bar treatment and expose the complete bar as a 44px keyboard/touch hit target. Their horizontal position and width always use the interval's actual timestamps. Overlapping intervals are stacked into visual lanes, not summed; reserve a compact bottom band (about 30% of the plot) so interval context does not overpower a primary trend. Hover and focus show the trip route, time, duration, and distance, and Enter/Space activates the trip.
 - Keep chart geometry semantically appropriate: daily totals may use one filled series, while daily charge-session composition remains a stacked AC/DC/Unknown view.
 - Charging-curve analysis uses dense power-colored evidence points, fading from accent orange at lower power to green at higher power. Its single compact comparison button overlays the chart rather than consuming chart height and cycles a smooth local-regression trend line through Observed, Best observed, and Off; the default is the representative observed regression, a best-observed mode must name its upper-quartile method, and estimated history must remain visibly distinct and excluded from both summaries.
-- On mobile, dashboard charts expose an on-theme expand control. The expanded viewer is an opaque, safe-area-aware fullscreen surface: its picker and close controls are anchored to opposite viewport edges so they do not consume chart height. They fade after the viewer first becomes available and return on a chart tap or Enter/Space, while the viewer uses a solid accent rotate prompt with large iconography before landscape exploration. The viewer must prevent page scroll, overscroll, and background interaction until it closes.
+- A pinned dashboard chart is one card: the title and an optional insight sentence are inside the card, above the plot. The card has one "⋯" button (label "Chart options", 44 px hit area) with "Chart settings" and "Full screen". Do not add icon-only buttons next to it. Chart controls keep the global keyboard focus ring; do not remove it with `outline-none` or `ring-0` overrides.
+- Chart errors stay in their card: "Unable to load chart data." and "Retry". A chart that still loads after 15 s shows "Still loading · Retry". A chart with no data in the period is a compact empty row (at most 64 px) with the chart name, the reason, and when it shows. Toasts are only for owner actions.
+- "Full screen" opens the dashboard chart viewer on every screen size. The expanded viewer is an opaque, safe-area-aware fullscreen surface: its picker and close controls are anchored to opposite viewport edges so they do not consume chart height. They fade after the viewer first becomes available and return on a chart tap or Enter/Space, while the viewer uses a solid accent rotate prompt with large iconography before landscape exploration. The viewer must prevent page scroll, overscroll, and background interaction until it closes.
 - Time and numeric charts support horizontal range selection, touch-first pan and pinch exploration in the viewer, and a conditional top-right icon-only reset control that returns to the full range. Categorical charts keep full category/value detail and touch-safe selection rather than simulating a meaningless zoom level.
 
 ### Vehicle artwork

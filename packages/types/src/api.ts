@@ -458,6 +458,17 @@ export interface PurgeExternalConnectionCacheResponse {
   message: string;
 }
 
+/** Rule that set cost_usd on a charge session. */
+export type ChargeCostMethod =
+  | 'user_free'
+  | 'user_manual'
+  | 'network_free'
+  | 'rivian_free_session'
+  | 'rivian_paid_total'
+  | 'profile'
+  | 'profile_pending'
+  | 'unknown';
+
 export interface ChargeSession {
   id: string;
   vehicle_id: string;
@@ -472,7 +483,10 @@ export interface ChargeSession {
   soc_end: number | null;
   peak_power_kw: number | null;
   cost_usd: number | null;
-  cost_method?: string | null;
+  /** Rule that set cost_usd; null while the session is open. Known values: ChargeCostMethod; repair tools may briefly write 'telemetry_repair'. */
+  cost_method?: ChargeCostMethod | (string & {}) | null;
+  /** Derived display value for user_manual only: cost_usd / kwh_added in $/kWh. Null otherwise. Not stored. */
+  cost_rate_per_kwh?: number | null;
   source?: string | null;
   api_started_at?: string | null;
   api_ended_at?: string | null;

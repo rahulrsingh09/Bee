@@ -43,6 +43,7 @@ import {
   useDashboardDataSelector,
   useDashboardMetric,
   type DashboardDataRequirements,
+  type DashboardDataSource,
 } from '../../dashboardData';
 import { resolveIconId } from '../../editor/iconMigration';
 import { seriesToDailyDeltas, seriesToDailyTotals } from '../../editor/dailyDelta';
@@ -178,35 +179,75 @@ export function SensorChipWidget({ instance, ctx }: { instance: WidgetInstance; 
   const dashboardCharging = useDashboardDataSelector((snapshot) => snapshot.chargingSummary);
   const dashboardEfficiency = useDashboardDataSelector((snapshot) => snapshot.efficiencySummary);
   const dashboardRefreshing = useDashboardDataSelector((snapshot) => snapshot.isRefreshing) ?? false;
-  const { data: fetchedValue, isLoading: metricLoading } = useMetricValue(
+  const dashboardFailed = useDashboardDataSelector((snapshot) => snapshot.failed);
+  const dashboardRetry = useDashboardDataSelector((snapshot) => snapshot.retry);
+  const valueQuery = useMetricValue(
     dashboardDataAvailable ? null : ctx.vehicleId,
     dashboardDataAvailable ? null : metric,
     ctx.from,
     ctx.to,
   );
-  const { data: fetchedSeries = [] } = useMetricSeries(
+  const seriesQuery = useMetricSeries(
     dashboardDataAvailable ? null : ctx.vehicleId,
     dashboardDataAvailable ? null : metric,
     ctx.from,
     ctx.to,
   );
-  const { data: fetchedEfficiencySummary } = useEfficiencySummary(
+  const efficiencyQuery = useEfficiencySummary(
     !dashboardDataAvailable && needsEfficiency ? ctx.vehicleId : null,
     ctx.from,
     ctx.to,
     ctx.tripTagFilter,
   );
-  const { data: fetchedHealth, isLoading: healthLoading } = useBatteryHealth(
+  const healthQuery = useBatteryHealth(
     !dashboardDataAvailable && needsHealth ? ctx.vehicleId : null
   );
-  const { data: fetchedChargingSummary, isLoading: chargingLoading } = useChargingSummary(
+  const chargingQuery = useChargingSummary(
     !dashboardDataAvailable && needsCharging ? ctx.vehicleId : null,
     ctx.from,
     ctx.to
   );
-  const { data: fetchedStatus, isLoading: statusLoading } = useCurrentVehicleStatus(
+  const statusQuery = useCurrentVehicleStatus(
     !dashboardDataAvailable && needsStatus ? ctx.vehicleId : null
   );
+  const { data: fetchedValue, isLoading: metricLoading } = valueQuery;
+  const { data: fetchedSeries = [] } = seriesQuery;
+  const { data: fetchedEfficiencySummary } = efficiencyQuery;
+  const { data: fetchedHealth, isLoading: healthLoading } = healthQuery;
+  const { data: fetchedChargingSummary, isLoading: chargingLoading } = chargingQuery;
+  const { data: fetchedStatus, isLoading: statusLoading } = statusQuery;
+  // The queries this tile reads its value from. A failed one with no data shows
+  // an in-place error, because background reads do not toast.
+  const valueQueries: SensorQueryState[] = dashboardDataAvailable
+    ? []
+    : options.dataSource === 'metric'
+      ? [valueQuery, ...(needsEfficiency ? [efficiencyQuery] : [])]
+      : options.dataSource === 'batteryHealth'
+        ? [healthQuery, ...(needsStatus ? [statusQuery] : [])]
+        : options.dataSource === 'chargingSummary'
+          ? [chargingQuery, ...(needsStatus ? [statusQuery] : [])]
+          : options.dataSource === 'vehicleStatus'
+            ? [statusQuery]
+            : options.dataSource === 'efficiencySummary'
+              ? [efficiencyQuery, ...(needsStatus ? [statusQuery] : [])]
+              : [];
+  const failedQueries = valueQueries.filter((query) => query.isError && query.data == null);
+  // On a dashboard, the provider owns the reads. The tile shows the error when
+  // a provider source that it reads has failed.
+  const providerSources: DashboardDataSource[] = !dashboardDataAvailable
+    ? []
+    : options.dataSource === 'metric'
+      ? ['batch', ...(needsEfficiency ? ['efficiencySummary' as const] : [])]
+      : options.dataSource === 'batteryHealth'
+        ? ['batteryHealth', ...(needsStatus ? ['status' as const] : [])]
+        : options.dataSource === 'chargingSummary'
+          ? ['chargingSummary', ...(needsStatus ? ['status' as const] : [])]
+          : options.dataSource === 'vehicleStatus'
+            ? ['status']
+            : options.dataSource === 'efficiencySummary'
+              ? ['efficiencySummary', ...(needsStatus ? ['status' as const] : [])]
+              : [];
+  const providerFailed = providerSources.some((source) => dashboardFailed?.[source] === true);
   const value = dashboardDataAvailable ? dashboardMetric?.value : fetchedValue;
   const series = dashboardDataAvailable ? dashboardMetric?.series ?? [] : fetchedSeries;
   const efficiencySummary = dashboardDataAvailable ? dashboardEfficiency : fetchedEfficiencySummary;
@@ -241,8 +282,14 @@ export function SensorChipWidget({ instance, ctx }: { instance: WidgetInstance; 
         ? (efficiencySummary?.avg ?? (allowLatestFallback ? (value?.value ?? null) : null))
         : resolvedMetricValue
       : resolveConfiguredValue(options, sourceValues);
+  // A trip selection computes its value from the selected trips, not from these queries.
+  const loadFailed = (failedQueries.length > 0 || providerFailed) && activeTripSelectionStat == null;
+  const retryFailedQueries = () => {
+    if (providerFailed) dashboardRetry?.();
+    for (const query of failedQueries) void query.refetch();
+  };
   const statusPresentation =
-    options.dataSource === 'vehicleStatus'
+    options.dataSource === 'vehicleStatus' && !loadFailed
       ? presentVehicleStatusDefinition(instance.definitionId, status)
       : null;
   const unit = options.dataSource === 'metric' ? value?.unit : options.unit;
@@ -250,7 +297,7 @@ export function SensorChipWidget({ instance, ctx }: { instance: WidgetInstance; 
   const isEditing = ctx.visibilityState != null;
   const hasValue = statusPresentation != null
     || (activeTripSelectionStat ? isFiniteNumber(selectionValue) : isFiniteNumber(resolvedValue));
-  const isEmpty = !isLoading && !hasValue;
+  const isEmpty = !isLoading && !hasValue && !loadFailed;
   const emptyState = isEmpty
     ? resolveEmptyState(definition?.emptyState, {
         isEditing,
@@ -266,14 +313,14 @@ export function SensorChipWidget({ instance, ctx }: { instance: WidgetInstance; 
         : formatMetricValue(resolvedValue, unit);
   const inlineSecondary = statusPresentation
     ? ''
-    : isLoading || isEmpty
+    : isLoading || isEmpty || loadFailed
       ? ''
       : activeTripSelectionStat
         ? ''
         : resolveInlineSecondary(options, sourceValues);
   const secondary = statusPresentation
     ? (statusPresentation.secondaryText ?? '')
-    : isLoading || isEmpty
+    : isLoading || isEmpty || loadFailed
       ? ''
       : activeTripSelectionStat
         ? ''
@@ -298,7 +345,7 @@ export function SensorChipWidget({ instance, ctx }: { instance: WidgetInstance; 
         allowLatestFallback ? resolvedValue : null,
         value?.ts ?? ctx.to ?? new Date().toISOString()
       );
-  const showSprite = options.showSprite && options.chartType !== 'none' && !activeTripSelectionStat && !isEmpty;
+  const showSprite = options.showSprite && options.chartType !== 'none' && !activeTripSelectionStat && !isEmpty && !loadFailed;
   const spriteColor = metricColor;
 
   if (isEmpty && !emptyState) {
@@ -318,7 +365,8 @@ export function SensorChipWidget({ instance, ctx }: { instance: WidgetInstance; 
       )}
       style={options.accentBorder ? { borderColor: metricColor } : undefined}
       data-testid="sensor-chip"
-      {...(isLoading ? { 'aria-busy': true } : {})}
+      {...(isLoading && !loadFailed ? { 'aria-busy': true } : {})}
+      {...(loadFailed ? { 'data-sensor-error': 'true' } : {})}
       {...(isEmpty ? { 'data-sensor-empty': emptyState?.action ? 'action' : 'reason' } : {})}
     >
       {showSprite ? (
@@ -391,7 +439,9 @@ export function SensorChipWidget({ instance, ctx }: { instance: WidgetInstance; 
         </div>
 
         <div className="mt-1.5 flex items-baseline gap-1">
-          {isLoading && !statusPresentation ? (
+          {loadFailed ? (
+            <SensorLoadError onRetry={retryFailedQueries} />
+          ) : isLoading && !statusPresentation ? (
             <Skeleton
               aria-hidden="true"
               data-testid="sensor-value-skeleton"
@@ -419,6 +469,30 @@ export function SensorChipWidget({ instance, ctx }: { instance: WidgetInstance; 
         {secondary ? <p className="mt-0.5 truncate text-xs text-fg-tertiary">{secondary}</p> : null}
       </div>
     </Card>
+  );
+}
+
+/** The parts of a React Query result that the tile error needs. */
+interface SensorQueryState {
+  data?: unknown;
+  isError: boolean;
+  refetch: () => unknown;
+}
+
+/** In-place read failure. The tile stays visible and never shows a placeholder value. */
+function SensorLoadError({ onRetry }: { onRetry: () => void }) {
+  return (
+    <span role="alert" className="flex min-w-0 items-center gap-1 text-sm text-status-danger" data-testid="sensor-load-error">
+      <span className="truncate">Could not load</span>{' '}
+      <span aria-hidden="true">·</span>{' '}
+      <button
+        type="button"
+        onClick={onRetry}
+        className="inline-flex min-h-11 items-center font-medium underline underline-offset-2"
+      >
+        Retry
+      </button>
+    </span>
   );
 }
 

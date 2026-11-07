@@ -600,7 +600,7 @@ export class AuthenticatedTransport {
       }
 
       const responseBody = await res.json().catch(() => null);
-      const err: ApiError = responseBody?.error ?? { code: 'unknown', message: res.statusText };
+      const err = apiErrorFromBody(responseBody, res.status, res.statusText);
       const detail: ApiFailureDetail = {
         status: res.status,
         code: err.code,
@@ -2377,6 +2377,29 @@ function describeMutationAction(method: string, path: string, body?: unknown): s
 
 function isFetchConnectionError(error: unknown): boolean {
   return error instanceof TypeError || (error instanceof Error && ['NetworkError', 'AbortError'].includes(error.name));
+}
+
+/**
+ * Reads the error of a failed response. The API sends `{ error: { code, message } }`;
+ * a proxy or an older route can send `{ error: "text" }` or no JSON. Every form
+ * gives a string code and message, so an error never reads "500 undefined:".
+ */
+function apiErrorFromBody(body: unknown, status: number, statusText: string): ApiError {
+  const fallbackCode = `HTTP_${status}`;
+  const fallbackMessage = statusText || `Request failed with status ${status}`;
+  const error = body && typeof body === 'object' ? (body as { error?: unknown }).error : undefined;
+  if (typeof error === 'string') {
+    const text = error.trim();
+    return { code: fallbackCode, message: text || fallbackMessage };
+  }
+  if (error && typeof error === 'object') {
+    const { code, message } = error as { code?: unknown; message?: unknown };
+    return {
+      code: typeof code === 'string' && code ? code : fallbackCode,
+      message: typeof message === 'string' && message ? message : fallbackMessage,
+    };
+  }
+  return { code: 'unknown', message: fallbackMessage };
 }
 
 function apiFailureDetailFrom(error: unknown): ApiFailureDetail | undefined {

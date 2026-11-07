@@ -28,6 +28,29 @@ describe('api client dashboard contracts', () => {
     expect(String((failure as Error).message)).not.toMatch(/Cannot read properties/);
   });
 
+  it('turns a string error body into a string code and message, never "500 undefined:"', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ error: 'boom' }), { status: 500, headers: { 'Content-Type': 'application/json' } }),
+    );
+    const failure = await api.vehicleStatus('vehicle-1').catch((error: unknown) => error) as Error & {
+      code?: unknown;
+      detail?: { code?: unknown; message?: unknown };
+    };
+    expect(failure.code).toBe('HTTP_500');
+    expect(failure.detail).toMatchObject({ code: 'HTTP_500', message: 'boom' });
+    expect(failure.message).toBe('500 HTTP_500: boom');
+    expect(failure.message).not.toContain('undefined');
+  });
+
+  it('keeps the server code and message of a structured error body', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: 'boom', message: 'boom' } }), { status: 500, headers: { 'Content-Type': 'application/json' } }),
+    );
+    const failure = await api.vehicleStatus('vehicle-1').catch((error: unknown) => error) as Error & { code?: unknown };
+    expect(failure.code).toBe('boom');
+    expect(failure.message).toBe('500 boom: boom');
+  });
+
   it('rejects incomplete metric JSON without treating a partial document as success', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{"values":[],"series":[', { status: 200 }));
     await expect(api.vehicleStatus('vehicle-1')).rejects.toMatchObject({ code: 'INCOMPLETE_RESPONSE' });

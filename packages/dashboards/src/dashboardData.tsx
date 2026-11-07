@@ -25,6 +25,15 @@ export interface DashboardMetricData {
   series: MetricSeriesPoint[];
 }
 
+/** The provider queries that a tile can read from. */
+export type DashboardDataSource = 'batch' | 'status' | 'batteryHealth' | 'chargingSummary' | 'efficiencySummary';
+
+/**
+ * A source has failed when its read returned an error and no earlier data
+ * exists. Background reads do not toast, so the tile shows this error itself.
+ */
+export type DashboardDataFailures = Readonly<Record<DashboardDataSource, boolean>>;
+
 export interface DashboardDataSnapshot {
   hasProvider: true;
   values: ReadonlyMap<string, MetricValueResponse>;
@@ -35,6 +44,27 @@ export interface DashboardDataSnapshot {
   chargingSummary?: ChargingSummary;
   efficiencySummary?: EfficiencySummary;
   isRefreshing: boolean;
+  failed: DashboardDataFailures;
+  /** Refetches only the sources that have failed. */
+  retry: () => void;
+}
+
+const NO_FAILURES: DashboardDataFailures = {
+  batch: false,
+  status: false,
+  batteryHealth: false,
+  chargingSummary: false,
+  efficiencySummary: false,
+};
+
+interface ProviderQueryState {
+  data?: unknown;
+  isError?: boolean;
+  refetch?: () => unknown;
+}
+
+function hasFailed(query: ProviderQueryState, required: boolean) {
+  return required && query.isError === true && query.data == null;
 }
 
 class DashboardDataStore {
@@ -48,6 +78,8 @@ class DashboardDataStore {
       series: new Map(),
       metrics: new Map(),
       isRefreshing: false,
+      failed: NO_FAILURES,
+      retry: () => {},
     };
   }
 
@@ -128,6 +160,51 @@ export function DashboardDataProvider({
     ctx.to,
     ctx.tripTagFilter,
   );
+  const failedBatch = hasFailed(batch, metrics.length > 0);
+  const failedStatus = hasFailed(status, requirements.status === true);
+  const failedBatteryHealth = hasFailed(batteryHealth, requirements.batteryHealth === true);
+  const failedChargingSummary = hasFailed(chargingSummary, requirements.chargingSummary === true);
+  const failedEfficiencySummary = hasFailed(efficiencySummary, requirements.efficiencySummary === true);
+  const { refetch: refetchBatch } = batch;
+  const { refetch: refetchStatus } = status;
+  const { refetch: refetchBatteryHealth } = batteryHealth;
+  const { refetch: refetchChargingSummary } = chargingSummary;
+  const { refetch: refetchEfficiencySummary } = efficiencySummary;
+  const retry = React.useCallback(() => {
+    const sources: Array<[boolean, (() => unknown) | undefined]> = [
+      [failedBatch, refetchBatch],
+      [failedStatus, refetchStatus],
+      [failedBatteryHealth, refetchBatteryHealth],
+      [failedChargingSummary, refetchChargingSummary],
+      [failedEfficiencySummary, refetchEfficiencySummary],
+    ];
+    for (const [sourceFailed, refetch] of sources) {
+      if (sourceFailed) void refetch?.();
+    }
+  }, [
+    failedBatch,
+    failedStatus,
+    failedBatteryHealth,
+    failedChargingSummary,
+    failedEfficiencySummary,
+    refetchBatch,
+    refetchStatus,
+    refetchBatteryHealth,
+    refetchChargingSummary,
+    refetchEfficiencySummary,
+  ]);
+  const failed = React.useMemo<DashboardDataFailures>(
+    () => failedBatch || failedStatus || failedBatteryHealth || failedChargingSummary || failedEfficiencySummary
+      ? {
+          batch: failedBatch,
+          status: failedStatus,
+          batteryHealth: failedBatteryHealth,
+          chargingSummary: failedChargingSummary,
+          efficiencySummary: failedEfficiencySummary,
+        }
+      : NO_FAILURES,
+    [failedBatch, failedStatus, failedBatteryHealth, failedChargingSummary, failedEfficiencySummary],
+  );
 
   const snapshot = React.useMemo<DashboardDataSnapshot>(() => {
     const values = new Map((batch.data?.values ?? []).map((value) => [value.metric, value]));
@@ -148,8 +225,12 @@ export function DashboardDataProvider({
     ...(requirements.efficiencySummary && efficiencySummary.data ? { efficiencySummary: efficiencySummary.data } : {}),
     isRefreshing: batch.isFetching || status.isFetching || batteryHealth.isFetching
       || chargingSummary.isFetching || efficiencySummary.isFetching,
+    failed,
+    retry,
     };
   }, [
+    failed,
+    retry,
     batch.data,
     batch.isFetching,
     status.data,

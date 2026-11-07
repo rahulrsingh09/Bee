@@ -1,5 +1,5 @@
 import React from 'react';
-import { AuthenticatedVehicleArtwork, type ResolvedVehicleArtwork } from '@riviamigo/hooks';
+import { AuthenticatedVehicleArtwork, useVehicleArtwork, type ResolvedVehicleArtwork } from '@riviamigo/hooks';
 import {
   angleForKey, angleStepWidth, createOrbitFrames, DEFAULT_FRAME, FRONT_FRAME, loadArtworkPaint, ORBIT_FRAMES,
   restAngleIndex, settleAngle, wrapAngleIndex, wrapFrame, type Oklab,
@@ -42,13 +42,56 @@ export interface RVehicleAnglesProps {
   fallbackSource?: string | null;
 }
 
+/** The accessible name of the still image: the turn label without the key hint. */
+function stillLabel(label: string) {
+  return label.replace(/\.?\s*Use arrow keys to turn\.?\s*$/, '').trim() || label;
+}
+
+/**
+ * Drops the owner angles whose image fails to load. The side image is kept: it has
+ * the packaged model artwork as its fallback.
+ */
+function useUsableAngles(angles: readonly VehicleAngleImage[]) {
+  const [failed, setFailed] = React.useState<ReadonlySet<string>>(() => new Set());
+  const markFailed = React.useCallback((url: string) => {
+    setFailed(current => (current.has(url) ? current : new Set(current).add(url)));
+  }, []);
+  const usable = React.useMemo(
+    () => angles.filter(angle => angle.angle === 'side' || !failed.has(angle.url)),
+    [angles, failed],
+  );
+  return { usable, markFailed };
+}
+
+/** One angle of the turn. A protected image that cannot be fetched, or a browser image error, reports the angle as failed. */
+function TurnAngle({ angle, active, fallbackSource, onFailed }: {
+  angle: VehicleAngleImage;
+  active: boolean;
+  fallbackSource: string | null;
+  onFailed: (url: string) => void;
+}) {
+  // Same query as AuthenticatedVehicleArtwork (shared cache): no second request.
+  const { isError } = useVehicleArtwork(angle.url);
+  React.useEffect(() => {
+    if (isError && !fallbackSource) onFailed(angle.url);
+  }, [angle.url, fallbackSource, isError, onFailed]);
+  return (
+    <AuthenticatedVehicleArtwork source={angle.url} fallbackSource={fallbackSource}
+      className="r-orbit-angle" data-angle={angle.angle} data-active={active || undefined}
+      onError={fallbackSource ? undefined : () => onFailed(angle.url)}
+      alt="" aria-hidden="true" draggable={false} />
+  );
+}
+
 /**
  * The owner's own Rivian images as a turn control. The car rests on the side image.
  * A drag or the arrow keys step through the angles with a short cross-fade; a released
  * drag rounds to the nearest angle and the set wraps around. A double-tap or Home
  * returns to the side image. Reduced motion shows each angle at once (no fade, no inertia).
  */
-export function RVehicleAngles({ label, angles, fallbackSource }: RVehicleAnglesProps) {
+export function RVehicleAngles({ label, angles: ownerAngles, fallbackSource }: RVehicleAnglesProps) {
+  // An angle whose image fails is dropped from the turn set, so no stop is blank.
+  const { usable: angles, markFailed } = useUsableAngles(ownerAngles);
   const count = angles.length;
   const rest = restAngleIndex(angles);
   const [index, setIndex] = React.useState(rest);
@@ -95,7 +138,20 @@ export function RVehicleAngles({ label, angles, fallbackSource }: RVehicleAngles
     }
   }
 
-  const active = angles[index] ?? angles[0]!;
+  const active = angles[index] ?? angles[0];
+  // With fewer than 2 usable angles there is nothing to turn: show the side image alone.
+  if (count < 2 || !active) {
+    const still = angles[rest] ?? angles[0] ?? ownerAngles.find(angle => angle.angle === 'side');
+    return (
+      <div className="r-orbit r-orbit-turn" data-mode="still">
+        <div className="r-orbit-stage">
+          <AuthenticatedVehicleArtwork source={still?.url ?? null} fallbackSource={fallbackSource}
+            className="r-orbit-angle" data-angle={still?.angle ?? 'side'} data-active
+            alt={stillLabel(label)} draggable={false} />
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="r-orbit r-orbit-turn">
       <div className="r-orbit-stage" role="slider" tabIndex={0} aria-label={label}
@@ -129,10 +185,8 @@ export function RVehicleAngles({ label, angles, fallbackSource }: RVehicleAngles
         }}
         onPointerUp={event => finish(event)} onPointerCancel={event => finish(event, true)}>
         {angles.map((angle, position) => (
-          <AuthenticatedVehicleArtwork key={angle.url} source={angle.url}
-            fallbackSource={angle.angle === 'side' ? fallbackSource : null}
-            className="r-orbit-angle" data-angle={angle.angle} data-active={position === index || undefined}
-            alt="" aria-hidden="true" draggable={false} />
+          <TurnAngle key={angle.url} angle={angle} active={position === index}
+            fallbackSource={angle.angle === 'side' ? fallbackSource ?? null : null} onFailed={markFailed} />
         ))}
       </div>
     </div>

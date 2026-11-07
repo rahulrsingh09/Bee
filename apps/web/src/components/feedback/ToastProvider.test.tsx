@@ -57,6 +57,21 @@ describe('ToastProvider', () => {
     ]);
   });
 
+  it('keeps one permanent polite live region, before and after toasts', () => {
+    renderProvider();
+    const region = screen.getByRole('region', { name: 'Notifications' });
+    expect(region).toHaveAttribute('aria-live', 'polite');
+    expect(region).toBeEmptyDOMElement();
+    emit('Saved', 'success');
+    emit('Heads up', 'info');
+    expect(screen.getByRole('region', { name: 'Notifications' })).toBe(region);
+    expect(region).toHaveTextContent('Saved');
+    expect(region).toHaveTextContent('Heads up');
+    expect(document.querySelectorAll('[aria-live="polite"]')).toHaveLength(1);
+    act(() => vi.advanceTimersByTime(TOAST_DISMISS_MS + 1));
+    expect(screen.getByRole('region', { name: 'Notifications' })).toBe(region);
+  });
+
   it('shows at most three toasts, newest last', () => {
     renderProvider();
     for (const title of ['One', 'Two', 'Three', 'Four']) emit(title);

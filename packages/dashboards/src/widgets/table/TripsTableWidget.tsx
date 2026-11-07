@@ -241,7 +241,10 @@ export function TripsTableWidget({ ctx }: { instance: WidgetInstance; ctx: Widge
   const [batchTagIds, setBatchTagIds] = React.useState<string[]>([]);
   const [pendingBatchAction, setPendingBatchAction] = React.useState<'clear' | 'add' | 'save' | null>(null);
   const isMobile = useIsMobile();
-  const { data, isLoading } = useTrips(ctx.vehicleId, ctx.from, ctx.to, page, pageSize, deferredSearch.trim(), ctx.tripTagFilter);
+  const tripsQuery = useTrips(ctx.vehicleId, ctx.from, ctx.to, page, pageSize, deferredSearch.trim(), ctx.tripTagFilter);
+  const { data, isLoading } = tripsQuery;
+  // Background reads do not toast, so a failed read shows in place of the rows.
+  const loadFailed = tripsQuery.isError && data == null;
   const updateAssignments = useUpdateTripTagAssignments(ctx.vehicleId);
   const placesQuery = useQuery({
     queryKey: ['places'],
@@ -418,7 +421,9 @@ export function TripsTableWidget({ ctx }: { instance: WidgetInstance; ctx: Widge
         </div>
       ) : null}
 
-      {isMobile ? (
+      {loadFailed ? (
+        <TripsLoadError onRetry={() => void tripsQuery.refetch()} />
+      ) : isMobile ? (
         <div className="flex flex-col gap-2">
           {isLoading
             ? Array.from({ length: 5 }).map((_, i) => (
@@ -454,6 +459,19 @@ export function TripsTableWidget({ ctx }: { instance: WidgetInstance; ctx: Widge
       )}
 
       {pagination}
+    </div>
+  );
+}
+
+/** In-place read failure for the trip list. It replaces the rows and never says "No trips found". */
+function TripsLoadError({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div role="alert" data-table-state="error" className="flex flex-wrap items-center justify-center gap-1 rounded-lg border border-status-danger/30 bg-status-danger/10 px-4 py-6 text-center text-sm text-status-danger">
+      <span>Could not load trips</span>{' '}
+      <span aria-hidden="true">·</span>{' '}
+      <button type="button" onClick={onRetry} className="inline-flex min-h-11 items-center font-medium underline underline-offset-2">
+        Retry
+      </button>
     </div>
   );
 }

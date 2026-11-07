@@ -89,7 +89,7 @@ export function RAppLayout({ children, activeKey, footer }: {
         <Link to="/" aria-label="R overview" className="r-brand"><RMark /></Link>
         <nav className="r-navigation" aria-label="Primary navigation">
           {rNavigation.map(({ key, label, to, icon: Icon }) => (
-            <Link key={key} to={to} aria-current={active === key ? 'page' : undefined}>
+            <Link key={key} to={to} aria-label={label} aria-current={active === key ? 'page' : undefined}>
               <Icon aria-hidden="true" /><span>{label}</span>
             </Link>
           ))}

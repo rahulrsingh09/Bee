@@ -64,15 +64,23 @@ const metricMocks = vi.hoisted(() => ({
   },
   vehicleStatus: null as null | Record<string, unknown>,
   chargingFetching: false,
+  valueError: false,
+  statusError: false,
+  batchError: false,
+  healthError: false,
+  refetchValue: vi.fn(),
+  refetchStatus: vi.fn(),
+  refetchBatch: vi.fn(),
+  refetchHealth: vi.fn(),
 }));
 
 vi.mock('@riviamigo/hooks', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@riviamigo/hooks')>();
   return {
     ...actual,
-    useMetricValue: () => ({
-      data: metricMocks.value,
-    }),
+    useMetricValue: () => metricMocks.valueError
+      ? { data: undefined, isLoading: false, isError: true, refetch: metricMocks.refetchValue }
+      : { data: metricMocks.value, isError: false, refetch: metricMocks.refetchValue },
     useMetricSeries: (
       vehicleId: string | null,
       metric: string | null,
@@ -84,6 +92,9 @@ vi.mock('@riviamigo/hooks', async (importOriginal) => {
     },
     useMetricBatch: (vehicleId: string | null, metrics: Array<{ metric?: string }> | undefined, from: string | null, to: string | null) => {
       metricMocks.metricBatchCalls.push({ vehicleId, metric: metrics?.[0]?.metric ?? null, from, to });
+      if (metricMocks.batchError) {
+        return { data: undefined, isFetching: false, isError: true, refetch: metricMocks.refetchBatch };
+      }
       return {
         data: {
           values: [metricMocks.value],
@@ -92,21 +103,29 @@ vi.mock('@riviamigo/hooks', async (importOriginal) => {
           max_points: 96,
         },
         isFetching: false,
+        isError: false,
+        refetch: metricMocks.refetchBatch,
       };
     },
     useEfficiencySummary: () => ({ data: metricMocks.efficiencySummary, isLoading: false }),
-    useBatteryHealth: () => ({ data: metricMocks.batteryHealth, isLoading: false }),
+    useBatteryHealth: () => metricMocks.healthError
+      ? { data: undefined, isLoading: false, isFetching: false, isError: true, refetch: metricMocks.refetchHealth }
+      : { data: metricMocks.batteryHealth, isLoading: false, isError: false, refetch: metricMocks.refetchHealth },
     useChargingSummary: () => ({
       data: metricMocks.chargingSummary,
       isLoading: metricMocks.chargingFetching && metricMocks.chargingSummary == null,
       isFetching: metricMocks.chargingFetching,
     }),
-    useCurrentVehicleStatus: () => ({ data: metricMocks.vehicleStatus, isLoading: false }),
+    useCurrentVehicleStatus: () => metricMocks.statusError
+      ? { data: null, isLoading: false, isError: true, refetch: metricMocks.refetchStatus }
+      : { data: metricMocks.vehicleStatus, isLoading: false, isError: false, refetch: metricMocks.refetchStatus },
     useMetricCatalog: () => ({ data: [] }),
   };
 });
 
 import {
+  collectDashboardDataRequirements,
+  DashboardDataProvider,
   DashboardRenderer,
   DEFAULT_DASHBOARDS,
   getWidget,
@@ -1201,5 +1220,182 @@ describe('SensorChipSummary tile rules', () => {
     expect(chip).toHaveAttribute('aria-busy', 'true');
     expect(within(chip).getByTestId('sensor-value-skeleton')).toBeInTheDocument();
     expect(chip).not.toHaveTextContent('12.4 mi');
+  });
+});
+
+describe('sensor tile read failure', () => {
+  const instance = (definitionId: string) => ({
+    id: 'd9000009-0000-0000-0000-000000000077',
+    componentType: 'sensor' as const,
+    definitionId,
+    options: {},
+    layout: { x: 0, y: 0, w: 3, h: 2 },
+  });
+
+  function renderTile(definitionId: string) {
+    const Tile = getWidget('sensor', definitionId)!.component;
+    // No DashboardDataProvider: the tile reads its own queries.
+    return render(<Tile instance={instance(definitionId)} ctx={defaultCtx} />);
+  }
+
+  beforeEach(() => {
+    applyThemePreferences({ mode: 'dark', palette: 'classic' });
+    metricMocks.valueError = false;
+    metricMocks.statusError = false;
+    metricMocks.vehicleStatus = null;
+    metricMocks.value = { metric: 'total_miles', value: 12345, unit: 'mi', label: 'Total Miles', ts: '2026-05-07T00:00:00Z' };
+    metricMocks.series = [
+      { ts: '2026-05-01T00:00:00Z', value: 10 },
+      { ts: '2026-05-02T00:00:00Z', value: 18 },
+    ];
+    metricMocks.refetchValue.mockClear();
+    metricMocks.refetchStatus.mockClear();
+  });
+
+  it('shows Could not load · Retry in place of the value and does not hide the tile', () => {
+    metricMocks.valueError = true;
+    renderTile('total_miles');
+
+    const chip = screen.getByTestId('sensor-chip');
+    expect(screen.queryByTestId('sensor-chip-hidden')).toBeNull();
+    expect(chip).toHaveAttribute('data-sensor-error', 'true');
+    expect(chip).not.toHaveAttribute('data-sensor-empty');
+    expect(chip).not.toHaveAttribute('aria-busy');
+    expect(within(chip).getByRole('alert')).toHaveTextContent('Could not load · Retry');
+    expect(chip.querySelector('[data-sensor-value]')).toBeNull();
+    expect(chip).not.toHaveTextContent(/^-$|—|No data/);
+    expect(screen.queryByTestId('sensor-sprite-layer')).toBeNull();
+
+    fireEvent.click(within(chip).getByRole('button', { name: 'Retry' }));
+    expect(metricMocks.refetchValue).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the error instead of the Unavailable chip when the vehicle status read fails', () => {
+    metricMocks.statusError = true;
+    renderTile('twelve_volt_health');
+
+    const chip = screen.getByTestId('sensor-chip');
+    expect(within(chip).getByRole('alert')).toHaveTextContent('Could not load · Retry');
+    expect(chip).not.toHaveTextContent('Unavailable');
+    fireEvent.click(within(chip).getByRole('button', { name: 'Retry' }));
+    expect(metricMocks.refetchStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the normal value when the read succeeds', () => {
+    renderTile('total_miles');
+
+    const chip = screen.getByTestId('sensor-chip');
+    expect(chip).not.toHaveAttribute('data-sensor-error');
+    expect(within(chip).queryByRole('alert')).toBeNull();
+    expect(chip.querySelector('[data-sensor-value]')).not.toBeNull();
+  });
+});
+
+describe('sensor tile read failure from the dashboard data provider', () => {
+  const instance = (id: string, definitionId: string) => ({
+    id,
+    componentType: 'sensor' as const,
+    definitionId,
+    options: {},
+    layout: { x: 0, y: 0, w: 3, h: 2 },
+  });
+  const milesTile = instance('d9000009-0000-0000-0000-000000000081', 'total_miles');
+  const healthTile = instance('d9000009-0000-0000-0000-000000000082', 'battery_health_pct');
+
+  function renderDashboardTiles() {
+    const tiles = [milesTile, healthTile];
+    return render(
+      <DashboardDataProvider ctx={defaultCtx} requirements={collectDashboardDataRequirements(tiles)}>
+        {tiles.map((tile) => {
+          const Tile = getWidget('sensor', tile.definitionId)!.component;
+          return (
+            <div key={tile.id} data-testid={`tile-${tile.definitionId}`}>
+              <Tile instance={tile} ctx={defaultCtx} />
+            </div>
+          );
+        })}
+      </DashboardDataProvider>,
+    );
+  }
+
+  const chipOf = (definitionId: string) => within(screen.getByTestId(`tile-${definitionId}`)).getByTestId('sensor-chip');
+
+  beforeEach(() => {
+    applyThemePreferences({ mode: 'dark', palette: 'classic' });
+    metricMocks.batchError = false;
+    metricMocks.healthError = false;
+    metricMocks.valueError = false;
+    metricMocks.statusError = false;
+    metricMocks.vehicleStatus = null;
+    metricMocks.value = { metric: 'total_miles', value: 12345, unit: 'mi', label: 'Total Miles', ts: '2026-05-07T00:00:00Z' };
+    metricMocks.series = [
+      { ts: '2026-05-01T00:00:00Z', value: 10 },
+      { ts: '2026-05-02T00:00:00Z', value: 18 },
+    ];
+    metricMocks.batteryHealth = {
+      usable_now_kwh: 111.6,
+      usable_new_kwh: 109.0,
+      battery_health_pct: 96.4,
+      estimated_degradation_pct: 3.6,
+      charging_cycles: 18,
+      charge_count: 22,
+      total_energy_added_kwh: 1800,
+      total_energy_used_kwh: 1900,
+      charging_efficiency_pct: 94.4,
+    };
+    metricMocks.refetchBatch.mockClear();
+    metricMocks.refetchHealth.mockClear();
+    metricMocks.refetchStatus.mockClear();
+    metricMocks.refetchValue.mockClear();
+  });
+
+  it('shows Could not load · Retry on a tile whose provider source failed, and Retry refetches only that source', () => {
+    metricMocks.healthError = true;
+    renderDashboardTiles();
+
+    const healthChip = chipOf('battery_health_pct');
+    expect(healthChip).toHaveAttribute('data-sensor-error', 'true');
+    expect(healthChip).not.toHaveAttribute('data-sensor-empty');
+    expect(healthChip).not.toHaveAttribute('aria-busy');
+    expect(within(healthChip).getByRole('alert')).toHaveTextContent('Could not load · Retry');
+    expect(healthChip.querySelector('[data-sensor-value]')).toBeNull();
+
+    fireEvent.click(within(healthChip).getByRole('button', { name: 'Retry' }));
+    expect(metricMocks.refetchHealth).toHaveBeenCalledTimes(1);
+    expect(metricMocks.refetchBatch).not.toHaveBeenCalled();
+    expect(metricMocks.refetchStatus).not.toHaveBeenCalled();
+  });
+
+  it('keeps a tile whose provider source succeeded unaffected', () => {
+    metricMocks.healthError = true;
+    renderDashboardTiles();
+
+    const milesChip = chipOf('total_miles');
+    expect(milesChip).not.toHaveAttribute('data-sensor-error');
+    expect(within(milesChip).queryByRole('alert')).toBeNull();
+    expect(milesChip.querySelector('[data-sensor-value]')).not.toBeNull();
+  });
+
+  it('shows the error on a metric tile when the metric batch fails, and Retry refetches the batch', () => {
+    metricMocks.batchError = true;
+    renderDashboardTiles();
+
+    const milesChip = chipOf('total_miles');
+    expect(screen.queryAllByTestId('sensor-chip-hidden')).toHaveLength(0);
+    expect(within(milesChip).getByRole('alert')).toHaveTextContent('Could not load · Retry');
+    expect(chipOf('battery_health_pct')).not.toHaveAttribute('data-sensor-error');
+
+    fireEvent.click(within(milesChip).getByRole('button', { name: 'Retry' }));
+    expect(metricMocks.refetchBatch).toHaveBeenCalledTimes(1);
+    expect(metricMocks.refetchHealth).not.toHaveBeenCalled();
+    expect(metricMocks.refetchValue).not.toHaveBeenCalled();
+  });
+
+  it('shows no error when every provider source succeeds', () => {
+    renderDashboardTiles();
+
+    expect(screen.queryAllByRole('alert')).toHaveLength(0);
+    expect(chipOf('total_miles').querySelector('[data-sensor-value]')).not.toBeNull();
+    expect(chipOf('battery_health_pct').querySelector('[data-sensor-value]')).not.toBeNull();
   });
 });

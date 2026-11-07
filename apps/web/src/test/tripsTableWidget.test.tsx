@@ -183,4 +183,20 @@ describe('TripsTableWidget trip list', () => {
     expect(screen.queryByRole('columnheader', { name: 'Mode' })).not.toBeInTheDocument();
     expect(screen.queryByText('All-Purpose')).not.toBeInTheDocument();
   });
+
+  it.each([
+    ['desktop', 1280],
+    ['phone', 390],
+  ])('shows Could not load trips · Retry on %s when the read fails, not No trips found', (_label, width) => {
+    setViewport(width);
+    const refetch = vi.fn();
+    mockTrips.mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch });
+    render(<TripsTableWidget instance={{} as never} ctx={ctx} />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Could not load trips · Retry');
+    expect(screen.queryByText('No trips found')).not.toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
 });

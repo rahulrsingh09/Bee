@@ -210,6 +210,9 @@ personal copies so new fixed content appears without replacing saved layouts.
 
 ### 6. Hooks and Data Layer
 
+
+`DashboardDataProvider` sets a `failed` flag for each source (`batch`, `status`, `batteryHealth`, `chargingSummary`, `efficiencySummary`) when its read fails and no earlier data exists. It also gives a `retry()` that refetches only the failed sources. Sensor tiles use these to show "Could not load · Retry" instead of hiding.
+
 `packages/hooks` owns dashboard-facing data access and lightweight normalization. `DashboardRenderer` owns the dashboard-wide coordination layer: it derives a sorted, deduplicated requirement manifest from visible widgets and supplies the result through `DashboardDataProvider`.
 
 Use hooks for:

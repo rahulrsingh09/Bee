@@ -65,8 +65,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <>
       {children}
+      {/* One permanent polite live region. It exists before the first toast, so
+          screen readers announce success and info toasts as they are added. */}
       <section
         aria-label="Notifications"
+        aria-live="polite"
+        aria-relevant="additions text"
         className="fixed right-4 top-4 z-50 flex w-[min(420px,calc(100vw-2rem))] flex-col gap-3"
       >
         {toasts.map((toast) => (

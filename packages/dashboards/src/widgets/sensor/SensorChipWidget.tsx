@@ -361,15 +361,10 @@ export function SensorChipWidget({ instance, ctx }: { instance: WidgetInstance; 
                   <button
                     type="button"
                     aria-label={`${title} help`}
-                    className="relative inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded text-fg-tertiary transition-colors hover:text-fg focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+                    // The ::before draws a 44 × 44 hit area around the small icon. It
+                    // sits lower than centre so the clipped card edge cannot cut it.
+                    className="relative inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded text-fg-tertiary transition-colors before:absolute before:left-1/2 before:top-[-10px] before:h-11 before:w-11 before:-translate-x-1/2 before:content-[''] hover:text-fg focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
                   >
-                    {/* 44 × 44 hit area around the small icon. It sits lower than
-                        centre so the clipped card edge cannot cut it. */}
-                    <span
-                      aria-hidden="true"
-                      data-testid="sensor-help-hit-area"
-                      className="absolute left-1/2 top-[-10px] h-11 w-11 -translate-x-1/2"
-                    />
                     <CircleHelp className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
                 </Tooltip>

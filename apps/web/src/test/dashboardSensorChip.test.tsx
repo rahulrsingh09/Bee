@@ -1144,9 +1144,10 @@ describe('sensor tile rules', () => {
     render(<DashboardRenderer config={config(false, false, {}, 'efficiency_coverage', 'Efficiency data coverage')} ctx={defaultCtx} />);
 
     const button = screen.getByRole('button', { name: 'Efficiency data coverage help' });
-    const hitArea = within(button).getByTestId('sensor-help-hit-area');
-    expect(hitArea).toHaveClass('absolute', 'h-11', 'w-11');
-    expect(hitArea).toHaveAttribute('aria-hidden', 'true');
+    // The hit area is the button's own ::before, so the UX audit and the
+    // browser count it as part of the button.
+    expect(button).toHaveClass('relative', 'before:absolute', 'before:h-11', 'before:w-11', "before:content-['']");
+    expect(button).not.toHaveClass('before:pointer-events-none');
   });
 
   it('hides the duplicate count tile from the editor palette but still renders saved layouts', () => {

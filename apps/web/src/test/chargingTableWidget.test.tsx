@@ -61,6 +61,20 @@ describe('ChargingTableWidget', () => {
     expect(container.firstElementChild).toHaveClass('!h-auto');
   });
 
+  it('gives the search field and pagination buttons a 44 px target', () => {
+    render(
+      <ChargingTableWidget
+        instance={{} as never}
+        ctx={{ vehicleId: 'vehicle-1', from: '2024-01-01', to: '2024-01-31' }}
+      />,
+    );
+
+    expect(screen.getByRole('searchbox', { name: 'Search locations' })).toHaveClass('h-11');
+    for (const name of ['Prev', 'Next']) {
+      expect(screen.getByRole('button', { name })).toHaveClass('min-h-11', 'min-w-11');
+    }
+  });
+
   it('uses live fallbacks and pending cost for an active desktop row', () => {
     sessions[0] = {
       ...sessions[0]!, ended_at: null, energy_added_kwh: null, duration_min: null, soc_end: null,

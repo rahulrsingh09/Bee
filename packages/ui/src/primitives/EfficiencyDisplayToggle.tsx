@@ -49,7 +49,7 @@ export function EfficiencyDisplayToggle({ className }: EfficiencyDisplayTogglePr
       <button
         type="button"
         className={[
-          'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-bg-elevated text-fg-secondary transition-colors hover:border-border-strong hover:text-fg focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent',
+          'inline-flex h-11 w-11 items-center justify-center rounded-lg border border-border bg-bg-elevated text-fg-secondary transition-colors hover:border-border-strong hover:text-fg focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent',
           className,
         ]
           .filter(Boolean)

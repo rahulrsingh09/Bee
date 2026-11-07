@@ -27,7 +27,7 @@ export function EfficiencyDashboardPage({
         <Tooltip content={showTagFilters ? 'Hide efficiency filters' : 'Show efficiency filters'}>
           <button
             type="button"
-            className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent ${showTagFilters || hasActiveFilter ? 'border-accent/40 bg-accent/10 text-accent' : 'border-border bg-bg-elevated text-fg-secondary hover:border-border-strong hover:text-fg'}`}
+            className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border transition-colors focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent ${showTagFilters || hasActiveFilter ? 'border-accent/40 bg-accent/10 text-accent' : 'border-border bg-bg-elevated text-fg-secondary hover:border-border-strong hover:text-fg'}`}
             onClick={() => setShowTagFilters((value) => !value)}
             aria-label={showTagFilters ? 'Hide efficiency filters' : 'Show efficiency filters'}
             aria-expanded={showTagFilters}
@@ -90,7 +90,7 @@ function EfficiencyTagFilterBar({
               type="button"
               disabled={filter.untagged || filter.tagIds.length === 0}
               onClick={() => filter.setFilter?.({ ...filter, tagMatch: match })}
-              className={`h-9 rounded-md px-3 font-medium capitalize transition-colors ${filter.tagMatch === match ? 'bg-bg-surface text-fg shadow-sm' : 'text-fg-tertiary hover:text-fg'} disabled:opacity-40`}
+              className={`relative h-9 min-w-11 rounded-md px-3 font-medium capitalize transition-colors before:absolute before:inset-x-0 before:-inset-y-1 before:content-['']  ${filter.tagMatch === match ? 'bg-bg-surface text-fg shadow-sm' : 'text-fg-tertiary hover:text-fg'} disabled:opacity-40`}
             >
               {match}
             </button>

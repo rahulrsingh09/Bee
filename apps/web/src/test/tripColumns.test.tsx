@@ -9,6 +9,52 @@ vi.mock('@riviamigo/ui/primitives', async () => {
 });
 
 describe('trip columns', () => {
+  it('keeps the compact row but gives the checkbox, date link and tag button a 44 px target', () => {
+    const trip: TripRow = {
+      id: 'trip-1',
+      started_at: '2024-01-01T12:00:00Z',
+      ended_at: '2024-01-01T13:00:00Z',
+      distance_mi: 18.3,
+      duration_min: 60,
+      energy_used_kwh: 6.5,
+      efficiency_wh_mi: 355,
+      soc_start: 75,
+      soc_end: 68,
+      tags: [
+        { id: 'tag-1', vehicle_id: 'vehicle-1', name: 'Home', color_token: 'accent', created_by: 'user-1', created_at: '', updated_at: '' },
+        { id: 'tag-2', vehicle_id: 'vehicle-1', name: 'School', color_token: 'success', created_by: 'user-1', created_at: '', updated_at: '' },
+      ],
+    };
+    const onToggleSelect = vi.fn();
+    let selected = false;
+    const { rerender } = render(
+      <DataTable
+        data={[trip]}
+        columns={createTripColumns([], { onOpenTrip: vi.fn(), onToggleSelect, isSelected: () => selected, includeTags: true })}
+      />,
+    );
+
+    const checkbox = screen.getByRole('checkbox', { name: /^Select trip from / });
+    // The input itself is the 44 × 44 target; negative margins keep the 28 px footprint.
+    expect(checkbox).toHaveClass('absolute', 'inset-0', 'h-full', 'w-full', 'appearance-none');
+    expect(checkbox.closest('label')).toHaveClass('h-11', 'w-11', '-m-2');
+    expect(checkbox).not.toBeChecked();
+    fireEvent.click(checkbox);
+    expect(onToggleSelect).toHaveBeenCalledWith('trip-1');
+    selected = true;
+    rerender(
+      <DataTable
+        data={[trip]}
+        columns={createTripColumns([], { onOpenTrip: vi.fn(), onToggleSelect, isSelected: () => selected, includeTags: true })}
+      />,
+    );
+    expect(screen.getByRole('checkbox', { name: /^Select trip from / })).toBeChecked();
+
+    // Visually small controls take their target from their own ::before.
+    expect(screen.getByRole('button', { name: /^Open trip from / })).toHaveClass('relative', 'before:absolute', 'before:h-11', 'before:inset-x-0');
+    expect(screen.getByRole('button', { name: 'Show 2 tags for trip' })).toHaveClass('relative', 'before:absolute', 'before:h-11', 'before:w-11');
+  });
+
   it('opens the whole trip from the row or the date, with no separate info button', () => {
     const trip: TripRow = {
       id: 'trip-1',

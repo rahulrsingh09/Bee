@@ -165,14 +165,14 @@ export function ChargingTableWidget({ ctx }: { instance: WidgetInstance; ctx: Wi
         <button
           disabled={page <= 1}
           onClick={() => setPage((p) => p - 1)}
-          className="rounded-lg border border-border px-3 py-1.5 text-xs transition-colors hover:bg-bg-elevated disabled:opacity-40"
+          className="min-h-11 min-w-11 rounded-lg border border-border px-4 py-2 text-xs transition-colors hover:bg-bg-elevated disabled:opacity-40"
         >
           Prev
         </button>
         <button
           disabled={page >= totalPages || totalPages <= 1}
           onClick={() => setPage((p) => p + 1)}
-          className="rounded-lg border border-border px-3 py-1.5 text-xs transition-colors hover:bg-bg-elevated disabled:opacity-40"
+          className="min-h-11 min-w-11 rounded-lg border border-border px-4 py-2 text-xs transition-colors hover:bg-bg-elevated disabled:opacity-40"
         >
           Next
         </button>
@@ -191,7 +191,7 @@ export function ChargingTableWidget({ ctx }: { instance: WidgetInstance; ctx: Wi
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search location"
-            className="w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-fg outline-none placeholder:text-fg-tertiary focus:border-accent"
+            className="h-11 w-full rounded-lg border border-border bg-bg-surface px-3 text-sm text-fg outline-none placeholder:text-fg-tertiary focus:border-accent"
           />
         </label>
         {!isMobile && (

@@ -240,8 +240,8 @@ describe('ExternalConnectionsSection', () => {
 
     const mode = await screen.findByRole('button', { name: 'Map basemap mode' });
     const provider = screen.getByRole('button', { name: 'Basemap provider' });
-    expect(mode).toHaveClass('h-9');
-    expect(provider).toHaveClass('h-9');
+    expect(mode).toHaveClass('h-11');
+    expect(provider).toHaveClass('h-11');
     expect(mode.closest('label')).toHaveClass('content-start');
     expect(provider.closest('label')).toHaveClass('content-start');
     expect(mode.closest('label')?.parentElement).toHaveClass('items-start');

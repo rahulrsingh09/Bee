@@ -5,7 +5,7 @@ import { Eraser, Moon, Plus, Save, Sun } from 'lucide-react';
 import { PiArrowFatLinesRight } from 'react-icons/pi';
 import { api, useAuth, useBasemapConfig, useTrips, useTripMapRoutes, useUpdateTripTagAssignments, useUserPreferences } from '@riviamigo/hooks';
 import { useDocumentTheme } from '@riviamigo/ui/hooks';
-import { DataTable, createTripColumns, formatTripBatteryRange, isDefaultTripDriveMode, type TripRow } from '@riviamigo/ui/tables';
+import { DataTable, TripSelectCheckbox, createTripColumns, formatTripBatteryRange, isDefaultTripDriveMode, type TripRow } from '@riviamigo/ui/tables';
 import { Badge, Button, SelectPicker, Tooltip } from '@riviamigo/ui/primitives';
 import { TripMapChart, type TripMapRoute, type MapStyleMode } from '@riviamigo/ui/charts';
 import { formatMiles, formatDuration, formatEfficiency } from '@riviamigo/ui/lib/utils';
@@ -57,15 +57,12 @@ function TripCard({
           : 'border-border bg-bg-elevated/60 hover:bg-bg-elevated'
       }`}
     >
-      <label className="absolute right-2 top-2 inline-flex h-7 w-7 cursor-pointer items-center justify-center">
-        <input
-          type="checkbox"
-          className="h-4 w-4 accent-accent"
-          checked={isSelected}
-          onChange={onToggleSelect}
-          aria-label={`Select trip from ${date}`}
-        />
-      </label>
+      <TripSelectCheckbox
+        className="absolute right-0 top-0 z-10 m-0"
+        checked={isSelected}
+        onChange={onToggleSelect}
+        label={`Select trip from ${date}`}
+      />
       <button type="button" onClick={onOpen} className="w-full text-left pr-9" aria-label={`Open trip from ${date}`}>
       <div className="flex items-center justify-between gap-2 mb-1.5">
         <span className="text-xs text-fg-tertiary">
@@ -186,7 +183,7 @@ export function TripsMapWidget({ ctx }: { instance: WidgetInstance; ctx: WidgetC
           <button
             onClick={() => setMapStyleOverride((s) => (s ?? mapStyle) === 'dark' ? 'light' : 'dark')}
             aria-label={effectiveMapStyle === 'dark' ? 'Switch to light map' : 'Switch to dark map'}
-            className="absolute bottom-2 right-2 z-10 flex h-8 w-8 items-center justify-center rounded-lg border border-accent bg-bg-surface text-accent shadow-lg transition-colors hover:bg-bg-elevated"
+            className="absolute bottom-2 right-2 z-10 flex h-11 w-11 items-center justify-center rounded-lg border border-accent bg-bg-surface text-accent shadow-lg transition-colors hover:bg-bg-elevated"
           >
             {effectiveMapStyle === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </button>
@@ -200,11 +197,11 @@ export function TripsMapWidget({ ctx }: { instance: WidgetInstance; ctx: WidgetC
         onHighlight={setHighlightedRouteId}
       />
       {selectedRouteIds.length > 0 ? (
-        <div className="flex shrink-0 items-center justify-between gap-3 rounded-lg border border-accent/30 bg-accent/10 px-3 py-2 text-xs text-fg-secondary">
+        <div className="flex shrink-0 items-center justify-between gap-3 rounded-lg border border-accent/30 bg-accent/10 px-3 py-1 text-xs text-fg-secondary">
           {selectedRouteIds.length === 1 ? (
             <button
               type="button"
-              className="group flex w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/15"
+              className="group flex min-h-11 w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/15"
               onClick={() => navigate({ to: '/trips/$tripId', params: { tripId: selectedTripId! } })}
             >
               Open trip
@@ -213,7 +210,7 @@ export function TripsMapWidget({ ctx }: { instance: WidgetInstance; ctx: WidgetC
           ) : (
             <>
               <span>{selectedRouteIds.length} routes selected.</span>
-              <button className="font-medium text-accent hover:underline" onClick={clearTripSelection}>Show all</button>
+              <button type="button" className="inline-flex min-h-11 min-w-11 items-center justify-center px-2 font-medium text-accent hover:underline" onClick={clearTripSelection}>Show all</button>
             </>
           )}
         </div>
@@ -322,14 +319,14 @@ export function TripsTableWidget({ ctx }: { instance: WidgetInstance; ctx: Widge
         <button
           disabled={page <= 1}
           onClick={() => setTripTablePage(page - 1)}
-          className="rounded-lg border border-border px-3 py-1.5 text-xs transition-colors hover:bg-bg-elevated disabled:opacity-40"
+          className="min-h-11 min-w-11 rounded-lg border border-border px-4 py-2 text-xs transition-colors hover:bg-bg-elevated disabled:opacity-40"
         >
           Prev
         </button>
         <button
           disabled={page >= totalPages || totalPages <= 1}
           onClick={() => setTripTablePage(page + 1)}
-          className="rounded-lg border border-border px-3 py-1.5 text-xs transition-colors hover:bg-bg-elevated disabled:opacity-40"
+          className="min-h-11 min-w-11 rounded-lg border border-border px-4 py-2 text-xs transition-colors hover:bg-bg-elevated disabled:opacity-40"
         >
           Next
         </button>
@@ -347,20 +344,20 @@ export function TripsTableWidget({ ctx }: { instance: WidgetInstance; ctx: Widge
             value={search}
             onChange={(event) => setTripTableSearch(event.target.value)}
             placeholder="Search start, destination, or tag"
-            className="h-9 w-full rounded-lg border border-border bg-bg-surface px-3 text-sm text-fg outline-none placeholder:text-fg-tertiary focus:border-accent focus:ring-0"
+            className="h-11 w-full rounded-lg border border-border bg-bg-surface px-3 text-sm text-fg outline-none placeholder:text-fg-tertiary focus:border-accent focus:ring-0"
           />
         </label>
-        <div className="flex h-9 items-center gap-3">
+        <div className="flex h-11 items-center gap-3">
           {selectedIds.length > 0 ? (
-            <div className="inline-flex h-9 items-center gap-2 rounded-lg border border-accent/30 bg-accent/10 px-3 text-xs text-fg-secondary">
+            <div className="inline-flex h-11 items-center gap-2 rounded-lg border border-accent/30 bg-accent/10 pl-3 pr-1 text-xs text-fg-secondary">
               <span>{selectedIds.length} selected</span>
-              <button className="font-medium text-accent hover:underline" onClick={clearTripSelection}>
+              <button type="button" className="inline-flex h-11 min-w-11 items-center justify-center px-2 font-medium text-accent hover:underline" onClick={clearTripSelection}>
                 Clear
               </button>
             </div>
           ) : null}
           {!isMobile && (
-            <label className="flex h-9 items-center gap-2 text-xs text-fg-tertiary">
+            <label className="flex h-11 items-center gap-2 text-xs text-fg-tertiary">
               Rows
               <SelectPicker
                 className="min-w-[4.5rem]"

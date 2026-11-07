@@ -194,7 +194,8 @@ export function SelectPicker<TValue extends string = string>({
     }
   }
 
-  const triggerSize = size === 'sm' ? 'h-8 px-2.5 text-xs' : 'h-9 px-3 text-sm';
+  // Both sizes keep a 44 px touch target; `sm` only tightens padding and text.
+  const triggerSize = size === 'sm' ? 'h-11 px-2.5 text-xs' : 'h-11 px-3 text-sm';
 
   return (
     <div ref={rootRef} className={cn('relative inline-block min-w-0', className)}>

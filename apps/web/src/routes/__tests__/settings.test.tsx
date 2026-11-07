@@ -1423,11 +1423,13 @@ describe('Settings page', () => {
     expect(document.documentElement.classList.contains('dark')).toBe(true);
   });
 
-  it('renders the Account section with Sign Out', () => {
+  it('renders the Account section with a touch-safe Sign out button', () => {
     renderSettings();
     clickSettingsSection('Account');
     expect(screen.getAllByText('Account').length).toBeGreaterThan(0);
-    expect(screen.getByText('Sign Out')).toBeInTheDocument();
+    // 44 px is the project touch-target minimum (docs/branding.md).
+    expect(screen.getByRole('button', { name: 'Sign out' })).toHaveClass('h-11');
+    expect(screen.getByRole('button', { name: 'Change password' })).toHaveClass('h-11');
   });
 
   it('renders the telemetry explorer for admin users', async () => {
@@ -1816,7 +1818,7 @@ describe('Settings page', () => {
     getBackupOverview.mockResolvedValue(baseline);
   });
 
-  it('calls logout and navigates on Sign Out click', async () => {
+  it('calls logout and navigates on Sign out click', async () => {
     const logoutFn = vi.fn().mockResolvedValue(undefined);
     vi.doMock('@riviamigo/hooks', () => ({
       useAuth: () => ({ logout: logoutFn }),
@@ -1824,9 +1826,9 @@ describe('Settings page', () => {
     }));
     renderSettings();
     clickSettingsSection('Account');
-    fireEvent.click(screen.getByText('Sign Out'));
+    fireEvent.click(screen.getByText('Sign out'));
     // logout is async; just assert the click doesn't throw
-    expect(screen.getByText('Sign Out')).toBeInTheDocument();
+    expect(screen.getByText('Sign out')).toBeInTheDocument();
   });
 
   it('shows live password requirements and changes the password only after confirmation matches', async () => {

@@ -161,6 +161,20 @@ describe('TripsTableWidget trip list', () => {
     expect(navigate).toHaveBeenCalledTimes(1);
   });
 
+  it('gives the search, pagination and trip checkboxes a 44 px target', () => {
+    setViewport(390);
+    const { container } = render(<TripsTableWidget instance={{} as never} ctx={ctx} />);
+
+    expect(screen.getByRole('searchbox', { name: 'Search trips' })).toHaveClass('h-11');
+    for (const name of ['Prev', 'Next']) {
+      expect(screen.getByRole('button', { name })).toHaveClass('min-h-11', 'min-w-11');
+    }
+    const checkbox = within(container.querySelector('[data-trip-card]') as HTMLElement)
+      .getByRole('checkbox', { name: /^Select trip from / });
+    expect(checkbox).toHaveClass('absolute', 'inset-0', 'h-full', 'w-full');
+    expect(checkbox.closest('label')).toHaveClass('h-11', 'w-11');
+  });
+
   it('hides the Mode column when every visible trip uses the default mode', () => {
     setViewport(1280);
     mockTrips.mockReturnValue({ data: { items: [trips[0]], total: 1, per_page: 15 }, isLoading: false });

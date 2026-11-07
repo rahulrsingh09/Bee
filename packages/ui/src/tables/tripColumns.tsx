@@ -1,10 +1,11 @@
 import * as React from 'react';
 import { createColumnHelper, type ColumnDef } from '@tanstack/react-table';
-import { Tag } from 'lucide-react';
+import { Check, Tag } from 'lucide-react';
 import { LuTags } from 'react-icons/lu';
 import { Badge } from '../primitives/Badge';
 import { Tooltip } from '../primitives/Tooltip';
 import {
+  cn,
   formatMiles,
   formatDuration,
   formatPercent,
@@ -63,6 +64,45 @@ export function formatTripBatteryRange(start: number | null | undefined, end: nu
   return `${formatPercent(start)} → ${formatPercent(end)}`;
 }
 
+export interface TripSelectCheckboxProps {
+  checked: boolean;
+  onChange: () => void;
+  label: string;
+  className?: string;
+}
+
+/**
+ * Trip selection checkbox with a 44 × 44 px touch target. The input fills the
+ * whole target and stays visible to assistive technology; the 16 px box is
+ * drawn by the sibling elements so the table keeps its compact look. Negative
+ * margins keep the layout footprint at 28 px.
+ */
+export function TripSelectCheckbox({ checked, onChange, label, className }: TripSelectCheckboxProps) {
+  return (
+    <label
+      className={cn('relative -m-2 inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center', className)}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <input
+        type="checkbox"
+        className="peer absolute inset-0 m-0 h-full w-full cursor-pointer appearance-none rounded-md bg-transparent focus-visible:outline-none"
+        checked={checked}
+        onChange={onChange}
+        aria-label={label}
+      />
+      <span
+        aria-hidden="true"
+        className="pointer-events-none h-4 w-4 rounded border border-border-strong bg-bg-surface transition-colors peer-checked:border-accent peer-checked:bg-accent peer-focus-visible:ring-2 peer-focus-visible:ring-accent peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-bg-page"
+      />
+      <Check
+        aria-hidden="true"
+        strokeWidth={3}
+        className="pointer-events-none absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 text-fg-on-accent opacity-0 peer-checked:opacity-100"
+      />
+    </label>
+  );
+}
+
 export function createTripColumns(places: Place[] = [], options: CreateTripColumnsOptions = {}) {
   const includeTags = options.includeTags ?? true;
   const includeMode = options.includeMode ?? true;
@@ -81,18 +121,11 @@ export function createTripColumns(places: Place[] = [], options: CreateTripColum
       cell: (info) => {
         const trip = info.row.original;
         return (
-          <label
-            className="inline-flex h-7 w-7 cursor-pointer items-center justify-center"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <input
-              type="checkbox"
-              className="h-4 w-4 accent-accent"
-              checked={isSelected?.(trip.id) ?? false}
-              onChange={() => onToggleSelect(trip.id)}
-              aria-label={`Select trip from ${formatAppDateTime(trip.started_at)}`}
-            />
-          </label>
+          <TripSelectCheckbox
+            checked={isSelected?.(trip.id) ?? false}
+            onChange={() => onToggleSelect(trip.id)}
+            label={`Select trip from ${formatAppDateTime(trip.started_at)}`}
+          />
         );
       },
     }));
@@ -110,7 +143,7 @@ export function createTripColumns(places: Place[] = [], options: CreateTripColum
         return (
           <button
             type="button"
-            className="whitespace-nowrap rounded-sm text-left font-medium text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="relative whitespace-nowrap rounded-sm text-left font-medium text-fg before:absolute before:inset-x-0 before:top-1/2 before:h-11 before:-translate-y-1/2 before:content-[''] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             aria-label={`Open trip from ${label}`}
             onClick={(event) => {
               event.stopPropagation();
@@ -235,7 +268,7 @@ export function createTripColumns(places: Place[] = [], options: CreateTripColum
                 aria-label={`Show ${tags.length} tag${tags.length === 1 ? '' : 's'} for trip`}
                 title="Show trip tags"
                 onClick={(event) => event.stopPropagation()}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border bg-bg-surface p-1 text-fg-tertiary transition-colors hover:border-border-strong hover:text-fg"
+                className="relative inline-flex h-7 w-7 items-center justify-center rounded-md border border-border bg-bg-surface p-1 text-fg-tertiary transition-colors before:absolute before:left-1/2 before:top-1/2 before:h-11 before:w-11 before:-translate-x-1/2 before:-translate-y-1/2 before:content-[''] hover:border-border-strong hover:text-fg"
               >
                 <LuTags className="h-4 w-4" />
               </button>

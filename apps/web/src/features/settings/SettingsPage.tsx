@@ -1895,7 +1895,8 @@ export function SettingsContent({ initialSection, oidcFeedback, oidcFeedbackKind
                     {passwordChangeError && <p role="alert" className="rounded-lg border border-status-danger/20 bg-status-danger/10 px-3 py-2 text-xs text-status-danger">{passwordChangeError}</p>}
                     <Button
                       type="submit"
-                      size="sm"
+                      size="md"
+                      className="h-11"
                       loading={changingPassword}
                       disabled={!currentPassword || newPassword.length < PASSWORD_MIN_LENGTH || newPassword !== confirmNewPassword}
                     >
@@ -1903,9 +1904,9 @@ export function SettingsContent({ initialSection, oidcFeedback, oidcFeedbackKind
                     </Button>
                   </form>}
                   <div className="border-t border-border pt-5">
-                    <Button variant="danger" size="sm" iconLeft={<LogOut className="h-3.5 w-3.5" />}
+                    <Button variant="danger" size="md" className="h-11" iconLeft={<LogOut className="h-4 w-4" />}
                       onClick={handleLogout}>
-                      Sign Out
+                      Sign out
                     </Button>
                   </div>
                 </CardContent>

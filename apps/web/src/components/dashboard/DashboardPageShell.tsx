@@ -334,7 +334,6 @@ function DashboardPageShellContent({
     <DateRangePicker
       timeframe={timeframe}
       onChange={setTimeframe}
-      triggerClassName="h-9"
     />
   ) : null;
   const vehicleAction = hasVehicleChoices && !currentEditMode ? (

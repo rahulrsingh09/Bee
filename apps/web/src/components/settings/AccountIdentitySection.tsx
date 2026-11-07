@@ -72,6 +72,7 @@ export function AccountIdentitySection() {
         ) : (
           <Button
             size="sm"
+            className="h-11"
             loading={link.isPending}
             disabled={!data.oidc_link_available}
             onClick={() => link.mutate()}
@@ -114,6 +115,7 @@ export function AccountIdentitySection() {
           </p>
           <Button
             size="sm"
+            className="h-11"
             loading={setInitialPassword.isPending}
             disabled={newPassword.length < 12 || newPassword !== confirmPassword}
             onClick={() => setInitialPassword.mutate()}
@@ -133,6 +135,7 @@ export function AccountIdentitySection() {
           <Button
             variant="secondary"
             size="sm"
+            className="h-11"
             loading={unlink.isPending}
             disabled={!password}
             onClick={() => unlink.mutate()}

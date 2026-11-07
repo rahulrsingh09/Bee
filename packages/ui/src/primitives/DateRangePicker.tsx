@@ -207,7 +207,7 @@ export function DateRangePicker({
         aria-haspopup="dialog"
         aria-expanded={open}
         className={cn(
-          'flex h-9 items-center gap-2 rounded-lg border bg-bg-elevated px-3 text-sm',
+          'flex h-11 items-center gap-2 rounded-lg border bg-bg-elevated px-3 text-sm',
           controlBorderClassName,
           'text-fg-secondary transition-colors duration-150 hover:border-fg-tertiary hover:text-fg',
           triggerClassName
@@ -249,7 +249,7 @@ export function DateRangePicker({
                     setOpen(false);
                   }}
                   className={cn(
-                    'rounded-md px-3 py-1.5 text-left text-sm transition-colors',
+                    'min-h-11 rounded-md px-3 py-1.5 text-left text-sm transition-colors',
                     matchesPreset(timeframe, preset.key)
                       ? 'bg-accent-muted text-accent'
                       : 'text-fg-secondary hover:bg-bg-surface hover:text-fg'
@@ -268,7 +268,7 @@ export function DateRangePicker({
                   }
                 }}
                 className={cn(
-                  'flex items-center justify-between rounded-md px-3 py-1.5 text-left text-sm transition-colors',
+                  'flex min-h-11 items-center justify-between rounded-md px-3 py-1.5 text-left text-sm transition-colors',
                   customExpanded || timeframe.kind === 'custom'
                     ? 'bg-accent-muted text-accent'
                     : 'text-fg-secondary hover:bg-bg-surface hover:text-fg'
@@ -370,7 +370,7 @@ export function DateRangePicker({
                 <button
                   type="button"
                   onClick={applyCustomRange}
-                  className="h-8 w-full rounded-lg bg-accent px-3 text-sm font-medium text-fg-on-accent hover:bg-accent/90"
+                  className="h-11 w-full rounded-lg bg-accent px-3 text-sm font-medium text-fg-on-accent hover:bg-accent/90"
                 >
                   Apply custom range
                 </button>
@@ -415,7 +415,7 @@ function DateTimeRow({
           : 'border-border bg-bg-surface hover:border-border-strong'
       )}
     >
-      <button type="button" onClick={onTarget} className="w-full text-left">
+      <button type="button" onClick={onTarget} className="min-h-11 w-full text-left">
         <div className="flex items-baseline justify-between gap-2">
           <div className="text-[11px] uppercase tracking-wide text-fg-tertiary">{label}</div>
           <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-fg-tertiary">
@@ -431,7 +431,7 @@ function DateTimeRow({
           onFocus={onTarget}
           placeholder="6/3/26"
           className={cn(
-            'h-8 w-full min-w-0 rounded-md border bg-bg-elevated px-2 text-xs text-fg outline-none placeholder:text-fg-tertiary focus:border-accent',
+            'h-11 w-full min-w-0 rounded-md border bg-bg-elevated px-2 text-xs text-fg outline-none placeholder:text-fg-tertiary focus:border-accent',
             controlBorderClassName
           )}
         />
@@ -439,7 +439,7 @@ function DateTimeRow({
           <Clock className="h-3.5 w-3.5 text-fg-tertiary" />
           <SelectPicker
             className="min-w-0 flex-1"
-            triggerClassName="h-7 rounded-md px-1 text-xs"
+            triggerClassName="rounded-md px-1 text-xs"
             value={String(hours)}
             onChange={(value) => onHour(Number(value))}
             aria-label={`${label} hour`}
@@ -452,7 +452,7 @@ function DateTimeRow({
           <span className="text-fg-tertiary">:</span>
           <SelectPicker
             className="min-w-0 flex-1"
-            triggerClassName="h-7 rounded-md px-1 text-xs"
+            triggerClassName="rounded-md px-1 text-xs"
             value={String(minutes)}
             onChange={(value) => onMinute(Number(value))}
             aria-label={`${label} minute`}

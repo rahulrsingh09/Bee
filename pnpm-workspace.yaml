@@ -52,20 +52,22 @@ overrides:
   compression: 1.8.2
   fast-uri: 3.1.9
   colord: 2.9.4
-  follow-redirects: 1.16.1
-  # 4.3.0 does not fix the disputed max-stale advisory; keep the reviewed version.
+  follow-redirects: 1.16.2
+  # The max-stale advisory was withdrawn on 2026-10-28; keep the reviewed version.
   http-cache-semantics: 4.2.0
   image-size: 2.0.4
-  'joi@17': 17.13.8
+  'glob@13': 14.0.4
+  'joi@17': 17.13.9
   js-yaml: 4.3.2
   launch-editor: 2.14.2
+  'minimatch@10': 11.0.5
   nanoid: 3.3.18
   postcss: 8.5.23
   postcss-selector-parser: 7.1.6
   proxy-addr: 2.0.8
-  qs: 6.16.0
+  qs: 6.16.1
   serialize-javascript: 7.1.3
-  seroval: 1.6.8
+  seroval: 1.6.11
   shell-quote: 1.12.0
   source-map-js: 1.2.2
   svgo: 3.3.5

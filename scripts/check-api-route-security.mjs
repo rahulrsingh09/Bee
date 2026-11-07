@@ -37,6 +37,7 @@ const authorizationMatrix = new Map([
   ['grafana', 'vehicle_read'],
   ['health', 'vehicle_read'],
   ['idle_drain', 'vehicle_read'],
+  ['insights', 'vehicle_read'],
   ['live', 'vehicle_read'],
   ['locations', 'vehicle_read'],
   ['metrics', 'vehicle_read'],

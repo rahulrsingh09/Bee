@@ -179,7 +179,7 @@ describe('DashboardChartWidget - smoothing controls', () => {
     expect(LEGACY_BUNDLED_CHART_BASELINE_REVISION).toBe(
       'dbd7ae58be996e6eb5a1b01582ab73f46fb388af'
     );
-    expect(CURRENT_BUNDLED_BASELINE_REVISION).toBe(5);
+    expect(CURRENT_BUNDLED_BASELINE_REVISION).toBe(6);
     for (const seed of chartSeeds) {
       const expected = LEGACY_BUNDLED_CHART_CONTRACTS[seed.slug];
       expect(expected, `missing immutable oracle entry for ${seed.slug}`).toBeDefined();

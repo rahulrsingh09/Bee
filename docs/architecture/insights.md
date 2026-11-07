@@ -69,16 +69,19 @@ The `now` scope returns the attention rules first.
 |---|---|---|---|---|
 | `route_comparison` | trip | 5 or more earlier drives with the same start and end | `this_mi_per_kwh`, `usual_mi_per_kwh` (median), `pct_diff`, `rank`, `count` | info |
 | `days_of_range` | now | 14 or more days with data in the last 30 whole local days, and a median above 0 | `range_mi`, `median_daily_mi`, `days`, `days_with_data` | info |
-| `high_parked_loss` | now | 7 or more earlier parks; latest loss 2 or more battery points and 2 or more times the median | `loss_pct`, `usual_loss_pct`, `ratio`, `duration_hours`, `started_at`, `ended_at` | attention |
-| `charge_shape` | charge | DC charge with 8 or more measured curve points | `peak_kw`, `peak_soc`, `peak_minute`, `low_kw`, `low_soc`, `phases` | info |
-| `usual_dc_band` | charge | DC charge and 3 or more earlier DC charges with a battery-% curve | `bands` (p10 to p90 kW per 1% battery), `sessions`, `within_band_pct`, `compared_bins` | info |
+| `high_parked_loss` | now | 7 or more earlier parks; the latest park ended in the last 3 days, lost 2 or more battery points, and drained at 2 or more times the median rate per hour | `loss_pct`, `usual_loss_pct`, `drain_pct_per_hour`, `usual_drain_pct_per_hour`, `ratio`, `duration_hours`, `started_at`, `ended_at` | attention |
+| `charge_shape` | charge | Ended DC charge with 8 or more measured curve points | `peak_kw`, `peak_soc`, `peak_minute`, `low_kw`, `low_soc`, `phases` | info |
+| `usual_dc_band` | charge | Ended DC charge and 3 or more earlier DC charges with a battery-% curve | `bands` (p10 to p90 kW per 1% battery), `sessions`, `within_band_pct`, `compared_bins` | info |
 | `missing_price` | now | 1 or more charges with no price in the last 90 days | `count`, `window_days` | info |
 | `stale_data` | now | No telemetry for more than 6 hours | `hours`, `last_seen_at` | attention |
 
 ### Rule details
 
-**Route comparison.** A trip end matches by saved place id. An end without a
-saved place matches by coordinates rounded to 3 decimal places (about 110 m).
+**Route comparison.** A trip end matches by saved place id. The place is the
+signed-in member's own correction when there is one
+(`trip_user_annotations`), else the detected place, as on the trip pages. This
+applies to this trip and to the earlier drives. An end without a saved place
+matches by coordinates rounded to 3 decimal places (about 110 m).
 The rule reads the 200 most recent earlier drives on the route. Efficiency is
 `1000 / efficiency_wh_per_mile`. `rank` 1 is the best of `count + 1` drives,
 this drive included.
@@ -90,19 +93,30 @@ divided by the median daily miles.
 
 **High parked loss.** The rule uses the validated parked periods of the Parked
 page (`fetch_idle_drain_periods`): 6 hours or longer, in the last 90 days, the
-100 most recent. The latest period is compared with the median loss of the
-earlier periods. `ratio` is `null` when the median loss is 0.
+100 most recent. The rule compares the drain rate of the latest period
+(`drain_pct_per_hour`, battery points per hour, as on the Parked page) with the
+median rate of the earlier periods. A long park at the usual rate is not
+flagged. The latest period must also lose 2 or more battery points.
+`usual_loss_pct` is the median total loss of the earlier periods, for context
+only. `ratio` is the latest rate divided by the median rate, and is `null` when
+the median rate is 0.
+
+A park that ended more than 3 days ago is not current, so the rule is silent.
+A park ends when a completed drive or charge starts. When no completed drive or
+charge started in the last 3 days, the rule does not read the parked periods.
 
 **Charge shape.** The curve source follows the session chart order: telemetry
 power when the vehicle sends it, else the recorded Parallax and Rivian points.
 The rule does not use the battery-% estimate, because an insight describes
-measured power only. Points above 300 kW are ignored. The peak phase is the
+measured power only. Points above 300 kW are ignored. An open charge gets no
+charge insights, because its curve has no end yet. The peak phase is the
 unbroken run of points around the peak within 3% of the peak kW. The climb
 phase is before it and the taper phase is after it. `low_kw` is the lowest
 power at or after the peak. A recorded point with no battery % gets one
 interpolated by time between the session start and end battery %.
 
-**Usual DC band.** The rule reads the 12 most recent earlier DC charges. Each
+**Usual DC band.** The rule reads the 12 most recent earlier ended DC charges,
+and loads their curves 4 at a time. Each
 charge gives a mean kW for each whole battery percent. A battery percent shows
 in `bands` only when 3 or more charges cover it. `within_band_pct` is the share
 of this charge's battery percents that are inside p10 to p90.

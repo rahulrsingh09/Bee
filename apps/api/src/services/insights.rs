@@ -34,14 +34,18 @@ pub const RANGE_MIN_DATA_DAYS: usize = 14;
 pub const PARKED_MIN_EARLIER: usize = 7;
 /// A parked loss must be at least this many battery percentage points.
 pub const PARKED_MIN_LOSS_PCT: f64 = 2.0;
-/// A parked loss must be at least this multiple of the usual loss.
+/// A parked drain rate must be at least this multiple of the usual rate.
 pub const PARKED_MIN_RATIO: f64 = 2.0;
+/// The latest park must have ended in the last this many days.
+pub const PARKED_MAX_AGE_DAYS: i64 = 3;
 /// Days of parked periods read for the parked-loss baseline.
 pub const PARKED_WINDOW_DAYS: i64 = 90;
 /// Parked periods shorter than this are ignored (the Parked page default).
 pub const PARKED_MIN_DURATION_HOURS: f64 = 6.0;
 /// Most recent parked periods read for the parked-loss baseline.
 pub const PARKED_MAX_PERIODS: usize = 100;
+/// Earlier DC charge curves read at the same time.
+pub const DC_BAND_CONCURRENT_LOADS: usize = 4;
 /// Measured curve points needed before a charge shape shows.
 pub const CHARGE_SHAPE_MIN_POINTS: usize = 8;
 /// A point within this share of the peak kW is part of the peak phase.
@@ -354,32 +358,63 @@ pub struct ParkedLoss {
     pub ended_at: DateTime<Utc>,
     pub duration_hours: f64,
     pub loss_pct: f64,
+    /// Battery percentage points lost per hour (the Parked page rate).
+    pub drain_pct_per_hour: f64,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct HighParkedLossValues {
     pub loss_pct: f64,
+    /// Median total loss of the earlier parks. For context only; the rule
+    /// compares rates.
     pub usual_loss_pct: f64,
-    /// Latest loss divided by the usual loss; null when the usual loss is 0.
+    pub drain_pct_per_hour: f64,
+    /// Median drain rate of the earlier parks.
+    pub usual_drain_pct_per_hour: f64,
+    /// Latest drain rate divided by the usual rate; null when the usual rate is 0.
     pub ratio: Option<f64>,
     pub duration_hours: f64,
     pub started_at: DateTime<Utc>,
     pub ended_at: DateTime<Utc>,
 }
 
-pub fn high_parked_loss(latest: &ParkedLoss, earlier: &[f64]) -> Option<HighParkedLossValues> {
-    let earlier = sorted_finite(earlier.iter().copied());
-    if earlier.len() < PARKED_MIN_EARLIER || !latest.loss_pct.is_finite() {
+/// Flag the latest park when it drained at 2 or more times the usual rate
+/// and lost 2 or more battery points. A park that ended more than
+/// `PARKED_MAX_AGE_DAYS` before `now` is not current, so it is not flagged.
+pub fn high_parked_loss(
+    latest: &ParkedLoss,
+    earlier: &[ParkedLoss],
+    now: DateTime<Utc>,
+) -> Option<HighParkedLossValues> {
+    if latest.ended_at < now - Duration::days(PARKED_MAX_AGE_DAYS)
+        || !latest.loss_pct.is_finite()
+        || !latest.drain_pct_per_hour.is_finite()
+    {
         return None;
     }
-    let usual = percentile_sorted(&earlier, 0.5)?;
-    if latest.loss_pct < PARKED_MIN_LOSS_PCT || latest.loss_pct < PARKED_MIN_RATIO * usual {
+    let earlier: Vec<&ParkedLoss> = earlier
+        .iter()
+        .filter(|p| p.loss_pct.is_finite() && p.drain_pct_per_hour.is_finite())
+        .collect();
+    if earlier.len() < PARKED_MIN_EARLIER {
+        return None;
+    }
+    let usual_rate = percentile_sorted(
+        &sorted_finite(earlier.iter().map(|p| p.drain_pct_per_hour)),
+        0.5,
+    )?;
+    let usual_loss = percentile_sorted(&sorted_finite(earlier.iter().map(|p| p.loss_pct)), 0.5)?;
+    if latest.loss_pct < PARKED_MIN_LOSS_PCT
+        || latest.drain_pct_per_hour < PARKED_MIN_RATIO * usual_rate
+    {
         return None;
     }
     Some(HighParkedLossValues {
         loss_pct: latest.loss_pct,
-        usual_loss_pct: usual,
-        ratio: (usual > 0.0).then(|| latest.loss_pct / usual),
+        usual_loss_pct: usual_loss,
+        drain_pct_per_hour: latest.drain_pct_per_hour,
+        usual_drain_pct_per_hour: usual_rate,
+        ratio: (usual_rate > 0.0).then(|| latest.drain_pct_per_hour / usual_rate),
         duration_hours: latest.duration_hours,
         started_at: latest.started_at,
         ended_at: latest.ended_at,
@@ -646,10 +681,12 @@ pub fn stale_data(
 // ---------------------------------------------------------------------------
 
 /// Evaluate every release-1 rule for `scope`. A trip or charge outside the
-/// vehicle is `NotFound`. The caller has already authorized the vehicle.
+/// vehicle is `NotFound`. The caller has already authorized `user_id` for the
+/// vehicle; `user_id` selects that member's own trip place corrections.
 pub async fn load_insights(
     pool: &PgPool,
     vehicle_id: Uuid,
+    user_id: Uuid,
     scope: InsightScope,
     now: DateTime<Utc>,
 ) -> Result<Vec<Insight>, AppError> {
@@ -664,7 +701,7 @@ pub async fn load_insights(
             vec![stale, parked, price, range]
         }
         InsightScope::Trip(trip_id) => {
-            vec![load_route_comparison(pool, vehicle_id, trip_id).await?]
+            vec![load_route_comparison(pool, vehicle_id, user_id, trip_id).await?]
         }
         InsightScope::Charge(charge_id) => {
             load_charge_insights(pool, vehicle_id, charge_id).await?
@@ -688,15 +725,23 @@ struct TripRouteRow {
 async fn load_route_comparison(
     pool: &PgPool,
     vehicle_id: Uuid,
+    user_id: Uuid,
     trip_id: Uuid,
 ) -> Result<Option<Insight>, AppError> {
+    // Places follow the member's own corrections, as on the trip pages
+    // (`trip_user_annotations`, see `routes::trips`).
     let trip = sqlx::query_as::<_, TripRouteRow>(
-        "SELECT started_at, start_geofence_id, end_geofence_id, start_lat, start_lng, end_lat, end_lng, \
-                efficiency_wh_per_mile \
-         FROM riviamigo.trips WHERE id = $1 AND vehicle_id = $2",
+        "SELECT t.started_at, \
+                COALESCE(tua.start_geofence_id, t.start_geofence_id) AS start_geofence_id, \
+                COALESCE(tua.end_geofence_id, t.end_geofence_id) AS end_geofence_id, \
+                t.start_lat, t.start_lng, t.end_lat, t.end_lng, t.efficiency_wh_per_mile \
+         FROM riviamigo.trips t \
+         LEFT JOIN riviamigo.trip_user_annotations tua ON tua.trip_id = t.id AND tua.user_id = $3 \
+         WHERE t.id = $1 AND t.vehicle_id = $2",
     )
     .bind(trip_id)
     .bind(vehicle_id)
+    .bind(user_id)
     .fetch_optional(pool)
     .await?
     .ok_or(AppError::NotFound)?;
@@ -716,19 +761,22 @@ async fn load_route_comparison(
     // A saved place matches by id. Without a place, an end matches by
     // coordinates rounded to ROUTE_COORDINATE_DECIMALS on both sides.
     let earlier = sqlx::query_as::<_, (Uuid, f64)>(
-        r#"SELECT id, efficiency_wh_per_mile
-           FROM riviamigo.trips
-           WHERE vehicle_id = $1
-             AND id <> $2
-             AND started_at < $3
-             AND efficiency_wh_per_mile > 0
-             AND CASE WHEN $4::uuid IS NOT NULL THEN start_geofence_id = $4::uuid
-                      ELSE round(start_lat::numeric, $10) = round($5::float8::numeric, $10)
-                       AND round(start_lng::numeric, $10) = round($6::float8::numeric, $10) END
-             AND CASE WHEN $7::uuid IS NOT NULL THEN end_geofence_id = $7::uuid
-                      ELSE round(end_lat::numeric, $10) = round($8::float8::numeric, $10)
-                       AND round(end_lng::numeric, $10) = round($9::float8::numeric, $10) END
-           ORDER BY started_at DESC
+        r#"SELECT t.id, t.efficiency_wh_per_mile
+           FROM riviamigo.trips t
+           LEFT JOIN riviamigo.trip_user_annotations tua ON tua.trip_id = t.id AND tua.user_id = $12
+           WHERE t.vehicle_id = $1
+             AND t.id <> $2
+             AND t.started_at < $3
+             AND t.efficiency_wh_per_mile > 0
+             AND CASE WHEN $4::uuid IS NOT NULL
+                      THEN COALESCE(tua.start_geofence_id, t.start_geofence_id) = $4::uuid
+                      ELSE round(t.start_lat::numeric, $10) = round($5::float8::numeric, $10)
+                       AND round(t.start_lng::numeric, $10) = round($6::float8::numeric, $10) END
+             AND CASE WHEN $7::uuid IS NOT NULL
+                      THEN COALESCE(tua.end_geofence_id, t.end_geofence_id) = $7::uuid
+                      ELSE round(t.end_lat::numeric, $10) = round($8::float8::numeric, $10)
+                       AND round(t.end_lng::numeric, $10) = round($9::float8::numeric, $10) END
+           ORDER BY t.started_at DESC
            LIMIT $11"#,
     )
     .bind(vehicle_id)
@@ -742,6 +790,7 @@ async fn load_route_comparison(
     .bind(end_lng)
     .bind(ROUTE_COORDINATE_DECIMALS)
     .bind(ROUTE_MAX_EARLIER_DRIVES)
+    .bind(user_id)
     .fetch_all(pool)
     .await?;
 
@@ -839,6 +888,27 @@ async fn load_high_parked_loss(
     vehicle_id: Uuid,
     now: DateTime<Utc>,
 ) -> Result<Option<Insight>, AppError> {
+    // A parked period ends when a completed drive or charge starts. Without
+    // such a start in the last PARKED_MAX_AGE_DAYS no park is current, so the
+    // rule is silent and the heavy 90-day period query does not run.
+    let recent_park_end = sqlx::query_scalar::<_, bool>(
+        r#"SELECT EXISTS (
+               SELECT 1 FROM riviamigo.trips
+               WHERE vehicle_id = $1 AND ended_at IS NOT NULL AND started_at >= $2 AND started_at <= $3
+           ) OR EXISTS (
+               SELECT 1 FROM riviamigo.charge_sessions
+               WHERE vehicle_id = $1 AND ended_at IS NOT NULL AND started_at >= $2 AND started_at <= $3
+           )"#,
+    )
+    .bind(vehicle_id)
+    .bind(now - Duration::days(PARKED_MAX_AGE_DAYS))
+    .bind(now)
+    .fetch_one(pool)
+    .await?;
+    if !recent_park_end {
+        return Ok(None);
+    }
+
     // Same validated parked periods as the Parked page, newest first.
     let periods = crate::routes::idle_drain::fetch_idle_drain_periods(
         pool,
@@ -858,17 +928,17 @@ async fn load_high_parked_loss(
                 ended_at: period.period_end?,
                 duration_hours: period.duration_hours.unwrap_or_default(),
                 loss_pct: period.soc_lost_pct.filter(|v| v.is_finite())?,
+                drain_pct_per_hour: period.drain_pct_per_hour.filter(|v| v.is_finite())?,
             })
         })
         .collect();
     let Some((latest, earlier)) = losses.split_first() else {
         return Ok(None);
     };
-    let earlier_losses: Vec<f64> = earlier.iter().map(|p| p.loss_pct).collect();
-    let Some(values) = high_parked_loss(latest, &earlier_losses) else {
+    let Some(values) = high_parked_loss(latest, earlier, now) else {
         return Ok(None);
     };
-    let count = earlier_losses.len();
+    let count = earlier.len();
     Ok(Some(insight(
         InsightKind::HighParkedLoss,
         InsightScope::Now,
@@ -982,11 +1052,16 @@ async fn load_charge_insights(
     .await?
     .ok_or(AppError::NotFound)?;
 
+    // An open charge has no end, so its curve span is not bounded. The shape
+    // rules wait until the charge ends.
+    let Some(ended_at) = session.ended_at else {
+        return Ok(Vec::new());
+    };
     if session.charger_type.as_deref() != Some("dc") {
         return Ok(Vec::new());
     }
     let scope = InsightScope::Charge(charge_id);
-    let this_curve = load_measured_curve(pool, vehicle_id, &session).await?;
+    let this_curve = load_measured_curve(pool, vehicle_id, &session, ended_at).await?;
 
     let shape = charge_shape(&this_curve).map(|values| {
         insight(
@@ -1017,13 +1092,22 @@ async fn load_charge_insights(
     .fetch_all(pool)
     .await?;
 
-    let earlier = try_join_all(earlier_sessions.iter().map(|earlier| async move {
-        Ok::<_, AppError>((
-            earlier.id,
-            load_measured_curve(pool, vehicle_id, earlier).await?,
-        ))
-    }))
-    .await?;
+    // The query reads ended charges only. Load DC_BAND_CONCURRENT_LOADS
+    // curves at a time so one request does not hold many pool connections.
+    let mut earlier: Vec<(Uuid, Vec<CurvePoint>)> = Vec::with_capacity(earlier_sessions.len());
+    for batch in earlier_sessions.chunks(DC_BAND_CONCURRENT_LOADS) {
+        let curves = try_join_all(batch.iter().filter_map(|earlier| {
+            let ended_at = earlier.ended_at?;
+            Some(async move {
+                Ok::<_, AppError>((
+                    earlier.id,
+                    load_measured_curve(pool, vehicle_id, earlier, ended_at).await?,
+                ))
+            })
+        }))
+        .await?;
+        earlier.extend(curves);
+    }
 
     let band = usual_dc_band(&this_curve, &earlier).map(|values| {
         let mut evidence = vec![InsightEvidence::charge(charge_id)];
@@ -1060,8 +1144,8 @@ async fn load_measured_curve(
     pool: &PgPool,
     vehicle_id: Uuid,
     session: &ChargeBoundsRow,
+    ended_at: DateTime<Utc>,
 ) -> Result<Vec<CurvePoint>, AppError> {
-    let ended_at = session.ended_at.unwrap_or_else(Utc::now);
     let telemetry = sqlx::query_as::<_, (f64, f64, Option<f64>)>(
         r#"SELECT EXTRACT(EPOCH FROM (time_bucket('1 minute', ts) - $3))::float8 / 60.0,
                   AVG(ABS(power_kw))::float8,
@@ -1262,35 +1346,86 @@ mod tests {
         assert_eq!(from, Utc.with_ymd_and_hms(2026, 10, 8, 7, 0, 0).unwrap());
     }
 
-    fn park(loss_pct: f64) -> ParkedLoss {
+    /// A park that ends at `ts(end_hour)` after `hours` hours.
+    fn park(hours: f64, loss_pct: f64, end_hour: i64) -> ParkedLoss {
         ParkedLoss {
-            started_at: ts(0),
-            ended_at: ts(10),
-            duration_hours: 10.0,
+            started_at: ts(end_hour) - Duration::minutes((hours * 60.0) as i64),
+            ended_at: ts(end_hour),
+            duration_hours: hours,
             loss_pct,
+            drain_pct_per_hour: loss_pct / hours,
         }
     }
 
+    /// Seven earlier 10-hour parks at about 0.1 points per hour.
+    fn usual_parks() -> Vec<ParkedLoss> {
+        [1.0, 1.0, 1.0, 1.2, 0.8, 1.0, 1.1]
+            .iter()
+            .map(|loss| park(10.0, *loss, -24))
+            .collect()
+    }
+
     #[test]
-    fn high_parked_loss_flags_twice_the_usual_loss() {
-        let earlier = [1.0, 1.0, 1.0, 1.2, 0.8, 1.0, 1.1];
-        let values = high_parked_loss(&park(3.0), &earlier).unwrap();
+    fn high_parked_loss_flags_twice_the_usual_drain_rate() {
+        // 3 points in 10 hours: 0.3 per hour against a usual 0.1 per hour.
+        let values = high_parked_loss(&park(10.0, 3.0, 0), &usual_parks(), ts(1)).unwrap();
+        assert!((values.usual_drain_pct_per_hour - 0.1).abs() < 1e-9);
+        assert!((values.drain_pct_per_hour - 0.3).abs() < 1e-9);
+        assert!((values.ratio.unwrap() - 3.0).abs() < 1e-9);
+        assert_eq!(values.loss_pct, 3.0);
         assert_eq!(values.usual_loss_pct, 1.0);
-        assert_eq!(values.ratio, Some(3.0));
         assert_eq!(values.duration_hours, 10.0);
     }
 
     #[test]
+    fn high_parked_loss_compares_rate_not_total_loss() {
+        // A long park at the usual rate loses many points but is normal.
+        assert_eq!(
+            high_parked_loss(&park(100.0, 10.0, 0), &usual_parks(), ts(1)),
+            None
+        );
+        // A short park with a fast drain is flagged although its total loss is
+        // close to the usual total.
+        let fast = high_parked_loss(&park(6.0, 2.4, 0), &usual_parks(), ts(1)).unwrap();
+        assert!((fast.ratio.unwrap() - 4.0).abs() < 1e-9);
+    }
+
+    #[test]
     fn high_parked_loss_gates() {
-        let earlier = [1.0, 1.0, 1.0, 1.2, 0.8, 1.0, 1.1];
+        let earlier = usual_parks();
         // Six earlier parks are not enough.
-        assert_eq!(high_parked_loss(&park(3.0), &earlier[..6]), None);
-        // Below 2 percentage points.
-        assert_eq!(high_parked_loss(&park(1.9), &[0.5; 7]), None);
-        // Less than twice the usual loss.
-        assert_eq!(high_parked_loss(&park(3.0), &[1.6; 7]), None);
-        // A zero usual loss still flags, with no ratio.
-        assert_eq!(high_parked_loss(&park(2.5), &[0.0; 7]).unwrap().ratio, None);
+        assert_eq!(
+            high_parked_loss(&park(10.0, 3.0, 0), &earlier[..6], ts(1)),
+            None
+        );
+        // Below 2 percentage points, even at a fast rate.
+        assert_eq!(high_parked_loss(&park(6.0, 1.9, 0), &earlier, ts(1)), None);
+        // Exactly 2 points at a fast rate is flagged.
+        assert!(high_parked_loss(&park(6.0, 2.0, 0), &earlier, ts(1)).is_some());
+        // 3 points in 20 hours is 0.15 per hour, less than twice the usual rate.
+        assert_eq!(high_parked_loss(&park(20.0, 3.0, 0), &earlier, ts(1)), None);
+        // Exactly twice the usual rate is flagged.
+        assert!(high_parked_loss(&park(10.0, 2.0, 0), &earlier, ts(1)).is_some());
+        // A zero usual rate still flags, with no ratio.
+        let still: Vec<ParkedLoss> = (0..7).map(|_| park(10.0, 0.0, -24)).collect();
+        assert_eq!(
+            high_parked_loss(&park(10.0, 2.5, 0), &still, ts(1))
+                .unwrap()
+                .ratio,
+            None
+        );
+    }
+
+    #[test]
+    fn high_parked_loss_skips_a_park_that_ended_more_than_three_days_ago() {
+        let latest = park(10.0, 3.0, 0);
+        let earlier = usual_parks();
+        let limit = ts(0) + Duration::days(PARKED_MAX_AGE_DAYS);
+        assert!(high_parked_loss(&latest, &earlier, limit).is_some());
+        assert_eq!(
+            high_parked_loss(&latest, &earlier, limit + Duration::minutes(1)),
+            None
+        );
     }
 
     fn dc_curve() -> Vec<CurvePoint> {

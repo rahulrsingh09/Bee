@@ -71,6 +71,34 @@ struct SessionListParams {
 struct VehicleParam {
     vehicle_id: Option<Uuid>,
 }
+/// Largest manual session cost accepted, in USD. The derived
+/// `cost_rate_per_kwh` divides this total by the energy added, so a bound keeps
+/// that division finite.
+const MAX_MANUAL_COST_USD: f64 = 100_000.0;
+
+/// A manual cost must be a finite number from 0 to `MAX_MANUAL_COST_USD`, and
+/// `cost_usd` is only valid with the manual cost mode.
+fn validate_manual_cost(
+    cost_mode: Option<CostOverrideMode>,
+    cost_usd: Option<f64>,
+) -> Result<(), AppError> {
+    let manual = cost_mode == Some(CostOverrideMode::Manual);
+    if manual
+        && !cost_usd
+            .is_some_and(|value| value.is_finite() && (0.0..=MAX_MANUAL_COST_USD).contains(&value))
+    {
+        return Err(AppError::Validation(
+            "cost_usd must be a number from 0 to 100000 when cost_mode is manual".into(),
+        ));
+    }
+    if !manual && cost_usd.is_some() {
+        return Err(AppError::Validation(
+            "cost_usd is only valid when cost_mode is manual".into(),
+        ));
+    }
+    Ok(())
+}
+
 #[derive(Deserialize)]
 struct SessionLocationUpdate {
     /// Legacy field. `null` retains its historical meaning: no location.
@@ -659,20 +687,7 @@ async fn update_charge_session(
             "place_id required when location_mode is saved_place".into(),
         ));
     }
-    if payload.cost_mode == Some(CostOverrideMode::Manual)
-        && !payload
-            .cost_usd
-            .is_some_and(|value| value.is_finite() && value >= 0.0)
-    {
-        return Err(AppError::Validation(
-            "cost_usd must be a non-negative number when cost_mode is manual".into(),
-        ));
-    }
-    if payload.cost_mode != Some(CostOverrideMode::Manual) && payload.cost_usd.is_some() {
-        return Err(AppError::Validation(
-            "cost_usd is only valid when cost_mode is manual".into(),
-        ));
-    }
+    validate_manual_cost(payload.cost_mode, payload.cost_usd)?;
 
     let updated_session_id = if location_mode == Some(LocationOverrideMode::SavedPlace) {
         let place_id = requested_place_id.expect("validated saved place id");
@@ -1532,7 +1547,11 @@ async fn get_summary_response(
 
 #[cfg(test)]
 mod tests {
-    use super::{build_charge_chart_series, normalize_capacity_kwh, ChartSeriesSessionSourceRow};
+    use super::{
+        build_charge_chart_series, normalize_capacity_kwh, validate_manual_cost,
+        ChartSeriesSessionSourceRow, CostOverrideMode, MAX_MANUAL_COST_USD,
+    };
+    use crate::errors::AppError;
     use axum::body::Body;
     use chrono::{TimeZone, Utc};
     use http::{Request, StatusCode};
@@ -1543,6 +1562,39 @@ mod tests {
     fn normalizes_capacity_values_in_kwh_and_wh() {
         assert_eq!(normalize_capacity_kwh(135.0), Some(135.0));
         assert_eq!(normalize_capacity_kwh(135_000.0), Some(135.0));
+    }
+
+    #[test]
+    fn manual_cost_must_be_finite_and_at_most_the_cap() {
+        let manual = Some(CostOverrideMode::Manual);
+        for ok in [0.0, 12.5, MAX_MANUAL_COST_USD] {
+            assert!(validate_manual_cost(manual, Some(ok)).is_ok(), "{ok}");
+        }
+        for bad in [
+            -0.01,
+            MAX_MANUAL_COST_USD + 0.01,
+            1e308,
+            f64::INFINITY,
+            f64::NAN,
+        ] {
+            assert!(
+                matches!(
+                    validate_manual_cost(manual, Some(bad)),
+                    Err(AppError::Validation(_))
+                ),
+                "{bad}"
+            );
+        }
+        assert!(matches!(
+            validate_manual_cost(manual, None),
+            Err(AppError::Validation(_))
+        ));
+        assert!(matches!(
+            validate_manual_cost(Some(CostOverrideMode::Free), Some(1.0)),
+            Err(AppError::Validation(_))
+        ));
+        assert!(validate_manual_cost(Some(CostOverrideMode::Automatic), None).is_ok());
+        assert!(validate_manual_cost(None, None).is_ok());
     }
 
     #[test]

@@ -4,7 +4,7 @@ use serde_json::Value;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-pub const BUNDLED_CHART_BASELINE_REVISION: i32 = 5;
+pub const BUNDLED_CHART_BASELINE_REVISION: i32 = 6;
 
 const BUNDLED_CHART_DEFAULTS: &str = include_str!("../../charts/defaults.json");
 const RETIRED_BUNDLED_CHART_SLUGS: &[&str] = &["charge-session-curve"];
@@ -52,7 +52,7 @@ mod tests {
 
     #[test]
     fn bundled_chart_baseline_advances_existing_system_rows_only() {
-        assert_eq!(BUNDLED_CHART_BASELINE_REVISION, 5);
+        assert_eq!(BUNDLED_CHART_BASELINE_REVISION, 6);
         assert!(UPSERT_BUNDLED_CHART_SQL.contains("VALUES (NULL"));
         assert!(UPSERT_BUNDLED_CHART_SQL.contains("ON CONFLICT (slug) WHERE owner_id IS NULL"));
         assert!(UPSERT_BUNDLED_CHART_SQL.contains(

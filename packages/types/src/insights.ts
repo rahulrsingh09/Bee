@@ -58,8 +58,12 @@ export interface HighParkedLossValues {
   /** Battery percentage points lost in the latest parked period. */
   loss_pct: number;
   usual_loss_pct: number;
-  /** Latest loss divided by the usual loss; null when the usual loss is 0. */
+  /** Latest drain rate divided by the usual drain rate; null when the usual rate is 0. */
   ratio: number | null;
+  /** Battery percentage points lost per hour in the latest parked period. Additive; older servers omit it. */
+  drain_pct_per_hour?: number;
+  /** Median drain rate per hour of the earlier parked periods. Additive; older servers omit it. */
+  usual_drain_pct_per_hour?: number;
   duration_hours: number;
   started_at: string;
   ended_at: string;

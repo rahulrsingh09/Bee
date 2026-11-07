@@ -5,10 +5,10 @@ import { rootRoute } from './__root';
 import {
   useCloneDashboard,
   downloadDashboardYaml,
-  importDashboardYaml,
 } from '@riviamigo/dashboards';
 import { ProtectedRoute } from '../components/layout/ProtectedRoute';
-import { Copy, Download, Upload } from 'lucide-react';
+import { Copy, Download } from 'lucide-react';
+import { DashboardImportControl } from '../components/dashboard/DashboardImportControl';
 import { DashboardPageShell } from '../components/dashboard/DashboardPageShell';
 
 export const DASHBOARD_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -56,7 +56,7 @@ function UserDashboardPage() {
         });
       }}
       renderActions={(state) => {
-        const { activeConfig, setLocalConfig } = state;
+        const { activeConfig } = state;
 
         async function handleClone() {
           if (!activeConfig) return;
@@ -66,20 +66,6 @@ function UserDashboardPage() {
             params: { slug: cloned.slug },
             search: { edit: 1, dashboardId: cloned.id },
           });
-        }
-
-        async function handleImport(event: React.ChangeEvent<HTMLInputElement>) {
-          const file = event.target.files?.[0];
-          if (!file) return;
-          const text = await file.text();
-          try {
-            const imported = importDashboardYaml(text);
-            setLocalConfig(imported);
-            navigate({ to: '/d/$slug', params: { slug }, search: { edit: 1 } });
-          } catch (err) {
-            alert(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
-          }
-          event.target.value = '';
         }
 
         return (
@@ -108,16 +94,7 @@ function UserDashboardPage() {
             >
               <Download className="h-3.5 w-3.5" />
             </button>
-            <label
-              title="Import from YAML"
-              aria-label="Import from YAML"
-              className="inline-flex min-h-11 min-w-11 cursor-pointer items-center justify-center p-1.5 rounded-lg border border-border hover:bg-bg-elevated transition-colors text-fg-tertiary hover:text-fg"
-            >
-              <Upload className="h-3.5 w-3.5" />
-              <input type="file" accept=".yaml,.yml" className="sr-only" onChange={(event) => {
-                void handleImport(event);
-              }} />
-            </label>
+            <DashboardImportControl />
           </>
         );
       }}

@@ -19,6 +19,15 @@ describe('api client dashboard contracts', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('rejects a 500 whose body has no message without crashing the error formatter', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ error: 'boom' }), { status: 500, headers: { 'Content-Type': 'application/json' } }),
+    );
+    const failure = await api.vehicleStatus('vehicle-1').catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(Error);
+    expect(String((failure as Error).message)).not.toMatch(/Cannot read properties/);
+  });
+
   it('rejects incomplete metric JSON without treating a partial document as success', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{"values":[],"series":[', { status: 200 }));
     await expect(api.vehicleStatus('vehicle-1')).rejects.toMatchObject({ code: 'INCOMPLETE_RESPONSE' });

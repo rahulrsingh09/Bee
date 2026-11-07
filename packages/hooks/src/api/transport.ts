@@ -2386,7 +2386,8 @@ function apiFailureDetailFrom(error: unknown): ApiFailureDetail | undefined {
   return detail;
 }
 
-function truncate(value: string, maxLength: number) {
+function truncate(value: string | null | undefined, maxLength: number) {
+  if (typeof value !== 'string') return '';
   if (value.length <= maxLength) return value;
   return `${value.slice(0, maxLength - 1)}…`;
 }

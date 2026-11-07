@@ -124,18 +124,46 @@ The session also ends at that reading when a new odometer reading shows that
 the vehicle moved at least 1 mile. Idle or driving time after a charge does not
 lengthen the session or change its end state of charge, peak or energy.
 
-The charging trace on a session page shows the charge power over time. For an
-R2 it uses Rivian's per-minute graph, so a DC fast charge shows its ramp, peak
-and taper. Under a DC curve, a note shows the peak and end power. The note
-also gives an estimated reason when power changed:
+The **How it charged** card on a charge page shows the charge power (kW)
+against the battery % or, with the **Time** toggle, against minutes. It has one
+y-axis. For an R2 it uses Rivian's per-minute graph, so a DC fast charge shows
+its climb, peak and taper. On a DC charge with 8 or more measured points, three
+phase cards (Climb, Peak, Taper) come from the charge shape insight, with one
+sentence for each phase. When 3 or more earlier DC charges have a battery-%
+curve, a gray band shows your usual DC curve (p10 to p90). Drag across the
+chart, or use the arrow keys, to read the kW, battery % and minute of a point.
+With reduced motion, the chart shows its final state at once. The taper
+sentence also gives an estimated reason when power changed:
 
 - **Normal taper:** power falls steadily as the battery fills.
 - **Charger limit:** power falls and then recovers. A battery does not do this,
   so the charger probably limited the rate, for example by sharing power with
   another car.
 
-Rivian does not send a reason for a slower charge, so the note is an estimate
-from the curve shape.
+Rivian does not send a reason for a slower charge, so the sentence is an
+estimate from the curve shape. A charge with no power curve shows one row with
+the peak kW when it is known.
+
+### Charge cost
+
+The Cost tile on a charge page shows the price and the rule that set it:
+**Billed by Rivian**, **Your home rate** or **Place rate**, **Your price**,
+**Free**, **No price** or **Price pending**. When a charge has no price, owners
+and managers see **Add the cost of this charge**. **Edit** opens the same box
+for any charge.
+
+1. Select **Total paid** or **Rate per kWh**.
+2. Enter the amount. The line below shows the other value, for example
+   "= 50¢ per kWh for 28.6 kWh" or "= $14.30".
+3. Optional: select **Use this rate for my next charges at this charger**. This
+   adds a saved place at the charge location with that per-kWh rate, or saves
+   the rate to the saved place that holds the charge. A time-of-use plan on
+   that place is replaced.
+4. Select **Save cost**.
+
+The app saves a rate as a total: rate × the energy added, rounded to cents.
+The charge then shows **Your price** with the rate. Per-network rates are not
+available.
 
 ## Recover a missed drive
 

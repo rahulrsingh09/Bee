@@ -116,7 +116,7 @@ for (const width of [320, 390, 901, 1280, 1920]) for (const mode of ['dark', 'li
     await expect(stories.getByRole('link', { name: /Last drive/ })).toHaveAttribute('href', '/trips/trip-1');
     await expect(stories.locator('.now-route path')).toHaveAttribute('d', /^M[\d.]+,[\d.]+( L[\d.]+,[\d.]+)+$/);
     await expect(stories.getByRole('link', { name: /Last charge/ })).toHaveAttribute('href', '/charging/charge-1');
-    await expect(stories.getByRole('link', { name: /Last park/ })).toContainText('3.1× your usual loss');
+    await expect(stories.getByRole('link', { name: /Last park/ })).toContainText('3.1× your usual drain rate');
     expect(await page.getByRole('heading', { level: 2 }).allTextContents()).toEqual(['Odometer', 'Needs a look', 'Today']);
 
     const box = async (selector: string) => (await page.locator(selector).boundingBox())!;

@@ -7,6 +7,7 @@ import {
   formatCurrency, formatDuration, formatEfficiency, formatKwh, formatMiles, formatNumber,
 } from '@riviamigo/ui/lib/utils';
 import { formatAppTime } from '@riviamigo/ui/lib/dateTime';
+import { chargeKind, type ChargeKind } from '../charging/detail/chargeDetailModel';
 import { eventTime, railTitle, routePath } from './nowModel';
 import { useSeenOnce } from './useNowMotion';
 
@@ -38,7 +39,7 @@ function DriveViz({ path }: { path: string }) {
 }
 
 /** A battery bar from `from` to `to`; `kind` sets the mark color. */
-function BatterySpan({ from, to, kind }: { from: number; to: number; kind: 'ac' | 'dc' | 'loss' }) {
+function BatterySpan({ from, to, kind }: { from: number; to: number; kind: ChargeKind | 'loss' | 'unknown' }) {
   const low = Math.max(0, Math.min(from, to, 100));
   const high = Math.min(100, Math.max(from, to, 0));
   return <span className="now-span-track" data-kind={kind}>
@@ -47,8 +48,9 @@ function BatterySpan({ from, to, kind }: { from: number; to: number; kind: 'ac' 
   </span>;
 }
 
-function chargeKind(charge: ChargeSession) {
-  return charge.charger_type === 'dc' || charge.charger_type === 'dcfc' ? 'dc' : 'ac';
+/** Title text for the charge kind. The kind uses the charge detail rule (type, then network, then power); null when not known. */
+function chargeKindTitle(kind: ChargeKind | null) {
+  return kind === 'dc' ? 'DC fast' : kind === 'ac' ? 'AC' : null;
 }
 
 export function NowStoryRail({ vehicleId, trip, charge, park, insights, loading, failed, onRetry, now, animate }: {
@@ -69,18 +71,19 @@ export function NowStoryRail({ vehicleId, trip, charge, park, insights, loading,
   }
   if (charge) {
     const kind = chargeKind(charge);
+    const kindTitle = chargeKindTitle(kind);
     const battery = charge.soc_start != null && charge.soc_end != null ? `${Math.round(charge.soc_start)}% → ${Math.round(charge.soc_end)}%` : null;
     cards.push(<StoryCard key="charge" to="/charging/$sessionId" params={{ sessionId: charge.id }} animate={animate}
       eyebrow={`Last charge · ${eventTime(charge.started_at, now)}`}
-      title={`${charge.location_name || 'Charge'} · ${kind === 'dc' ? 'DC fast' : 'AC'}`}
+      title={[charge.location_name || 'Charge', kindTitle].filter(Boolean).join(' · ')}
       value={charge.energy_added_kwh != null ? `+${formatKwh(charge.energy_added_kwh)}` : 'Energy not reported'}
       context={[battery, charge.duration_min != null ? formatDuration(charge.duration_min) : null, charge.cost_usd != null ? formatCurrency(charge.cost_usd) : null].filter(Boolean).join(' · ')}
-      viz={charge.soc_start != null && charge.soc_end != null ? <BatterySpan from={charge.soc_start} to={charge.soc_end} kind={kind} /> : null} />);
+      viz={charge.soc_start != null && charge.soc_end != null ? <BatterySpan from={charge.soc_start} to={charge.soc_end} kind={kind ?? 'unknown'} /> : null} />);
   }
   if (park?.period_start) {
     const sameStart = parkedLoss && Math.abs(Date.parse(parkedLoss.values.started_at) - Date.parse(park.period_start)) < 5 * 60_000;
     const usual = sameStart && parkedLoss.values.ratio != null
-      ? `${formatNumber(parkedLoss.values.ratio, 1)}× your usual loss` : null;
+      ? `${formatNumber(parkedLoss.values.ratio, 1)}× your usual drain rate` : null;
     const rate = park.drain_pct_per_hour != null ? `${formatNumber(park.drain_pct_per_hour, 2)}% per hour` : null;
     const span = park.period_end
       ? `${eventTime(park.period_start, now)}–${formatAppTime(park.period_end)}` : `Since ${eventTime(park.period_start, now)}`;

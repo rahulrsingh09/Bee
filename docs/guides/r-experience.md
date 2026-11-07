@@ -86,10 +86,23 @@ When Rivian sends no price for a charge, the charge page asks for it.
    **Rate per kWh**.
 3. Enter the total from your receipt, or the rate. The line below the field
    shows the result, for example "= 50¢ per kWh for 28.6 kWh".
-4. Optional: with a rate, select **Use this rate for my next charges at this
-   charger**. The app saves the rate to a saved place at that charger, so the
-   next charges there get the same price.
+4. Optional: with a rate, select the rate option.
+   - With no saved place at the charger, the option is **Use this rate for my
+     next charges at this charger**. The app adds a saved place at that charger
+     with the rate. Automatic charges at this place then use this rate.
+   - With a saved place at the charger, the option is **Use this rate at**
+     *place*. This changes the price of the place. Past automatic charges at
+     the place are priced again with this rate. Before the save, a confirm step
+     says this. Select **Save and change** *place* to continue, or **Cancel**.
+   - The cost box does not change the Home place or a place with time-of-use
+     rates. Change those prices in **Settings → Places**.
 5. Select **Save cost**.
+
+You can enter a decimal with a period or one comma ("14.30" or "14,30"). Do
+not use a comma for thousands.
+
+If the cost saves and the place rate does not, the box stays open and says so.
+Select **Try again**, or **Close** to keep only the cost.
 
 To change a saved price, select **Edit** on the charge page. Edit also has
 **Mark free** and, for a price that you entered, **Use the automatic price**.

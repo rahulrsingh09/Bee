@@ -117,7 +117,7 @@ describe('insight sentences', () => {
       ['Parked loss was high', '/battery/phantom-drain'],
       ['3 charges have no price', '/settings'],
     ]);
-    expect(items[1]!.detail).toBe('4.0% in 8h 30m · 3.1× your usual loss');
+    expect(items[1]!.detail).toBe('4.0% in 8h 30m · 3.1× your usual drain rate');
     expect(items[2]!.search).toEqual({ section: 'places' });
     expect(attentionItems([insight('missing_price', { count: 1, window_days: 90 }, 'info')])[0]!.title).toBe('1 charge has no price');
   });

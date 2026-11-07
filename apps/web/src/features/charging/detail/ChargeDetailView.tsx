@@ -50,7 +50,9 @@ export function ChargeDetailView({ sessionId, vehicleId, canManage }: ChargeDeta
   const insights = useInsights(vehicleId, `charge:${sessionId}` as InsightScope);
   const [editing, setEditing] = React.useState(false);
   const [status, setStatus] = React.useState<string | null>(null);
-  React.useEffect(() => { setEditing(false); setStatus(null); }, [sessionId]);
+  // The prompt box stays open during its save, and after a partial failure, even when the charge then has a price.
+  const [promptHeld, setPromptHeld] = React.useState(false);
+  React.useEffect(() => { setEditing(false); setStatus(null); setPromptHeld(false); }, [sessionId]);
 
   const places = React.useMemo(() => placesQuery.data ?? [], [placesQuery.data]);
   const rawCurve = React.useMemo(() => curveQuery.data ?? [], [curveQuery.data]);
@@ -131,7 +133,7 @@ export function ChargeDetailView({ sessionId, vehicleId, canManage }: ChargeDeta
         </div>
         {canManage ? (
           <Button type="button" variant="secondary" className="min-h-11 shrink-0 whitespace-nowrap" aria-expanded={editing}
-            onClick={() => { setEditing((value) => !value); setStatus(null); }}>
+            onClick={() => { setEditing((value) => !value); setStatus(null); setPromptHeld(false); }}>
             <Pencil className="h-4 w-4" aria-hidden="true" />
             {editing ? 'Done' : 'Edit'}
           </Button>
@@ -167,8 +169,8 @@ export function ChargeDetailView({ sessionId, vehicleId, canManage }: ChargeDeta
         <div className="grid grid-cols-2 gap-3" data-charge-tiles>
           {tiles.map((tile) => <ChargeTile key={tile.label} {...tile} />)}
         </div>
-        {canManage && unpriced && !editing ? (
-          <ChargeCostBox {...costBoxProps} variant="prompt" onDone={setStatus} />
+        {canManage && (unpriced || promptHeld) && !editing ? (
+          <ChargeCostBox {...costBoxProps} variant="prompt" onDone={setStatus} onHoldChange={setPromptHeld} />
         ) : null}
         <ChargeSourceDetails session={session} />
       </div>

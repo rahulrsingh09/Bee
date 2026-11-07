@@ -95,6 +95,7 @@
 .now-span-mark { position: absolute; top: 0; bottom: 0; background: var(--rm-charging-ac); }
 .now-span-track[data-kind="dc"] .now-span-mark { background: var(--rm-charging-dc); }
 .now-span-track[data-kind="loss"] .now-span-mark { background: var(--rm-status-warning); }
+.now-span-track[data-kind="unknown"] .now-span-mark { background: var(--rm-border-strong); }
 
 @media(max-width:420px) {
   .now-chips { gap: 6px; }

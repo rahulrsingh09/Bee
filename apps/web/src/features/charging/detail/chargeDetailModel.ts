@@ -149,12 +149,31 @@ export function roundCents(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
-/** Parse a typed amount: "14.30", "$14.30", "50¢" (rate input only). Null when not a non-negative number. */
+/** One comma as the decimal mark: "14,30" or "0,5". */
+const DECIMAL_COMMA = /^\d+,\d{1,2}$/;
+
+function amountBody(input: string) {
+  const body = input.trim().replace(/^\$/, '').trim();
+  const cents = /¢$/.test(body);
+  return { body: body.replace(/¢$/, '').trim(), cents };
+}
+
+/** True when the input has a comma that is not one decimal comma, for example "1,430". */
+export function hasUnclearComma(input: string) {
+  const { body } = amountBody(input);
+  return body.includes(',') && !DECIMAL_COMMA.test(body);
+}
+
+/**
+ * Parse a typed amount: "14.30", "$14.30", "14,30", "50¢" (rate input only).
+ * Null when not a non-negative number. A comma is only a decimal mark
+ * ("14,30" = 14.30); other commas ("1,430") are not accepted.
+ */
 export function parseAmount(input: string, unit: 'dollars' | 'rate'): number | null {
-  const trimmed = input.trim().replace(/^\$/, '').replace(/,/g, '');
-  if (!trimmed) return null;
-  const cents = /¢$/.test(trimmed);
-  const number = Number(trimmed.replace(/¢$/, ''));
+  const { body, cents } = amountBody(input);
+  if (!body) return null;
+  if (body.includes(',') && !DECIMAL_COMMA.test(body)) return null;
+  const number = Number(body.replace(',', '.'));
   if (!Number.isFinite(number) || number < 0) return null;
   if (cents && unit === 'rate') return number / 100;
   if (cents) return null;
@@ -181,7 +200,11 @@ export function costEntry(mode: CostEntryMode, input: string, kwh: number | null
   if (!input.trim()) return { total: null, rate: null, preview: null, error: null };
   const amount = parseAmount(input, mode === 'rate' ? 'rate' : 'dollars');
   if (amount == null) {
-    return { total: null, rate: null, preview: null, error: mode === 'rate' ? 'Enter a rate of 0 or more, for example 0.50.' : 'Enter an amount of 0 or more, for example 14.30.' };
+    const example = mode === 'rate' ? '0.50' : '14.30';
+    if (hasUnclearComma(input)) {
+      return { total: null, rate: null, preview: null, error: `Do not use a comma for thousands. Use a period or one comma for the decimal, for example ${example}.` };
+    }
+    return { total: null, rate: null, preview: null, error: mode === 'rate' ? `Enter a rate of 0 or more, for example ${example}.` : `Enter an amount of 0 or more, for example ${example}.` };
   }
   if (mode === 'rate') {
     if (energy == null) return { total: null, rate: amount, preview: null, error: 'The energy added is not known, so the app cannot compute a total. Enter the total paid.' };
@@ -273,11 +296,34 @@ export interface PlaceRatePlan {
   body: UpsertPlaceBody;
   /** Copy that says what Save does to the saved Place. */
   description: string;
+  /**
+   * The confirm step before Save, for an existing Place. The server then prices
+   * the past automatic charges at that Place again (routes/places.rs update_place).
+   * Null for a new Place: create_place prices no charge again at once.
+   */
+  confirm: string | null;
+}
+
+/** Where to change a price that the cost box must not change. */
+export const PLACES_SETTINGS = 'Settings → Places';
+
+/**
+ * Why the cost box must not save a rate to the Place, or null when it can.
+ * The Home price and a time-of-use schedule change only in Settings → Places:
+ * a per-kWh rate from one receipt would replace them and price their history again.
+ */
+export function placeRateBlock(place: Place | null, atHome: boolean): string | null {
+  if (place?.is_home || (!place && atHome)) return `Change the Home price in ${PLACES_SETTINGS}.`;
+  if (place?.charging?.billing_type === 'tou') {
+    return `${place.name} has time-of-use rates. Change its price in ${PLACES_SETTINGS}.`;
+  }
+  return null;
 }
 
 /**
  * Create or update the saved Place at the charge location with a per-kWh rate.
- * Null when the charge has no location to save.
+ * Null when the charge has no location to save. Call `placeRateBlock` first:
+ * the Home place and a time-of-use place are not changed here.
  */
 export function placeRatePlan(session: ChargeSession, place: Place | null, rate: number, timezone: string, defaultName: string): PlaceRatePlan | null {
   const rateText = `${formatRate(rate)} per kWh`;
@@ -286,7 +332,7 @@ export function placeRatePlan(session: ChargeSession, place: Place | null, rate:
       display_name: place.name, osm_id: null, latitude: place.latitude, longitude: place.longitude,
       road: null, city: null, state: null, postcode: null, country: null, raw: null,
     };
-    const replacesSchedule = place.charging?.billing_type === 'tou';
+    const confirm = `This sets ${place.name} to ${formatRate(rate)}/kWh. Past automatic charges at ${place.name} are priced again with this rate.`;
     return {
       placeId: place.id,
       body: {
@@ -304,9 +350,8 @@ export function placeRatePlan(session: ChargeSession, place: Place | null, rate:
           timezone: place.charging?.timezone ?? timezone,
         },
       },
-      description: replacesSchedule
-        ? `Saves ${rateText} to your saved place “${place.name}”. This replaces its time-of-use rates.`
-        : `Saves ${rateText} to your saved place “${place.name}”.`,
+      description: confirm,
+      confirm,
     };
   }
   const point = sessionCoordinates(session);
@@ -326,13 +371,15 @@ export function placeRatePlan(session: ChargeSession, place: Place | null, rate:
       },
       charging: { billing_type: 'per_kwh', rate, session_fee: 0, currency: 'USD', timezone },
     },
-    description: `Adds the saved place “${name}” at this charger with ${rateText}.`,
+    description: `Adds the saved place “${name}” at this charger with ${rateText}. Automatic charges at this place use this rate.`,
+    confirm: null,
   };
 }
 
 // ---------------------------------------------------------------- curve
 
 export interface CurvePoint {
+  /** Minutes from the session start, the same origin as the API charge_shape. Can be below 0. */
   minute: number;
   /** Battery %, interpolated by time when Rivian sent none. Null when no battery % is known. */
   soc: number | null;
@@ -345,6 +392,9 @@ export interface ChargeCurveModel {
   estimated: boolean;
   /** True when every point has a battery % and the battery % rises. */
   socAxis: boolean;
+  /** First minute of the time axis: 0, or the first reading when it is before the session start. */
+  startMin: number;
+  /** Last minute of the time axis, from the session start. */
   durationMin: number;
   socMin: number;
   socMax: number;
@@ -359,7 +409,9 @@ function positiveSoc(value: number | null | undefined) {
 /**
  * Prepare the curve for the chart. Measured points win over estimates. A
  * point with no battery % gets one interpolated by time between known
- * points, or between the session start and end battery %.
+ * points, or between the session start and end battery %. Minutes stay
+ * counted from the session start (`minutes_elapsed`), so the API phase and
+ * peak minutes line up with the points.
  */
 export function buildChargeCurve(raw: ChargeCurvePoint[], session: Pick<ChargeSession, 'soc_start' | 'soc_end' | 'duration_min'>): ChargeCurveModel | null {
   const valid = raw.filter((point) => Number.isFinite(point.power_kw) && point.power_kw >= 0);
@@ -400,7 +452,7 @@ export function buildChargeCurve(raw: ChargeCurvePoint[], session: Pick<ChargeSe
   };
 
   const points: CurvePoint[] = sorted.map(({ point, minute }) => ({
-    minute: minute - first,
+    minute,
     soc: positiveSoc(point.soc_pct) ?? socAt(minute),
     kw: point.power_kw,
   }));
@@ -420,7 +472,8 @@ export function buildChargeCurve(raw: ChargeCurvePoint[], session: Pick<ChargeSe
     points,
     estimated: recorded.length < 2,
     socAxis,
-    durationMin: Math.max(points[points.length - 1]!.minute, session.duration_min ?? 0, 1),
+    startMin: Math.min(0, first),
+    durationMin: Math.max(last, session.duration_min ?? 0, 1),
     socMin,
     socMax,
     peakIndex,

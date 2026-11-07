@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { ChargeCurvePoint, ChargeSession, Place } from '@riviamigo/types';
 import {
   buildChargeCurve, chargeKind, chargeTitle, costDisplay, costEntry, costMethodLabel, currentPriceLine, formatRate,
-  heroLine, matchSavedPlace, phaseKw, phaseSentence, placeRatePlan, pointContext, timeRangeText,
+  heroLine, matchSavedPlace, nearestIndexByMinute, parseAmount, phaseKw, phaseSentence, placeRateBlock, placeRatePlan,
+  pointContext, timeRangeText,
 } from './chargeDetailModel';
 
 const base: ChargeSession = {
@@ -27,6 +28,7 @@ describe('header', () => {
   it('marks DC FAST and AC charges', () => {
     expect(chargeKind(base)).toBe('dc');
     expect(chargeKind({ ...base, charger_type: null, network_vendor: null, peak_power_kw: 11 })).toBe('ac');
+    expect(chargeKind({ ...base, charger_type: null, network_vendor: null, peak_power_kw: null })).toBeNull();
   });
 
   it('writes a compact time range', () => {
@@ -68,6 +70,22 @@ describe('cost', () => {
     expect(costEntry('total', '', 28.6)).toMatchObject({ total: null, error: null });
   });
 
+  it('reads one decimal comma and rejects other commas', () => {
+    expect(parseAmount('14,30', 'dollars')).toBe(14.3);
+    expect(parseAmount('$14,3', 'dollars')).toBe(14.3);
+    expect(parseAmount('0,45', 'rate')).toBe(0.45);
+    expect(parseAmount('48,5¢', 'rate')).toBe(0.485);
+    expect(costEntry('total', '14,30', 28.6)).toMatchObject({ total: 14.3, error: null });
+    expect(costEntry('rate', '0,50', 28.6)).toMatchObject({ total: 14.3, rate: 0.5, error: null });
+    for (const input of ['1,430', '1,430.00', '14,30,1', ',30', '14,']) {
+      expect(parseAmount(input, 'dollars')).toBeNull();
+      expect(costEntry('total', input, 28.6)).toMatchObject({
+        total: null, error: 'Do not use a comma for thousands. Use a period or one comma for the decimal, for example 14.30.',
+      });
+    }
+    expect(costEntry('rate', '0,479', 28.6).error).toBe('Do not use a comma for thousands. Use a period or one comma for the decimal, for example 0.50.');
+  });
+
   it('shows the method on the Cost tile', () => {
     expect(costDisplay(base, false)).toMatchObject({ value: 'No price', attention: true });
     const manual = { ...base, cost_method: 'user_manual', cost_usd: 14.3, cost_rate_per_kwh: 0.5 } as ChargeSession;
@@ -87,20 +105,31 @@ describe('saved place rate', () => {
     expect(matchSavedPlace(base, [place({ latitude: 47.7 })])).toBeNull();
   });
 
-  it('updates the matched place and keeps its fee, home flag and name', () => {
-    const plan = placeRatePlan(base, place({ is_home: true, charging: {
-      id: 'c', name: 'Old', billing_type: 'tou', rate: 0.2, session_fee: 1, currency: 'USD', timezone: 'America/Los_Angeles', tou_periods: [],
+  it('updates the matched place, keeps its fee and name, and says that past automatic charges are priced again', () => {
+    const plan = placeRatePlan(base, place({ is_work: true, charging: {
+      id: 'c', name: 'Old', billing_type: 'per_kwh', rate: 0.2, session_fee: 1, currency: 'USD', timezone: 'America/Los_Angeles', tou_periods: [],
     } }), 0.5, 'UTC', 'Tesla Supercharger')!;
     expect(plan.placeId).toBe('p1');
-    expect(plan.body).toMatchObject({ name: 'Bellevue Supercharger', is_home: true, charging: { billing_type: 'per_kwh', rate: 0.5, session_fee: 1, timezone: 'America/Los_Angeles' } });
-    expect(plan.description).toMatch(/replaces its time-of-use rates/);
+    expect(plan.body).toMatchObject({ name: 'Bellevue Supercharger', is_work: true, charging: { billing_type: 'per_kwh', rate: 0.5, session_fee: 1, timezone: 'America/Los_Angeles' } });
+    expect(plan.confirm).toBe('This sets Bellevue Supercharger to 50¢/kWh. Past automatic charges at Bellevue Supercharger are priced again with this rate.');
+    expect(plan.description).toBe(plan.confirm);
+  });
+
+  it('does not offer the rate for the Home place or a time-of-use place', () => {
+    const tou = { id: 'c', name: 'TOU', billing_type: 'tou' as const, rate: 0, session_fee: 0, currency: 'USD', timezone: 'UTC', tou_periods: [] };
+    expect(placeRateBlock(place({ is_home: true }), true)).toBe('Change the Home price in Settings → Places.');
+    expect(placeRateBlock(null, true)).toBe('Change the Home price in Settings → Places.');
+    expect(placeRateBlock(place({ charging: tou }), false)).toBe('Bellevue Supercharger has time-of-use rates. Change its price in Settings → Places.');
+    expect(placeRateBlock(place(), false)).toBeNull();
+    expect(placeRateBlock(null, false)).toBeNull();
   });
 
   it('creates a place at the charge location, and needs a location', () => {
     const plan = placeRatePlan(base, null, 0.5, 'UTC', 'Tesla Supercharger')!;
     expect(plan.placeId).toBeNull();
+    expect(plan.confirm).toBeNull();
     expect(plan.body).toMatchObject({ name: 'Tesla Supercharger', radius_m: 75, address: { latitude: 47.61, longitude: -122.2, osm_id: null }, charging: { billing_type: 'per_kwh', rate: 0.5 } });
-    expect(plan.description).toBe('Adds the saved place “Tesla Supercharger” at this charger with 50¢ per kWh.');
+    expect(plan.description).toBe('Adds the saved place “Tesla Supercharger” at this charger with 50¢ per kWh. Automatic charges at this place use this rate.');
     expect(placeRatePlan({ ...base, location_lat: null }, null, 0.5, 'UTC', 'X')).toBeNull();
   });
 });
@@ -116,6 +145,19 @@ describe('curve', () => {
     expect(curve.peakIndex).toBe(1);
     expect(curve.lowIndex).toBe(3);
     expect(curve.estimated).toBe(false);
+  });
+
+  it('counts minutes from the session start, the same origin as the API shape', () => {
+    // The first reading is 3 minutes after the session start; the API peak_minute is 5 (from the start).
+    const curve = buildChargeCurve(points([[3, 60, 40], [5, 108, 44], [10, 90, 55], [25, 52, 71]]), base)!;
+    expect(curve.points.map((point) => point.minute)).toEqual([3, 5, 10, 25]);
+    expect(curve.startMin).toBe(0);
+    expect(curve.durationMin).toBe(25);
+    expect(nearestIndexByMinute(curve.points, 5)).toBe(curve.peakIndex);
+    // A reading before the session start keeps its minute below 0, and the axis starts there.
+    const early = buildChargeCurve(points([[-1.5, 20, 40], [2, 108, 44], [22, 52, 71]]), base)!;
+    expect(early.points[0]!.minute).toBe(-1.5);
+    expect(early.startMin).toBe(-1.5);
   });
 
   it('prefers measured points and uses estimates only when nothing was measured', () => {

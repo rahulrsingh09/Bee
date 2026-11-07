@@ -34,6 +34,7 @@ export function invalidateChargingData(queryClient: QueryClient): void {
   void queryClient.invalidateQueries({ queryKey: ['charging'] });
   void queryClient.invalidateQueries({ queryKey: ['metrics', 'batch'] });
   void queryClient.invalidateQueries({ queryKey: ['trips'] });
+  void queryClient.invalidateQueries({ queryKey: ['vehicles', 'insights'] });
 }
 
 export function useChargeSessions(

@@ -26,7 +26,7 @@ const insights: Insight[] = [
 ];
 
 /** A DC charge with no price, its curve (API row shape), PATCH and Places. Registered after the fixture, so it wins. */
-async function installDcCharge(page: Page) {
+async function installDcCharge(page: Page, places: Array<Record<string, unknown>> = []) {
   const session: Record<string, unknown> = {
     id: 'charge-dc', vehicle_id: 'owner-vehicle', started_at: '2026-11-07T00:08:00Z', ended_at: '2026-11-07T00:30:00Z',
     location_name: 'Bellevue', charger_type: 'dc', energy_added_kwh: 28.6, duration_min: 22, soc_start: 40, soc_end: 71,
@@ -55,18 +55,27 @@ async function installDcCharge(page: Page) {
       placeWrites.push({ method: 'POST', body });
       return route.fulfill({ json: { id: 'place-new', latitude: 47.61, longitude: -122.2, radius_m: 75, is_home: false, is_work: false, address: body.address, charging: null, ...body } });
     }
+    if (places.length && route.request().method() === 'GET') return route.fulfill({ json: { places } });
     return route.fallback();
+  });
+  await page.route(/\/v1\/places\/[^/?]+$/, async (route) => {
+    if (route.request().method() !== 'PUT') return route.fallback();
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    placeWrites.push({ method: 'PUT', body });
+    const id = new URL(route.request().url()).pathname.split('/').pop();
+    return route.fulfill({ json: { ...places.find((place) => place.id === id), ...body, id } });
   });
   return { patches, placeWrites };
 }
 
-async function open(page: Page, mode: 'light' | 'dark', width: number, reducedMotion = true) {
+async function open(page: Page, mode: 'light' | 'dark', width: number, reducedMotion = true, places: Array<Record<string, unknown>> = []) {
   await page.setViewportSize({ width, height: 900 });
   if (reducedMotion) await page.emulateMedia({ reducedMotion: 'reduce' });
   const fixture = await installRFixture(page, { mode, timezone: 'America/Los_Angeles', insights: (scope) => (scope === 'charge:charge-dc' ? insights : []) });
-  const charge = await installDcCharge(page);
+  const charge = await installDcCharge(page, places);
   await page.goto('/charging/charge-dc');
-  await expect(page.getByRole('heading', { level: 1, name: 'Tesla Supercharger' })).toBeVisible({ timeout: 20_000 });
+  const heading = (places[0]?.name as string | undefined) ?? 'Tesla Supercharger';
+  await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible({ timeout: 20_000 });
   return { fixture, charge };
 }
 
@@ -151,7 +160,7 @@ test('an owner enters a rate, saves it as a total and keeps the rate for this ch
   await box.getByLabel('Rate (USD per kWh)').fill('0.50');
   await expect(box.getByText('= $14.30')).toBeVisible();
   await box.getByRole('checkbox', { name: /Use this rate for my next charges at this charger/ }).check();
-  await expect(box.getByText('Adds the saved place “Tesla Supercharger” at this charger with 50¢ per kWh.')).toBeVisible();
+  await expect(box.getByText('Adds the saved place “Tesla Supercharger” at this charger with 50¢ per kWh. Automatic charges at this place use this rate.')).toBeVisible();
   if (EVIDENCE_DIR) await box.screenshot({ path: `${EVIDENCE_DIR}/charge-cost-rate-390-light.png` });
   await box.getByRole('button', { name: 'Save cost' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Cost saved. Your next charges at “Tesla Supercharger” use 50¢ per kWh.' })).toBeVisible();
@@ -164,4 +173,39 @@ test('an owner enters a rate, saves it as a total and keeps the rate for this ch
   });
   await page.getByRole('button', { name: 'Edit' }).click();
   await expect(page.getByRole('region', { name: 'Cost' }).getByText('Your price $14.30 · 50¢/kWh')).toBeVisible();
+});
+
+const SAVED_PLACE = {
+  id: 'place-sc', name: 'Bellevue SC', latitude: 47.61, longitude: -122.2, radius_m: 75, is_home: false, is_work: false, address: null,
+  charging: { id: 'cp-1', name: 'Bellevue SC', billing_type: 'per_kwh', rate: 0.42, session_fee: 0, currency: 'USD', timezone: 'America/Los_Angeles', tou_periods: [] },
+};
+
+test('a rate for a saved place needs a confirm step that says past automatic charges are priced again', async ({ page }) => {
+  const { charge } = await open(page, 'dark', 390, true, [SAVED_PLACE]);
+  const box = page.getByRole('region', { name: 'Add the cost of this charge' });
+  await box.getByLabel('Total paid (USD)').fill('14,30');
+  await expect(box.getByText('= 50¢ per kWh for 28.6 kWh')).toBeVisible();
+  await box.getByRole('checkbox', { name: /Use this rate at Bellevue SC/ }).check();
+  await box.getByRole('button', { name: 'Save cost' }).click();
+  const confirm = box.getByRole('group', { name: 'Confirm the place rate' });
+  await expect(confirm).toContainText('This sets Bellevue SC to 50¢/kWh. Past automatic charges at Bellevue SC are priced again with this rate.');
+  if (EVIDENCE_DIR) await box.screenshot({ path: `${EVIDENCE_DIR}/charge-cost-confirm-390-dark.png` });
+  expect(charge.patches).toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  await confirm.getByRole('button', { name: 'Save and change Bellevue SC' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Cost saved. Bellevue SC now uses 50¢ per kWh. Past automatic charges there are priced again.' })).toBeVisible();
+  expect(charge.patches).toEqual([{ cost_mode: 'manual', cost_usd: 14.3 }]);
+  expect(charge.placeWrites).toHaveLength(1);
+  expect(charge.placeWrites[0]).toMatchObject({ method: 'PUT', body: { name: 'Bellevue SC', charging: { billing_type: 'per_kwh', rate: 0.5 } } });
+});
+
+test('the Home place price is not offered in the cost box', async ({ page }) => {
+  const { charge } = await open(page, 'light', 390, true, [{ ...SAVED_PLACE, id: 'place-home', name: 'Home', is_home: true }]);
+  const box = page.getByRole('region', { name: 'Add the cost of this charge' });
+  await box.getByLabel('Total paid (USD)').fill('14.30');
+  await expect(box.getByText('Change the Home price in Settings → Places.')).toBeVisible();
+  await expect(box.getByRole('checkbox')).toHaveCount(0);
+  await box.getByRole('button', { name: 'Save cost' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Cost saved.' })).toBeVisible();
+  expect(charge.placeWrites).toEqual([]);
 });

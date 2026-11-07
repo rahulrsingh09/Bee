@@ -143,7 +143,7 @@ export function attentionItems(insights: readonly Insight[] | undefined): Attent
   const parked = insightOf(insights, 'high_parked_loss');
   if (parked?.severity === 'attention') {
     const loss = `${formatNumber(parked.values.loss_pct, 1)}% in ${formatDuration(parked.values.duration_hours * 60)}`;
-    const ratio = parked.values.ratio != null ? ` · ${formatNumber(parked.values.ratio, 1)}× your usual loss` : '';
+    const ratio = parked.values.ratio != null ? ` · ${formatNumber(parked.values.ratio, 1)}× your usual drain rate` : '';
     items.push({ id: parked.id, title: 'Parked loss was high', detail: `${loss}${ratio}`, to: '/battery/phantom-drain' });
   }
   const price = insightOf(insights, 'missing_price');

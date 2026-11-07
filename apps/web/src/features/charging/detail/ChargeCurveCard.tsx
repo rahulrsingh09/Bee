@@ -134,17 +134,23 @@ function ChargeCurvePlot({ curve, shape, band, chargerLimited, kind }: ChargeCur
   const y = (kw: number) => TOP + ((yScale.max - Math.min(kw, yScale.max)) / yScale.max) * (BOTTOM - TOP);
   const socSpan = Math.max(1, curve.socMax - curve.socMin);
   const xSoc = (soc: number) => LEFT + ((soc - curve.socMin) / socSpan) * (plotRight - LEFT);
-  const xTime = (minute: number) => LEFT + (minute / curve.durationMin) * (plotRight - LEFT);
+  // Minutes count from the session start, as in the API shape; the axis starts at the first reading when it is earlier.
+  const timeSpan = Math.max(1, curve.durationMin - curve.startMin);
+  const xTime = (minute: number) => LEFT + ((minute - curve.startMin) / timeSpan) * (plotRight - LEFT);
   const xAtMinute = (minute: number) => {
     const soc = socAxis ? socAtMinute(points, minute) : null;
     const timeX = xTime(minute);
     return soc == null ? timeX : timeX + (xSoc(soc) - timeX) * morph;
   };
-  const xs = points.map((point) => {
+  // Point x and the line change with the width, the scale and the morph only, not with the drag cursor.
+  const xs = React.useMemo(() => points.map((point) => {
     const timeX = xTime(point.minute);
     return point.soc == null || !socAxis ? timeX : timeX + (xSoc(point.soc) - timeX) * morph;
-  });
-  const linePath = `M${points.map((point, index) => `${xs[index]!.toFixed(1)},${y(point.kw).toFixed(1)}`).join(' L')}`;
+  }), [points, socAxis, morph, width, curve.startMin, curve.durationMin, curve.socMin, curve.socMax]); // eslint-disable-line react-hooks/exhaustive-deps
+  const linePath = React.useMemo(
+    () => `M${points.map((point, index) => `${xs[index]!.toFixed(1)},${y(point.kw).toFixed(1)}`).join(' L')}`,
+    [points, xs, yScale.max], // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   const peakIndex = shape ? nearestIndexByMinute(points, shape.peak_minute) : curve.peakIndex;
   const lowIndex = React.useMemo(() => {
@@ -183,6 +189,7 @@ function ChargeCurvePlot({ curve, shape, band, chargerLimited, kind }: ChargeCur
   const xTicks = morph >= 0.5 && socAxis
     ? Array.from({ length: 11 }, (_, index) => index * 10).filter((soc) => soc >= curve.socMin - 0.01 && soc <= curve.socMax + 0.01).map((soc) => ({ x: xSoc(soc), label: `${soc}%` }))
     : (() => {
+      // Ticks start at the session start (0 min); a reading before it sits left of 0.
       const step = curve.durationMin <= 12 ? 2 : curve.durationMin <= 30 ? 5 : curve.durationMin <= 90 ? 15 : 60;
       return Array.from({ length: Math.floor(curve.durationMin / step) + 1 }, (_, index) => index * step)
         .map((minute) => ({ x: xTime(minute), label: `${minute} min` }));
@@ -190,17 +197,24 @@ function ChargeCurvePlot({ curve, shape, band, chargerLimited, kind }: ChargeCur
   const yTicks = Array.from({ length: Math.floor(yScale.max / yScale.step) + 1 }, (_, index) => index * yScale.step);
   const color = kind === 'ac' ? 'var(--rm-charging-ac)' : 'var(--rm-charging-dc)';
 
+  // The plot rect is read once per drag (or hover), not on each pointermove.
+  const rectRef = React.useRef<DOMRect | null>(null);
+  React.useEffect(() => { rectRef.current = null; }, [width]);
+  const releaseRect = () => { rectRef.current = null; };
   const pick = (clientX: number) => {
-    const rect = wrapRef.current?.querySelector('svg')?.getBoundingClientRect();
-    if (!rect || rect.width <= 0) return;
+    rectRef.current ??= wrapRef.current?.querySelector('svg')?.getBoundingClientRect() ?? null;
+    const rect = rectRef.current;
+    if (!rect || rect.width <= 0) { rectRef.current = null; return; }
     const sx = ((clientX - rect.left) / rect.width) * width;
     let best = 0;
-    xs.forEach((x, index) => { if (Math.abs(x - sx) < Math.abs(xs[best]! - sx)) best = index; });
-    setCursor(best);
+    for (let index = 1; index < xs.length; index += 1) {
+      if (Math.abs(xs[index]! - sx) < Math.abs(xs[best]! - sx)) best = index;
+    }
+    setCursor((current) => (current === best ? current : best));
   };
   const cursorPoint = cursor == null ? null : points[cursor] ?? null;
   const readout = cursorPoint
-    ? [`${formatKw(cursorPoint.kw)} kW`, formatPct(cursorPoint.soc), `${Math.round(cursorPoint.minute)} min`].filter(Boolean).join(' · ')
+    ? [`${formatKw(cursorPoint.kw)} kW`, formatPct(cursorPoint.soc), `${Math.max(0, Math.round(cursorPoint.minute))} min`].filter(Boolean).join(' · ')
     : null;
   React.useLayoutEffect(() => { if (tipRef.current) setTipWidth(tipRef.current.offsetWidth || 150); }, [readout]);
   const cursorX = cursor == null ? null : xs[cursor]!;
@@ -288,8 +302,11 @@ function ChargeCurvePlot({ curve, shape, band, chargerLimited, kind }: ChargeCur
           aria-valuetext={readout ?? 'No point selected'}
           data-charge-scrub
           className="absolute inset-0 touch-pan-y rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-          onPointerDown={(event) => pick(event.clientX)}
+          onPointerDown={(event) => { releaseRect(); pick(event.clientX); }}
           onPointerMove={(event) => { if (event.pointerType !== 'mouse' || event.buttons > 0 || cursor != null) pick(event.clientX); }}
+          onPointerUp={releaseRect}
+          onPointerCancel={releaseRect}
+          onPointerLeave={releaseRect}
           onKeyDown={(event) => {
             if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
             event.preventDefault();

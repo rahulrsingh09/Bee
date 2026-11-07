@@ -169,26 +169,114 @@ describe('ChargeDetailView', () => {
     fireEvent.change(within(box).getByLabelText('Rate (USD per kWh)'), { target: { value: '0.50' } });
     expect(within(box).getByText('= $14.30')).toBeInTheDocument();
     fireEvent.click(within(box).getByRole('checkbox', { name: /Use this rate for my next charges at this charger/ }));
-    expect(within(box).getByText('Adds the saved place “Tesla Supercharger” at this charger with 50¢ per kWh.')).toBeInTheDocument();
+    expect(within(box).getByText('Adds the saved place “Tesla Supercharger” at this charger with 50¢ per kWh. Automatic charges at this place use this rate.')).toBeInTheDocument();
+    // A new place changes no past charge, so there is no confirm step.
     fireEvent.click(within(box).getByRole('button', { name: 'Save cost' }));
+    expect(within(box).queryByRole('group', { name: 'Confirm the place rate' })).toBeNull();
     await waitFor(() => expect(createPlace).toHaveBeenCalled());
     expect(mutateAsync).toHaveBeenCalledWith({ sessionId: 'charge-dc', cost_mode: 'manual', cost_usd: 14.3 });
     expect(createPlace.mock.calls[0]![0]).toMatchObject({ name: 'Tesla Supercharger', charging: { billing_type: 'per_kwh', rate: 0.5 } });
     expect(await screen.findByRole('status')).toHaveTextContent('Cost saved. Your next charges at “Tesla Supercharger” use 50¢ per kWh.');
   });
 
-  it('saves a total and previews its rate; updates a matched place', async () => {
+  it('saves a total and previews its rate; confirms before it changes a matched place', async () => {
     state.places = [{ id: 'p1', name: 'Bellevue SC', latitude: 47.61, longitude: -122.2, radius_m: 75, is_home: false, is_work: false, address: null, charging: null }];
     renderView();
     const box = screen.getByRole('region', { name: 'Add the cost of this charge' });
     fireEvent.change(within(box).getByLabelText('Total paid (USD)'), { target: { value: '14.30' } });
     expect(within(box).getByText('= 50¢ per kWh for 28.6 kWh')).toBeInTheDocument();
-    fireEvent.click(within(box).getByRole('checkbox', { name: /Use this rate for my next charges at Bellevue SC/ }));
+    fireEvent.click(within(box).getByRole('checkbox', { name: /Use this rate at Bellevue SC/ }));
     fireEvent.click(within(box).getByRole('button', { name: 'Save cost' }));
+    const confirm = within(box).getByRole('group', { name: 'Confirm the place rate' });
+    expect(confirm).toHaveTextContent('This sets Bellevue SC to 50¢/kWh. Past automatic charges at Bellevue SC are priced again with this rate.');
+    expect(mutateAsync).not.toHaveBeenCalled();
+    // Cancel goes back and saves nothing.
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Cancel' }));
+    expect(within(box).queryByRole('group', { name: 'Confirm the place rate' })).toBeNull();
+    expect(mutateAsync).not.toHaveBeenCalled();
+    fireEvent.click(within(box).getByRole('button', { name: 'Save cost' }));
+    const save = within(box).getByRole('button', { name: 'Save and change Bellevue SC' });
+    expect(save).toHaveFocus();
+    fireEvent.click(save);
     await waitFor(() => expect(updatePlace).toHaveBeenCalled());
     expect(mutateAsync).toHaveBeenCalledWith({ sessionId: 'charge-dc', cost_mode: 'manual', cost_usd: 14.3 });
     expect(updatePlace.mock.calls[0]![0]).toBe('p1');
+    expect(updatePlace.mock.calls[0]![1]).toMatchObject({ charging: { billing_type: 'per_kwh', rate: 0.5 } });
     expect(createPlace).not.toHaveBeenCalled();
+    expect(await screen.findByRole('status')).toHaveTextContent('Cost saved. Bellevue SC now uses 50¢ per kWh. Past automatic charges there are priced again.');
+  });
+
+  it('does not offer the rate for the Home place or a time-of-use place', () => {
+    state.places = [{ id: 'home', name: 'Home', latitude: 47.61, longitude: -122.2, radius_m: 75, is_home: true, is_work: false, address: null, charging: null }];
+    const { unmount } = renderView();
+    let box = screen.getByRole('region', { name: 'Add the cost of this charge' });
+    fireEvent.change(within(box).getByLabelText('Total paid (USD)'), { target: { value: '14.30' } });
+    expect(within(box).queryByRole('checkbox')).toBeNull();
+    expect(within(box).getByText('Change the Home price in Settings → Places.')).toBeInTheDocument();
+    unmount();
+    state.places = [{ id: 'tou', name: 'Office', latitude: 47.61, longitude: -122.2, radius_m: 75, is_home: false, is_work: true, address: null,
+      charging: { id: 'c', name: 'Office TOU', billing_type: 'tou', rate: 0, session_fee: 0, currency: 'USD', timezone: 'UTC', tou_periods: [] } }];
+    renderView();
+    box = screen.getByRole('region', { name: 'Add the cost of this charge' });
+    fireEvent.change(within(box).getByLabelText('Total paid (USD)'), { target: { value: '14.30' } });
+    expect(within(box).queryByRole('checkbox')).toBeNull();
+    expect(within(box).getByText('Office has time-of-use rates. Change its price in Settings → Places.')).toBeInTheDocument();
+  });
+
+  it('keeps the prompt open and says so when the cost saves and the place rate does not', async () => {
+    // The PATCH gives the charge a price, so the parent would close the prompt without the hold.
+    mutateAsync.mockImplementationOnce(async (body: Record<string, unknown>) => {
+      state.session = { ...state.session, cost_method: 'user_manual', cost_usd: 14.3, cost_override_mode: 'manual' };
+      return { ...state.session, ...body };
+    });
+    createPlace.mockRejectedValueOnce(new Error('The place did not save.'));
+    renderView();
+    const box = screen.getByRole('region', { name: 'Add the cost of this charge' });
+    fireEvent.click(within(box).getByRole('button', { name: 'Rate per kWh' }));
+    fireEvent.change(within(box).getByLabelText('Rate (USD per kWh)'), { target: { value: '0.50' } });
+    fireEvent.click(within(box).getByRole('checkbox', { name: /Use this rate for my next charges at this charger/ }));
+    fireEvent.click(within(box).getByRole('button', { name: 'Save cost' }));
+    expect(await within(box).findByRole('alert')).toHaveTextContent('Cost saved, but the rate did not save to the place. The place did not save. Try again.');
+    expect(screen.getByRole('region', { name: 'Add the cost of this charge' })).toBe(box);
+    expect(screen.queryByRole('status')).toBeNull();
+    fireEvent.click(within(box).getByRole('button', { name: 'Close' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('Cost saved. The place rate did not change.');
+    expect(screen.queryByRole('region', { name: 'Add the cost of this charge' })).toBeNull();
+  });
+
+  it('invalidates the cached insights after a cost save', async () => {
+    const invalidate = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
+    renderView();
+    const box = screen.getByRole('region', { name: 'Add the cost of this charge' });
+    fireEvent.change(within(box).getByLabelText('Total paid (USD)'), { target: { value: '14,30' } });
+    fireEvent.click(within(box).getByRole('button', { name: 'Save cost' }));
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['vehicles', 'insights'] }));
+    expect(mutateAsync).toHaveBeenCalledWith({ sessionId: 'charge-dc', cost_mode: 'manual', cost_usd: 14.3 });
+    invalidate.mockRestore();
+  });
+
+  it('places the API peak on the curve when the first reading is 3 minutes after the session start', () => {
+    state.curve = CURVE.map((point) => ({ ...point, minutes_elapsed: point.minutes_elapsed! + 3 }));
+    state.insights = [{ ...SHAPE, values: { ...SHAPE.values, peak_minute: 5.42, phases: [
+      { name: 'climb', start_min: 3, end_min: 5, from_kw: 60, to_kw: 108 },
+      { name: 'peak', start_min: 5, end_min: 9, from_kw: 108, to_kw: 105 },
+      { name: 'taper', start_min: 9, end_min: 25, from_kw: 105, to_kw: 52 },
+    ] } } as Insight];
+    const { container } = renderView();
+    const card = container.querySelector('[data-charge-curve="plot"]') as HTMLElement;
+    expect(within(card).getByText('Peak 108 kW at 44%')).toBeInTheDocument();
+    fireEvent.click(within(card).getByRole('button', { name: 'Time' }));
+    const tickX = (label: string) => Number(within(card).getByText(label).getAttribute('x'));
+    // The time axis starts at the session start: the first reading sits right of 0 min, and the peak sits at 5.42 min.
+    const slider = screen.getByRole('slider', { name: 'Read a point on the curve' });
+    fireEvent.keyDown(slider, { key: 'ArrowRight' });
+    expect(container.querySelector('[data-charge-tip]')).toHaveTextContent('60 kW · 40% · 3 min');
+    const firstX = Number(card.querySelector('[data-charge-cursor] line')!.getAttribute('x1'));
+    expect(firstX).toBeGreaterThan(tickX('0 min'));
+    expect(firstX).toBeLessThan(tickX('5 min'));
+    const peakX = Number(card.querySelector('[data-charge-peak] circle')!.getAttribute('cx'));
+    expect(peakX).toBeGreaterThan(tickX('5 min'));
+    expect(peakX - tickX('5 min')).toBeLessThan((tickX('10 min') - tickX('5 min')) / 4);
   });
 
   it('shows "Your price" with the derived rate and opens the cost box from Edit', () => {

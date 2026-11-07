@@ -71,6 +71,7 @@ for (const inputMode of ['typed', 'browser-filled-email', 'browser-filled-passwo
     await expect(page.getByLabel('Password')).toHaveValue(credentials.password);
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect.poll(() => submitted).toEqual(credentials);
-    await expect(page.getByRole('alert')).toContainText('Incorrect email or password');
+    // The form keeps its own inline error; the sign-in failure toast repeats it in the Notifications region.
+    await expect(page.locator('form').getByRole('alert')).toContainText('Incorrect email or password');
   });
 }

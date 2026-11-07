@@ -11,7 +11,8 @@ for (const width of [393, 1440]) for (const mode of ['dark', 'light'] as const) 
     const key = page.getByRole('group', { name: 'Selected route key' });
     const select = async (index: number) => {
       const label = `Route ${String(index).padStart(2, '0')} · Home`;
-      await (width === 393 ? table.getByRole('button') : table.getByRole('row')).filter({ hasText: label }).click();
+      // A row or card opens the trip; selection for the map and tags uses its "Select trip from …" checkbox.
+      await table.locator('*').filter({ hasText: label }).filter({ has: page.getByRole('checkbox') }).last().getByRole('checkbox').click();
     };
     for (let index = 1; index <= 10; index++) await select(index);
     await expect(key.getByRole('button')).toHaveCount(10);
@@ -20,7 +21,7 @@ for (const width of [393, 1440]) for (const mode of ['dark', 'light'] as const) 
     ])));
     const firstDate = await key.getByRole('button').first().locator('span.block').last().textContent();
     expect(firstDate).toBe('Oct 7, 2026, 11:00 PM');
-    const firstTrip = (width === 393 ? table.getByRole('button') : table.getByRole('row')).filter({ hasText: 'Route 01 · Home' });
+    const firstTrip = (width === 393 ? table.getByRole('button') : table.getByRole('row')).filter({ hasText: 'Route 01 · Home' }).first();
     await expect(firstTrip).toContainText(firstDate!.trim());
     if (width === 1440) {
       const compact = key.locator('../..');
@@ -41,10 +42,10 @@ for (const width of [393, 1440]) for (const mode of ['dark', 'light'] as const) 
     await expect(key.getByRole('button')).toHaveCount(9);
     for (const [id, color] of Object.entries(await colors())) expect(color).toBe(before[id]);
     await select(2);
-    const efficiency = page.locator('[data-testid="sensor-chip"]').filter({ hasText: 'Avg Efficiency' }).first();
+    const efficiency = page.locator('[data-testid="sensor-chip"]').filter({ hasText: 'Efficiency' }).first();
     await page.getByRole('button', { name: /Toggle efficiency units/ }).click();
     await expect(efficiency).toContainText('304 Wh/mi');
-    await expect((width === 393 ? table.getByRole('button') : table.getByRole('row')).filter({ hasText: 'Route 01 · Home' })).toContainText(/250\s*Wh\/mi/);
+    await expect((width === 393 ? table.getByRole('button') : table.getByRole('row')).filter({ hasText: 'Route 01 · Home' }).first()).toContainText(/250\s*Wh\/mi/);
     await page.getByRole('button', { name: /Toggle efficiency units/ }).click();
     await expect(efficiency).toContainText('3.3 mi/kWh');
     for (let index = 11; index <= 15; index++) await select(index);

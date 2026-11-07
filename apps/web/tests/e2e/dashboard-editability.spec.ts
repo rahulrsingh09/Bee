@@ -242,7 +242,7 @@ test.describe('dashboard editability on coarse pointers', () => {
 test.describe('mobile app navigation', () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
 
-  test('uses a bottom, touch-safe navigation bar with Explore access', async ({ page }) => {
+  test('uses a bottom, touch-safe four-tab bar with Insights access', async ({ page }) => {
     await installApiMocks(page);
     await page.goto('/');
 
@@ -253,22 +253,37 @@ test.describe('mobile app navigation', () => {
     expect(box.y).toBeGreaterThan(740);
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(390);
-    const home = navigation.getByRole('link', { name: 'Home' });
-    const explore = navigation.getByRole('link', { name: 'Explore' });
-    const settings = page.getByRole('link', { name: 'Settings', exact: true });
-    const signOut = page.getByRole('button', { name: 'Sign out' });
+    await expect(navigation.getByRole('link')).toHaveCount(4);
+    const tabs = ['Now', 'Activity', 'Insights', 'Car'].map((name) => navigation.getByRole('link', { name, exact: true }));
+    const [now, , insights, car] = tabs;
 
-    await expect(home).toHaveAttribute('aria-current', 'page');
-    for (const control of [home, explore, settings, signOut]) {
+    await expect(now!).toHaveAttribute('aria-current', 'page');
+    for (const control of tabs) {
       const box = await control.boundingBox();
       expect(box).not.toBeNull();
       expect(box!.height).toBeGreaterThanOrEqual(44);
     }
+    // The top bar holds only the R mark and freshness. Settings and Sign out live on the Car tab.
+    const header = page.getByRole('banner');
+    await expect(header.getByRole('link', { name: 'Settings', exact: true })).toHaveCount(0);
+    await expect(header.getByRole('button', { name: 'Sign out' })).toHaveCount(0);
 
-    await explore.click();
-    await page.getByRole('main').getByRole('link', { name: /Battery/ }).click();
+    await insights!.click();
+    await expect(page).toHaveURL(/\/insights$/);
+    await page.getByRole('main').getByRole('link', { name: /^Battery/ }).click();
     await expect(page).toHaveURL(/\/battery$/);
     await expect(navigation).toBeVisible();
+    await expect(insights!).toHaveAttribute('aria-current', 'page');
+
+    await car!.click();
+    await expect(page).toHaveURL(/\/vehicle-health$/);
+    const settings = page.getByRole('main').getByRole('link', { name: /Settings/ });
+    await expect(settings).toBeVisible();
+    expect((await settings.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await page.goto('/settings?section=account');
+    const signOut = page.getByRole('main').getByRole('button', { name: 'Sign out' });
+    await expect(signOut).toBeVisible();
+    expect((await signOut.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   });
 });
 

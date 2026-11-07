@@ -69,11 +69,11 @@ for (const width of [320, 393, 402, 1280]) for (const mode of ['dark', 'light'] 
       await expect(card.getByText('0.25 mi/h')).toBeVisible();
       await card.screenshot({ path: testInfo.outputPath('period-details.png') });
       await periods.getByRole('button', { name: 'Sort rows by' }).click();
-      await page.getByRole('option', { name: 'SoC Diff', exact: true }).click();
+      await page.getByRole('option', { name: 'Battery lost', exact: true }).click();
       await periods.getByRole('button', { name: 'Sort descending' }).click();
       await expect(page.getByTestId('phantom-period-card').first()).toContainText('0.84%');
       await periods.getByRole('searchbox').fill('unmatched');
-      await expect(periods.getByRole('heading', { name: 'No matching phantom drain periods' })).toBeVisible();
+      await expect(periods.getByRole('heading', { name: 'No matching parked periods' })).toBeVisible();
       await periods.getByRole('searchbox').fill('');
       await expect(page.getByTestId('phantom-period-card')).toHaveCount(7);
       await periods.screenshot({ path: testInfo.outputPath('parked-periods.png') });

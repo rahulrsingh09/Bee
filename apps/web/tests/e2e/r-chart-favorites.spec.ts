@@ -1,6 +1,9 @@
 import { expect, test } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { installGraphFixture } from './r-default-graphs.fixture';
+import { OVERVIEW_DASHBOARD_PATH } from './r-experience.fixture';
+
+const pathFor = (slug: string) => slug === 'dashboard' ? OVERVIEW_DASHBOARD_PATH : `/${slug}`;
 
 for (const width of [393, 1280]) {
   test(`chart favorites start selected and persist independently of pinned graphs ${width}`, async ({ page }) => {
@@ -13,10 +16,12 @@ for (const width of [393, 1280]) {
     const showCatalog = async (slug: string) => {
       const config = JSON.parse(readFileSync(new URL(`../../../../packages/dashboards/src/defaults/${slug}.json`, import.meta.url), 'utf8'));
       const catalog = config.widgets.find((w: { options?: { showPicker?: boolean } }) => w.options?.showPicker === true);
-      await page.locator(`[data-widget-id="${catalog.id}"]`).scrollIntoViewIfNeeded();
+      const card = page.locator(`[data-widget-id="${catalog.id}"]`);
+      await card.scrollIntoViewIfNeeded();
+      await expect(card.getByRole('button', { name: 'Chart options' })).toHaveCount(1);
     };
     for (const slug of ['dashboard', 'battery', 'charging', 'efficiency']) {
-      await page.goto(slug === 'dashboard' ? '/' : `/${slug}`);
+      await page.goto(pathFor(slug));
       await showCatalog(slug);
       const picker = page.getByRole('button', { name: 'Chart', exact: true });
       await picker.scrollIntoViewIfNeeded();
@@ -28,7 +33,7 @@ for (const width of [393, 1280]) {
       await page.keyboard.press('Escape');
     }
     expect(fixture.writes).toEqual([]);
-    await page.goto('/');
+    await page.goto(OVERVIEW_DASHBOARD_PATH);
     await showCatalog('dashboard');
     const picker = page.getByRole('button', { name: 'Chart', exact: true });
     await picker.scrollIntoViewIfNeeded();

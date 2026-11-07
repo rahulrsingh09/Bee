@@ -5,6 +5,12 @@ import type { Page, WebSocketRoute } from '@playwright/test';
 import type { Insight, VehicleStatus } from '@riviamigo/types';
 import { readFileSync } from 'node:fs';
 
+/**
+ * The bundled Overview dashboard (the former Home grid). "/" is the Now page; the owner opens the
+ * Overview from Insights → Custom dashboards → "Open default", which links to this URL.
+ */
+export const OVERVIEW_DASHBOARD_PATH = '/d/dashboard?dashboardId=00000000-0000-0000-0000-000000000001';
+
 export async function installRFixture(page: Page, options: {
   mode?: 'light' | 'dark';
   timezone?: string;
@@ -157,6 +163,8 @@ export async function installRFixture(page: Page, options: {
     if (/\/vehicles\/[^/]+\/images$/.test(path)) return json({ all: [] });
     if (/\/vehicles\/[^/]+\/idle-drain$/.test(path)) return json({ vehicle_id: vehicle.id, periods: [] });
     if (/\/vehicles\/[^/]+\/charging-networks$/.test(path)) return json([]);
+    // The Now page reads the schedule; the preview vehicle has no schedule.
+    if (/\/vehicles\/[^/]+\/charging-schedule$/.test(path) && request.method() === 'GET') return json(null);
     if (/\/vehicles\/[^/]+\/ingestion-diagnostics$/.test(path)) return json({
       state: 'idle', started_at: null, ends_at: null, stopped_at: null, stop_reason: null,
       event_count: 0, last_event_at: null, truncated: false,

@@ -194,9 +194,11 @@ test('an edited Home layout stays reachable as a custom dashboard', async ({ pag
     id: '11111111-1111-4111-8111-111111111111', ownerId: '33333333-3333-4333-8333-333333333333', isDefault: false, isLocked: false,
   };
   await page.route(`**/v1/dashboards/${personal.id}`, route => route.fulfill({ json: personal }));
+  // The bundled Overview dashboard stays a custom dashboard at /d/dashboard; it no longer redirects to Now.
   await page.goto('/d/dashboard');
-  await expect(page).toHaveURL(/\/$/);
-  await expect(page.locator('.now')).toBeVisible();
+  await expect(page).toHaveURL(/\/d\/dashboard$/);
+  await expect(page.locator('.now')).toHaveCount(0);
+  await expect(page.locator('[data-dashboard-grid]').first()).toBeVisible();
   await page.goto(`/d/dashboard?dashboardId=${personal.id}`);
   await expect(page.locator('.r-dashboard-vehicle')).toBeVisible();
   await expect(page.locator('.now')).toHaveCount(0);

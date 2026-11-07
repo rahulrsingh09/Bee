@@ -1,6 +1,9 @@
 import { expect, test } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { installGraphFixture } from './r-default-graphs.fixture';
+import { OVERVIEW_DASHBOARD_PATH } from './r-experience.fixture';
+
+const primary = (page: import('@playwright/test').Page) => page.getByRole('navigation', { name: 'Primary navigation' });
 
 for (const width of [393, 1280]) for (const mode of ['dark', 'light'] as const) {
   test(`default graphs and battery navigation ${width} ${mode}`, async ({ page }, testInfo) => {
@@ -8,13 +11,17 @@ for (const width of [393, 1280]) for (const mode of ['dark', 'light'] as const) 
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const fixture = await installGraphFixture(page, { mode });
     const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
+    await page.goto('/');
+    await expect(page.locator('.now h1')).toBeVisible();
+    await expect(page.locator('[data-dashboard-grid]')).toHaveCount(0);
     for (const slug of ['dashboard', 'battery', 'charging', 'efficiency']) {
-      await page.goto(slug === 'dashboard' ? '/' : `/${slug}`);
+      await page.goto(slug === 'dashboard' ? OVERVIEW_DASHBOARD_PATH : `/${slug}`);
       const config = JSON.parse(readFileSync(new URL(`../../../../packages/dashboards/src/defaults/${slug}.json`, import.meta.url), 'utf8'));
       const graphs = config.widgets.filter((w: { options?: { showPicker?: boolean } }) => w.options?.showPicker === false);
       for (const widget of graphs) {
         const card = page.locator(`[data-dashboard-grid] > [data-widget-id="${widget.id}"]`);
-        await card.scrollIntoViewIfNeeded();
+        // The grid can re-render once while chart data settles; retry the scroll until it holds.
+        await expect(async () => card.scrollIntoViewIfNeeded({ timeout: 2000 })).toPass();
         await expect(card.locator(`[data-chart-id="${widget.options.chartId}"]`)).toBeVisible();
         await expect(card.getByText(widget.title, { exact: true })).toBeVisible();
         await expect(card.getByRole('button', { name: 'Chart', exact: true })).toHaveCount(0);
@@ -24,10 +31,12 @@ for (const width of [393, 1280]) for (const mode of ['dark', 'light'] as const) 
       await page.evaluate(() => scrollTo(0, 0));
       await page.screenshot({ path: testInfo.outputPath(`${slug}.png`), fullPage: true });
     }
-    await page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('link', { name: 'Battery', exact: true }).click();
-    await page.getByRole('navigation', { name: 'Battery sections' }).getByRole('link', { name: 'Phantom drain', exact: true }).click();
+    await primary(page).getByRole('link', { name: 'Insights', exact: true }).click();
+    await page.getByRole('navigation', { name: 'Insights' }).getByRole('link', { name: /^Battery/ }).click();
+    await expect(page).toHaveURL(/\/battery$/);
+    await page.getByRole('navigation', { name: 'Battery sections' }).getByRole('link', { name: 'Parked loss', exact: true }).click();
     await expect(page).toHaveURL(/\/battery\/phantom-drain$/);
-    await expect(page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('link', { name: 'Battery', exact: true })).toHaveAttribute('aria-current', 'page');
+    await expect(primary(page).getByRole('link', { name: 'Insights', exact: true })).toHaveAttribute('aria-current', 'page');
     await expect(page.getByText('Avg sleep', { exact: true })).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath('phantom-drain.png'), fullPage: true });
     await page.getByRole('button', { name: 'Last 30 days', exact: true }).click();
@@ -44,8 +53,8 @@ test('small phone primary targets fit and retain accessible names', async ({ pag
   await page.setViewportSize({ width: 320, height: 740 });
   await installGraphFixture(page);
   await page.goto('/battery');
-  const links = page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('link');
-  await expect(links).toHaveCount(5);
+  const links = primary(page).getByRole('link');
+  await expect(links).toHaveCount(4);
   for (const link of await links.all()) {
     await expect(link.locator('span')).toBeVisible();
     const box = (await link.boundingBox())!;
@@ -54,23 +63,24 @@ test('small phone primary targets fit and retain accessible names', async ({ pag
     expect(box.x + box.width).toBeLessThanOrEqual(320);
     expect(await link.evaluate(e => e.scrollWidth <= e.clientWidth)).toBe(true);
   }
-  await page.getByRole('link', { name: 'Explore', exact: true }).click();
-  await page.getByRole('link', { name: /Phantom drain Parked energy/ }).click();
+  await primary(page).getByRole('link', { name: 'Insights', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Insights' }).getByRole('link', { name: /^Parked loss/ }).click();
   await expect(page).toHaveURL(/\/battery\/phantom-drain$/);
 });
 
-test('mobile efficiency remains reachable and desktop restores its primary tab', async ({ page }) => {
+test('efficiency stays reachable from Insights on phone and desktop', async ({ page }) => {
   await page.setViewportSize({ width: 393, height: 852 });
   await installGraphFixture(page);
   await page.goto('/explore');
-  const navigation = page.getByRole('navigation', { name: 'Primary navigation' });
-  await expect(navigation.getByRole('link')).toHaveCount(5);
-  await page.locator('.r-directory').getByRole('link', { name: /^Efficiency / }).click();
+  await expect(page).toHaveURL(/\/insights$/);
+  const navigation = primary(page);
+  await expect(navigation.getByRole('link')).toHaveCount(4);
+  await page.locator('.r-directory').getByRole('link', { name: /^Efficiency/ }).click();
   await expect(page).toHaveURL(/\/efficiency$/);
-  await expect(navigation.getByRole('link', { name: 'Explore', exact: true })).toHaveAttribute('aria-current', 'page');
+  await expect(navigation.getByRole('link', { name: 'Insights', exact: true })).toHaveAttribute('aria-current', 'page');
   await page.setViewportSize({ width: 1280, height: 852 });
-  await expect(navigation.getByRole('link')).toHaveCount(6);
-  await expect(navigation.getByRole('link', { name: 'Efficiency', exact: true })).toHaveAttribute('aria-current', 'page');
+  await expect(navigation.getByRole('link')).toHaveCount(4);
+  await expect(navigation.getByRole('link', { name: 'Insights', exact: true })).toHaveAttribute('aria-current', 'page');
 });
 
 test('removing a pinned graph stays removed after saving the system layout', async ({ page }) => {
@@ -82,16 +92,16 @@ test('removing a pinned graph stays removed after saving the system layout', asy
   await page.getByRole('button', { name: 'Delete Widget', exact: true }).click();
   await page.getByRole('button', { name: 'Save dashboard changes' }).click();
   await expect(page.locator('.rgl-editor')).toHaveCount(0);
-  await page.goto('/');
-  await expect(page.locator('[data-dashboard-grid] > [data-widget-id="d1000001-0000-0000-0000-000000000101"]')).toHaveCount(0);
+  await page.goto(OVERVIEW_DASHBOARD_PATH);
   await expect(page.locator('[data-dashboard-grid] > [data-widget-id="d1000001-0000-0000-0000-000000000102"]')).toHaveCount(1);
+  await expect(page.locator('[data-dashboard-grid] > [data-widget-id="d1000001-0000-0000-0000-000000000101"]')).toHaveCount(0);
   expect(fixture.writes.filter(w => w.includes('/dashboards/'))).toHaveLength(1);
 });
 
 test('charging, vehicle lock and software states stay explicit', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 393, height: 852 });
   await installGraphFixture(page, { statusOverrides: { charger_state: 'Charging', charger_status: 'chrgr_sts_connected_charging', time_to_end_of_charge_min: 42, doors_locked: false, door_front_left_closed: false, closure_frunk_closed: false, closure_liftgate_closed: false, ota_available_version: '2026.39' } });
-  await page.goto('/');
+  await page.goto(OVERVIEW_DASHBOARD_PATH);
   const energy = page.locator('.r-energy-summary');
   await expect(energy).toHaveAttribute('data-charging', 'true');
   await expect(energy).toContainText('68%');

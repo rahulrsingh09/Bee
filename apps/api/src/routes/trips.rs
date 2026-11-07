@@ -161,6 +161,23 @@ struct VehicleParam {
     vehicle_id: Option<Uuid>,
 }
 
+/// The `SELECT` column list for [`TripRow`]. The list, single-trip, and detail
+/// queries share it, so a new trip field reaches every trip response together.
+/// It needs the `t`, `sg`, `eg`, `sa`, and `ea` aliases from the shared joins.
+macro_rules! trip_row_columns {
+    () => {
+        "t.id, t.started_at, t.ended_at, t.duration_seconds, t.distance_miles, \
+         t.efficiency_wh_per_mile, t.max_speed_mph, t.drive_mode, t.soc_start, t.soc_end, \
+         t.start_odometer_mi, t.end_odometer_mi, \
+         t.start_lat, t.start_lng, t.end_lat, t.end_lng, \
+         COALESCE(sg.name, NULLIF(CONCAT_WS(', ', sa.road, sa.city), '')) AS start_place, \
+         COALESCE(eg.name, NULLIF(CONCAT_WS(', ', ea.road, ea.city), '')) AS end_place, \
+         sa.display_name AS start_address, ea.display_name AS end_address, \
+         t.outside_temp_c AS outside_temp_c, t.outside_temp_source AS outside_temp_source, \
+         COALESCE((SELECT jsonb_agg(jsonb_build_object('id', tt.id, 'vehicle_id', tt.vehicle_id, 'name', tt.name, 'color_token', tt.color_token, 'created_by', tt.created_by, 'created_at', tt.created_at, 'updated_at', tt.updated_at) ORDER BY lower(tt.name), tt.id) FROM riviamigo.trip_tag_assignments tta JOIN riviamigo.trip_tags tt ON tt.id=tta.tag_id WHERE tta.trip_id=t.id), '[]'::jsonb) AS tags"
+    };
+}
+
 #[derive(Debug, Serialize, sqlx::FromRow)]
 struct TripRow {
     id: Uuid,
@@ -173,6 +190,10 @@ struct TripRow {
     drive_mode: Option<String>,
     soc_start: Option<f64>,
     soc_end: Option<f64>,
+    /// Odometer at trip start, in miles. `None` when the trip has no reading.
+    start_odometer_mi: Option<f64>,
+    /// Odometer at trip end, in miles. `None` when the trip has no reading.
+    end_odometer_mi: Option<f64>,
     start_lat: Option<f64>,
     start_lng: Option<f64>,
     end_lat: Option<f64>,
@@ -642,14 +663,7 @@ async fn list_trips(
         .await?;
 
     let rows_sql = format!(
-        "SELECT t.id, t.started_at, t.ended_at, t.duration_seconds, t.distance_miles, \
-                t.efficiency_wh_per_mile, t.max_speed_mph, t.drive_mode, t.soc_start, t.soc_end, \
-                t.start_lat, t.start_lng, t.end_lat, t.end_lng, \
-                COALESCE(sg.name, NULLIF(CONCAT_WS(', ', sa.road, sa.city), '')) AS start_place, \
-                COALESCE(eg.name, NULLIF(CONCAT_WS(', ', ea.road, ea.city), '')) AS end_place, \
-                sa.display_name AS start_address, ea.display_name AS end_address, \
-                t.outside_temp_c AS outside_temp_c, t.outside_temp_source AS outside_temp_source, \
-                COALESCE((SELECT jsonb_agg(jsonb_build_object('id', tt.id, 'vehicle_id', tt.vehicle_id, 'name', tt.name, 'color_token', tt.color_token, 'created_by', tt.created_by, 'created_at', tt.created_at, 'updated_at', tt.updated_at) ORDER BY lower(tt.name), tt.id) FROM riviamigo.trip_tag_assignments tta JOIN riviamigo.trip_tags tt ON tt.id=tta.tag_id WHERE tta.trip_id=t.id), '[]'::jsonb) AS tags \
+        concat!("SELECT ", trip_row_columns!(), " \
          FROM riviamigo.trips t \
          LEFT JOIN riviamigo.trip_user_annotations tua ON tua.trip_id = t.id AND tua.user_id = $7 \
          LEFT JOIN riviamigo.geofences sg ON sg.id = COALESCE(tua.start_geofence_id, t.start_geofence_id) \
@@ -658,7 +672,7 @@ async fn list_trips(
          LEFT JOIN riviamigo.addresses ea ON ea.id = COALESCE(tua.end_address_id, t.end_address_id) \
          WHERE t.vehicle_id=$1 AND t.started_at>=$2 AND t.started_at<=$3 \
          {} \
-         {} ORDER BY t.started_at DESC LIMIT $4 OFFSET $5",
+         {} ORDER BY t.started_at DESC LIMIT $4 OFFSET $5"),
         trip_search_predicate(6),
         sql_predicate("t", 8, 9, 10),
     );
@@ -807,21 +821,14 @@ async fn get_trip(
     require_vehicle_read_access(&state.pool, &auth, vid).await?;
 
     let row = sqlx::query_as::<_, TripRow>(
-        "SELECT t.id, t.started_at, t.ended_at, t.duration_seconds, t.distance_miles, \
-                t.efficiency_wh_per_mile, t.max_speed_mph, t.drive_mode, t.soc_start, t.soc_end, \
-                t.start_lat, t.start_lng, t.end_lat, t.end_lng, \
-                COALESCE(sg.name, NULLIF(CONCAT_WS(', ', sa.road, sa.city), '')) AS start_place, \
-                COALESCE(eg.name, NULLIF(CONCAT_WS(', ', ea.road, ea.city), '')) AS end_place, \
-                sa.display_name AS start_address, ea.display_name AS end_address, \
-                t.outside_temp_c AS outside_temp_c, t.outside_temp_source AS outside_temp_source, \
-                COALESCE((SELECT jsonb_agg(jsonb_build_object('id', tt.id, 'vehicle_id', tt.vehicle_id, 'name', tt.name, 'color_token', tt.color_token, 'created_by', tt.created_by, 'created_at', tt.created_at, 'updated_at', tt.updated_at) ORDER BY lower(tt.name), tt.id) FROM riviamigo.trip_tag_assignments tta JOIN riviamigo.trip_tags tt ON tt.id=tta.tag_id WHERE tta.trip_id=t.id), '[]'::jsonb) AS tags \
+        concat!("SELECT ", trip_row_columns!(), " \
          FROM riviamigo.trips t \
          LEFT JOIN riviamigo.trip_user_annotations tua ON tua.trip_id = t.id AND tua.user_id = $3 \
          LEFT JOIN riviamigo.geofences sg ON sg.id = COALESCE(tua.start_geofence_id, t.start_geofence_id) \
          LEFT JOIN riviamigo.geofences eg ON eg.id = COALESCE(tua.end_geofence_id, t.end_geofence_id) \
          LEFT JOIN riviamigo.addresses sa ON sa.id = COALESCE(tua.start_address_id, t.start_address_id) \
          LEFT JOIN riviamigo.addresses ea ON ea.id = COALESCE(tua.end_address_id, t.end_address_id) \
-            WHERE t.id=$1 AND t.vehicle_id=$2",
+            WHERE t.id=$1 AND t.vehicle_id=$2"),
     )
     .bind(id)
     .bind(vid)
@@ -1000,21 +1007,14 @@ async fn get_trip_detail(
     require_vehicle_read_access(&state.pool, &auth, vid).await?;
 
     let trip = sqlx::query_as::<_, TripRow>(
-        "SELECT t.id, t.started_at, t.ended_at, t.duration_seconds, t.distance_miles, \
-                t.efficiency_wh_per_mile, t.max_speed_mph, t.drive_mode, t.soc_start, t.soc_end, \
-                t.start_lat, t.start_lng, t.end_lat, t.end_lng, \
-                COALESCE(sg.name, NULLIF(CONCAT_WS(', ', sa.road, sa.city), '')) AS start_place, \
-                COALESCE(eg.name, NULLIF(CONCAT_WS(', ', ea.road, ea.city), '')) AS end_place, \
-                sa.display_name AS start_address, ea.display_name AS end_address, \
-                t.outside_temp_c AS outside_temp_c, t.outside_temp_source AS outside_temp_source, \
-                COALESCE((SELECT jsonb_agg(jsonb_build_object('id', tt.id, 'vehicle_id', tt.vehicle_id, 'name', tt.name, 'color_token', tt.color_token, 'created_by', tt.created_by, 'created_at', tt.created_at, 'updated_at', tt.updated_at) ORDER BY lower(tt.name), tt.id) FROM riviamigo.trip_tag_assignments tta JOIN riviamigo.trip_tags tt ON tt.id=tta.tag_id WHERE tta.trip_id=t.id), '[]'::jsonb) AS tags \
+        concat!("SELECT ", trip_row_columns!(), " \
          FROM riviamigo.trips t \
          LEFT JOIN riviamigo.trip_user_annotations tua ON tua.trip_id = t.id AND tua.user_id = $3 \
          LEFT JOIN riviamigo.geofences sg ON sg.id = COALESCE(tua.start_geofence_id, t.start_geofence_id) \
          LEFT JOIN riviamigo.geofences eg ON eg.id = COALESCE(tua.end_geofence_id, t.end_geofence_id) \
          LEFT JOIN riviamigo.addresses sa ON sa.id = COALESCE(tua.start_address_id, t.start_address_id) \
          LEFT JOIN riviamigo.addresses ea ON ea.id = COALESCE(tua.end_address_id, t.end_address_id) \
-         WHERE t.id=$1 AND t.vehicle_id=$2",
+         WHERE t.id=$1 AND t.vehicle_id=$2"),
     )
     .bind(id)
     .bind(vid)
@@ -1601,6 +1601,107 @@ async fn trip_series_response(
         .collect::<Vec<_>>();
 
     Ok(Json(serde_json::json!(points)))
+}
+
+#[cfg(test)]
+mod trip_row_tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    fn trip_row(start_odometer_mi: Option<f64>, end_odometer_mi: Option<f64>) -> TripRow {
+        let started_at = Utc.with_ymd_and_hms(2026, 11, 7, 8, 0, 0).unwrap();
+        TripRow {
+            id: Uuid::nil(),
+            started_at,
+            ended_at: started_at + chrono::Duration::minutes(30),
+            duration_seconds: Some(1_800),
+            distance_miles: Some(12.4),
+            efficiency_wh_per_mile: Some(410.0),
+            max_speed_mph: Some(64.0),
+            drive_mode: None,
+            soc_start: Some(80.0),
+            soc_end: Some(76.0),
+            start_odometer_mi,
+            end_odometer_mi,
+            start_lat: None,
+            start_lng: None,
+            end_lat: None,
+            end_lng: None,
+            start_place: None,
+            end_place: None,
+            start_address: None,
+            end_address: None,
+            outside_temp_c: None,
+            outside_temp_source: None,
+            tags: serde_json::json!([]),
+        }
+    }
+
+    #[test]
+    fn trip_row_columns_select_start_and_end_odometer() {
+        const COLUMNS: &str = trip_row_columns!();
+
+        assert!(COLUMNS.contains("t.start_odometer_mi"));
+        assert!(COLUMNS.contains("t.end_odometer_mi"));
+        assert!(
+            !COLUMNS.contains('{') && !COLUMNS.contains('}'),
+            "the list query passes these columns through format!"
+        );
+    }
+
+    #[test]
+    fn trip_row_serializes_odometer_in_miles() {
+        let json = serde_json::to_value(trip_row(Some(10_250.5), Some(10_262.9))).unwrap();
+
+        assert_eq!(json["start_odometer_mi"], serde_json::json!(10_250.5));
+        assert_eq!(json["end_odometer_mi"], serde_json::json!(10_262.9));
+    }
+
+    #[test]
+    fn trip_row_serializes_missing_odometer_as_null() {
+        let json = serde_json::to_value(trip_row(None, None)).unwrap();
+        let object = json.as_object().unwrap();
+
+        assert_eq!(
+            object.get("start_odometer_mi"),
+            Some(&serde_json::Value::Null)
+        );
+        assert_eq!(
+            object.get("end_odometer_mi"),
+            Some(&serde_json::Value::Null)
+        );
+    }
+
+    // Run with: cargo test -- --ignored
+    #[tokio::test]
+    #[ignore = "requires DATABASE_URL"]
+    async fn trip_row_columns_decode_against_schema() {
+        let database_url =
+            std::env::var("DATABASE_URL").expect("DATABASE_URL must be set for integration tests");
+        let pool = crate::db::pool::create_pool(&database_url)
+            .await
+            .expect("create_pool");
+
+        let rows = sqlx::query_as::<_, TripRow>(concat!(
+            "SELECT ",
+            trip_row_columns!(),
+            " FROM riviamigo.trips t \
+             LEFT JOIN riviamigo.geofences sg ON sg.id = t.start_geofence_id \
+             LEFT JOIN riviamigo.geofences eg ON eg.id = t.end_geofence_id \
+             LEFT JOIN riviamigo.addresses sa ON sa.id = t.start_address_id \
+             LEFT JOIN riviamigo.addresses ea ON ea.id = t.end_address_id \
+             ORDER BY t.started_at DESC LIMIT 5"
+        ))
+        .fetch_all(&pool)
+        .await
+        .expect("trip row columns match the trips schema");
+
+        for row in rows {
+            if let (Some(start), Some(end)) = (row.start_odometer_mi, row.end_odometer_mi) {
+                assert!(end >= start, "trip {} odometer runs backward", row.id);
+            }
+        }
+    }
 }
 
 #[cfg(test)]

@@ -1,5 +1,21 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type Locator } from '@playwright/test';
 import { installRFixture } from './r-experience.fixture';
+
+/** The chart remounts once its data arrives. Retry until the settled element is in view and measured. */
+async function settledBox(locator: Locator) {
+  for (let attempt = 0; attempt < 40; attempt++) {
+    try {
+      await locator.scrollIntoViewIfNeeded({ timeout: 2_000 });
+      const box = await locator.boundingBox();
+      if (box) return box;
+    } catch {
+      // The element was replaced during a re-render; measure the new one.
+    }
+    await locator.page().waitForTimeout(250);
+  }
+  throw new Error('The chart did not settle within 10 s.');
+}
+
 
 const chartSelector = '[data-chart-renderer="rich-time-series"]';
 const mapLabel = 'Inspect trip route. Tap or drag to select a point; arrow keys move along the route.';
@@ -115,8 +131,7 @@ test.describe('touch trip inspection', () => {
     await installRFixture(page, { populatedTrip: true });
     await page.goto('/trips/trip-1');
     const plot = powerCard(page).locator('.u-over');
-    await plot.scrollIntoViewIfNeeded();
-    const bounds = (await plot.boundingBox())!;
+    const bounds = await settledBox(plot);
     await page.touchscreen.tap(bounds.x + bounds.width * .5, bounds.y + bounds.height * .5);
     await expectSharedSample(page, 15, '15 min', '35 mph');
     await expect(plot).toHaveCSS('touch-action', 'pan-y');
@@ -127,8 +142,7 @@ test.describe('touch trip inspection', () => {
     await installRFixture(page, { populatedTrip: true });
     await page.goto('/trips/trip-1');
     const plot = powerCard(page).locator('.u-over');
-    await plot.scrollIntoViewIfNeeded();
-    const bounds = (await plot.boundingBox())!;
+    const bounds = await settledBox(plot);
     const session = await context.newCDPSession(page);
     const touch = async (type: string, x: number, y: number) => session.send('Input.dispatchTouchEvent', {
       type, touchPoints: type === 'touchEnd' ? [] : [{ x, y, id: 1 }],

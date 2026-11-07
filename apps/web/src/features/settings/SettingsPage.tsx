@@ -1,4 +1,5 @@
 import { ALL_PRESETS, R2_PRESET, RIVIAN_BATTERY_PRESETS, type BatteryGen } from './batteryPresets';
+import { RAppearanceMode } from '../r-experience/RAppearanceMode';
 import { IngestionDiagnosticsSection } from '../../components/settings/IngestionDiagnosticsSection';
 import { ThemeVehicleImage } from '../../components/settings/ThemeVehicleImage';
 import React from 'react';
@@ -1724,6 +1725,8 @@ export function SettingsContent({ initialSection, oidcFeedback, oidcFeedbackKind
                 </Card>
               </div>
             )}
+
+            {activeSection === 'units' && <RAppearanceMode />}
 
             {activeSection === 'units' && (
               <Card>

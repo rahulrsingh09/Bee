@@ -9,7 +9,7 @@ const descriptions: Record<string, string> = {
   vehicles: 'Connection, sharing and vehicle configuration',
   dashboards: 'Saved layouts and dashboard editing',
   charts: 'Your charts, sources and definitions',
-  units: 'Measurements, efficiency display, time zone and maps',
+  units: 'Appearance, measurements, efficiency display, time zone and maps',
   places: 'Named places and location boundaries',
   charging: 'Energy prices and charging preferences',
   external: 'Optional services and connections',

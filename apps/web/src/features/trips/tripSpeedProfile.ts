@@ -40,6 +40,31 @@ function distanceMiles(a: SpeedPoint, b: SpeedPoint) {
   return 3958.8 * 2 * Math.asin(Math.sqrt(Math.min(1, Math.max(0, haversine))));
 }
 
+interface TripDurationSource {
+  started_at: string;
+  ended_at: string | null;
+  duration_min?: number | null;
+  duration_seconds?: number | null;
+}
+
+/**
+ * The trip duration in seconds. The trip's own duration comes first: the
+ * timestamps can span more than the drive (for example a trip that the
+ * detector closed late), and coverage must never exceed the drive.
+ */
+export function resolveTripDurationSeconds(trip: TripDurationSource | null | undefined): number {
+  if (!trip) return 0;
+  if (trip.duration_seconds != null && Number.isFinite(trip.duration_seconds) && trip.duration_seconds > 0) {
+    return trip.duration_seconds;
+  }
+  if (trip.duration_min != null && Number.isFinite(trip.duration_min) && trip.duration_min > 0) {
+    return trip.duration_min * 60;
+  }
+  if (!trip.ended_at) return 0;
+  const seconds = (Date.parse(trip.ended_at) - Date.parse(trip.started_at)) / 1000;
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
+}
+
 export function buildTripSpeedProfile(
   points: SpeedPoint[],
   durationSeconds: number,
@@ -120,8 +145,12 @@ export function buildTripSpeedProfile(
     else bin.estimated_seconds! += seconds;
     bin.sample_elapsed_s ??= interval.start;
   }
-  const recordedSeconds = recorded.reduce((sum, item) => sum + item.end - item.start, 0);
-  const estimatedSeconds = estimated.reduce((sum, item) => sum + item.end - item.start, 0);
+  // Every interval is clipped to [0, duration] and recorded and estimated
+  // intervals do not overlap, so their sum cannot exceed the duration. The
+  // clamp keeps that true against floating-point error.
+  const recordedSeconds = Math.min(duration, recorded.reduce((sum, item) => sum + item.end - item.start, 0));
+  const estimatedSeconds = Math.min(duration - recordedSeconds,
+    estimated.reduce((sum, item) => sum + item.end - item.start, 0));
   const estimates = points.map(point => validSpeed(point.speed_mph) ? null
     : estimated.find(interval => point.elapsed_s > interval.start && point.elapsed_s <= interval.end) ?? null);
   const sortedGpsIntervals = gpsIntervals.sort((a, b) => a - b);
@@ -132,6 +161,7 @@ export function buildTripSpeedProfile(
     bins, estimates, recordedSeconds, estimatedSeconds, medianGpsSeconds,
     recordedValues: points.map(point => validSpeed(point.speed_mph) ? point.speed_mph : null),
     coveredSeconds: recordedSeconds + estimatedSeconds,
+    durationSeconds: duration,
     missingSeconds: Math.max(0, duration - recordedSeconds - estimatedSeconds),
     coverage: duration > 0 ? Math.min(1, (recordedSeconds + estimatedSeconds) / duration) : 0,
   };

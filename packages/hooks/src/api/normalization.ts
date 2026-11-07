@@ -66,6 +66,10 @@ export function normalizeTrip(raw: unknown): Trip {
           ? row.end_place_name
           : null,
     tags,
+    ...(row.start_odometer_mi !== undefined ? { start_odometer_mi: finiteNumber(row.start_odometer_mi) ?? null } : {}),
+    ...(row.end_odometer_mi !== undefined ? { end_odometer_mi: finiteNumber(row.end_odometer_mi) ?? null } : {}),
+    ...(row.outside_temp_c !== undefined ? { outside_temp_c: finiteNumber(row.outside_temp_c) ?? null } : {}),
+    ...(typeof row.outside_temp_source === 'string' ? { outside_temp_source: row.outside_temp_source as NonNullable<Trip['outside_temp_source']> } : {}),
   };
 }
 
@@ -105,6 +109,7 @@ export function normalizeChargeSession(raw: unknown): ChargeSession {
       null,
     cost_usd: finiteNumber(row.cost_usd) ?? null,
     cost_method: typeof row.cost_method === 'string' ? row.cost_method : null,
+    ...(row.cost_rate_per_kwh !== undefined ? { cost_rate_per_kwh: finiteNumber(row.cost_rate_per_kwh) ?? null } : {}),
     duration_min: finiteNumber(row.duration_min) ?? finiteNumber(row.duration_minutes) ?? null,
     source: typeof row.source === 'string' ? row.source : null,
     api_started_at: row.api_started_at == null ? null : String(row.api_started_at),

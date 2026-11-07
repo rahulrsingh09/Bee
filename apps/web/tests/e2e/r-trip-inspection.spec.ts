@@ -3,87 +3,122 @@ import { installRFixture } from './r-experience.fixture';
 
 const chartSelector = '[data-chart-renderer="rich-time-series"]';
 const mapLabel = 'Inspect trip route. Tap or drag to select a point; arrow keys move along the route.';
-const mapTime = (page: Page) => page.getByRole('heading', { name: 'Route Map', exact: true }).locator('..').locator('p');
+const slider = (page: Page) => page.getByRole('slider', { name: 'Drive time' });
+const readout = (page: Page, label: string) => page.locator('[data-trip-readout] div').filter({ has: page.getByText(label, { exact: true }) }).locator('dd');
+const powerCard = (page: Page) => page.locator('[data-trip-power]');
 
-async function expectSharedTime(page: Page, expected: string) {
-  await expect(mapTime(page)).toHaveText(expected);
-  await expect.poll(() => page.locator(`${chartSelector} [role="tooltip"]`).allTextContents())
-    .toEqual(expect.arrayContaining([
-      expect.stringMatching(new RegExp(`^${expected}\\nPower:`)),
-      expect.stringMatching(new RegExp(`^${expected}\\nOutside:`)),
-      expect.stringMatching(new RegExp(`^${expected}\\nElevation:`)),
-      expect.stringMatching(new RegExp(`^${expected}\\nFront Left:`)),
-    ]));
-  expect(await page.locator(`${chartSelector} .u-cursor-x`).evaluateAll(nodes =>
-    nodes.every(node => new DOMMatrix(getComputedStyle(node).transform).m41 >= 0))).toBe(true);
+/** The power tooltip and the replay readout show the same sample. */
+async function expectSharedSample(page: Page, index: number, minutes: string, speed: string) {
+  await expect(slider(page)).toHaveValue(String(index));
+  await expect(readout(page, 'Speed')).toHaveText(speed);
+  await expect.poll(() => powerCard(page).locator('[role="tooltip"]').allTextContents())
+    .toEqual([expect.stringMatching(new RegExp(`^${minutes}\\nPower: 20 kW`))]);
 }
 
 for (const width of [393, 1440]) {
   for (const mode of ['light', 'dark'] as const) {
-    test(`trip selection links map and graphs and persists at ${width}px in ${mode}`, async ({ page }, testInfo) => {
+    test(`trip replay links the map, power chart, scrubber and readout at ${width}px in ${mode}`, async ({ page }, testInfo) => {
       await page.setViewportSize({ width, height: 900 });
       const errors: string[] = [];
       page.on('pageerror', error => errors.push(error.message));
       await installRFixture(page, { mode, populatedTrip: true });
       await page.goto('/trips/trip-1');
+      await expect(page.getByRole('heading', { level: 1, name: 'Drive 1 → Home' })).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByText('Thu, Oct 8 · 5:00–5:30 PM')).toBeVisible();
+      await expect(page.getByTestId('trip-distance')).toContainText('20.0mi');
+      await expect(page.locator('[data-trip-tile="Efficiency"]')).toContainText('3.1mi/kWh');
+      await expect(page.getByRole('heading', { name: 'Power during the drive' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Time at each speed' })).toBeVisible();
+      await expect(page.locator('[data-trip-speed-profile]')).toContainText('Speed recorded for 30 of 30 min.');
+      // A flat route has no elevation chart; the change is in Conditions.
+      await expect(page.getByRole('heading', { name: 'Elevation along the route' })).toHaveCount(0);
+      await expect(page.locator('[data-trip-conditions]')).toContainText('Drive mode');
+      const body = await page.locator('main').innerText();
+      for (const banned of ['->', 'Avg. Effic.', 'TeslaMate', 'Drive Chart', '16:40', '8:20']) expect(body).not.toContain(banned);
+      // Odometer facts are hidden when the trip has no odometer.
+      await expect(page.getByTestId('trip-odometer')).toHaveCount(0);
+
       const map = page.getByLabel(mapLabel);
       await map.scrollIntoViewIfNeeded();
       await map.focus();
       await page.keyboard.press('End');
-      await expectSharedTime(page, '30:00');
+      await expectSharedSample(page, 30, '30 min', '50 mph');
+      await expect(page.locator('[data-trip-replay-clock]')).toHaveText('5:30 PM');
       await page.keyboard.press('Home');
-      await expectSharedTime(page, '0:00');
+      await expectSharedSample(page, 0, '0 min', '20 mph');
 
-      const plot = page.locator(`${chartSelector} .u-over`).first();
+      const plot = powerCard(page).locator('.u-over');
       await plot.scrollIntoViewIfNeeded();
       const bounds = (await plot.boundingBox())!;
       await page.mouse.move(bounds.x + bounds.width * .2, bounds.y + bounds.height * .5);
       await page.mouse.down();
       await page.mouse.move(bounds.x + bounds.width * .7, bounds.y + bounds.height * .5, { steps: 12 });
       await page.mouse.up();
-      await expectSharedTime(page, '21:00');
+      await expectSharedSample(page, 21, '21 min', '41 mph');
       await page.mouse.move(2, 2);
-      await page.locator(chartSelector).last().scrollIntoViewIfNeeded();
-      await expectSharedTime(page, '21:00');
-      await expect(page.getByRole('button', { name: 'Return to full chart view' })).toHaveCount(0);
+      await expectSharedSample(page, 21, '21 min', '41 mph');
 
-      await page.locator(chartSelector).last().getByRole('button', { name: 'Front Left', exact: true }).click();
-      await page.mouse.move(2, 2);
-      await expect(mapTime(page)).toHaveText('21:00');
-      await expect(page.locator(chartSelector).last().getByRole('tooltip')).toContainText('21:00');
-      await page.locator(chartSelector).last().getByRole('button', { name: 'Front Left', exact: true }).click();
-      await expectSharedTime(page, '21:00');
+      await slider(page).scrollIntoViewIfNeeded();
+      await slider(page).focus();
+      await page.keyboard.press('ArrowLeft');
+      await expectSharedSample(page, 20, '20 min', '40 mph');
+      await expect(readout(page, 'Battery')).toHaveText('71%');
 
-      const layout = await page.locator(chartSelector).evaluateAll(nodes => nodes.map(node => {
-        const outer = node.getBoundingClientRect();
-        return [...node.querySelectorAll('button, [role="tooltip"]')].every(child => {
-          const bounds = child.getBoundingClientRect();
-          return bounds.left >= outer.left && bounds.right <= outer.right + 1
-            && bounds.top >= outer.top && bounds.bottom <= outer.bottom + 1
-            && parseFloat(getComputedStyle(child).fontSize) >= 11;
-        });
-      }));
-      expect(layout).toEqual([true, true, true, true]);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       expect(errors).toEqual([]);
-      await page.screenshot({ path: testInfo.outputPath('persistent-trip-inspection.png'), fullPage: true });
+      await page.screenshot({ path: testInfo.outputPath(`trip-detail-${width}-${mode}.png`), fullPage: true });
     });
   }
 }
 
+test('play replays the drive to the end and pause stops it', async ({ page }) => {
+  await page.setViewportSize({ width: 393, height: 900 });
+  await installRFixture(page, { mode: 'dark', populatedTrip: true });
+  await page.goto('/trips/trip-1');
+  const play = page.getByRole('button', { name: 'Replay the drive' });
+  await play.click();
+  await expect(page.getByRole('button', { name: 'Pause the replay' })).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(async () => Number(await slider(page).inputValue())).toBeGreaterThan(3);
+  await page.getByRole('button', { name: 'Pause the replay' }).click();
+  const paused = Number(await slider(page).inputValue());
+  await page.waitForTimeout(600);
+  expect(Number(await slider(page).inputValue())).toBe(paused);
+  await expect(readout(page, 'Speed')).toHaveText(`${20 + paused} mph`);
+  // Play again continues from the selected sample and ends at the last one.
+  await page.getByRole('button', { name: 'Replay the drive' }).click();
+  await expect(slider(page)).toHaveValue('30', { timeout: 15_000 });
+  await expect(page.getByRole('button', { name: 'Replay the drive' })).toHaveAttribute('aria-pressed', 'false');
+  await expect(readout(page, 'Speed')).toHaveText('50 mph');
+});
+
+test('reduced motion does not start a replay and the scrubber still works', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.setViewportSize({ width: 393, height: 900 });
+  await installRFixture(page, { mode: 'dark', populatedTrip: true });
+  await page.goto('/trips/trip-1');
+  await expect(slider(page)).toBeVisible();
+  await page.waitForTimeout(1000);
+  await expect(slider(page)).toHaveValue('0');
+  await expect(page.getByRole('button', { name: 'Replay the drive' })).toHaveAttribute('aria-pressed', 'false');
+  // A pointer press on the track moves the scrubber (Playwright scrolls it clear of the dock first).
+  await slider(page).click();
+  await expect.poll(async () => Number(await slider(page).inputValue())).toBeGreaterThan(10);
+  const value = Number(await slider(page).inputValue());
+  await expect(readout(page, 'Speed')).toHaveText(`${20 + value} mph`);
+  await expect(powerCard(page).locator('[role="tooltip"]')).toContainText(`${value} min`);
+});
+
 test.describe('touch trip inspection', () => {
   test.use({ viewport: { width: 393, height: 659 }, hasTouch: true, isMobile: true });
 
-  test('tapping a lower graph updates the map and every other graph', async ({ page }) => {
+  test('tapping the power chart updates the scrubber, readout and map', async ({ page }) => {
     await installRFixture(page, { populatedTrip: true });
     await page.goto('/trips/trip-1');
-    const plot = page.locator(`${chartSelector} .u-over`).last();
+    const plot = powerCard(page).locator('.u-over');
     await plot.scrollIntoViewIfNeeded();
     const bounds = (await plot.boundingBox())!;
     await page.touchscreen.tap(bounds.x + bounds.width * .5, bounds.y + bounds.height * .5);
-    await expectSharedTime(page, '15:00');
-    await page.getByLabel(mapLabel).scrollIntoViewIfNeeded();
-    await expectSharedTime(page, '15:00');
+    await expectSharedSample(page, 15, '15 min', '35 mph');
     await expect(plot).toHaveCSS('touch-action', 'pan-y');
   });
 
@@ -91,7 +126,7 @@ test.describe('touch trip inspection', () => {
     test.skip(browserName !== 'chromium', 'Native touch-drag injection uses Chromium CDP; WebKit covers native tap.');
     await installRFixture(page, { populatedTrip: true });
     await page.goto('/trips/trip-1');
-    const plot = page.locator(`${chartSelector} .u-over`).first();
+    const plot = powerCard(page).locator('.u-over');
     await plot.scrollIntoViewIfNeeded();
     const bounds = (await plot.boundingBox())!;
     const session = await context.newCDPSession(page);
@@ -100,42 +135,40 @@ test.describe('touch trip inspection', () => {
     });
     const y = bounds.y + bounds.height * .5;
     await touch('touchStart', bounds.x + bounds.width * .2, y);
-    for (let step = 3; step <= 8; step++) {
-      await touch('touchMove', bounds.x + bounds.width * step / 10, y);
-    }
+    for (let step = 3; step <= 8; step++) await touch('touchMove', bounds.x + bounds.width * step / 10, y);
     await touch('touchEnd', 0, 0);
-    await expectSharedTime(page, '24:00');
+    await expectSharedSample(page, 24, '24 min', '44 mph');
     const scrollBefore = await page.evaluate(() => scrollY);
     await touch('touchStart', bounds.x + bounds.width * .2, y);
-    for (let step = 1; step <= 6; step++) {
-      await touch('touchMove', bounds.x + bounds.width * .2, y - step * 20);
-    }
+    for (let step = 1; step <= 6; step++) await touch('touchMove', bounds.x + bounds.width * .2, y - step * 20);
     await touch('touchEnd', 0, 0);
     await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(scrollBefore + 30);
-    await expectSharedTime(page, '24:00');
+    await expectSharedSample(page, 24, '24 min', '44 mph');
   });
 });
 
-test('trip graph readings use the selected metric units at the shared sample', async ({ page }) => {
+test('trip readings use the selected metric units', async ({ page }) => {
   await installRFixture(page, { populatedTrip: true, populatedAdmin: true });
   await page.goto('/settings?section=units');
   await page.getByRole('button', { name: /^Metric/ }).click();
   await page.goto('/trips/trip-1');
+  await expect(page.getByTestId('trip-distance')).toContainText('32.2km');
+  await expect(page.locator('[data-trip-tile="Efficiency"]')).toContainText('5.0km/kWh');
   const map = page.getByLabel(mapLabel);
   await map.scrollIntoViewIfNeeded();
   await map.focus();
   await page.keyboard.press('End');
-  await expectSharedTime(page, '30:00');
-  const tooltips = page.locator(`${chartSelector} [role="tooltip"]`);
-  await expect(tooltips.nth(0)).toContainText('Recorded speed: 80 km/h');
-  await expect(tooltips.nth(1)).toContainText('Outside: 20 °C');
-  await expect(tooltips.nth(2)).toContainText('Elevation: 20 m');
-  await expect(tooltips.nth(3)).toContainText('Front Left: 138 kPa');
-  const histogram = page.getByRole('heading', { name: 'Speed Histogram' }).locator('../..');
-  await histogram.scrollIntoViewIfNeeded();
-  await expect(histogram.getByText('72-80', { exact: true })).toBeVisible();
-  await expect(histogram).toContainText('30m covered · 100%');
-  await expect(histogram.getByText('80-89', { exact: true })).toHaveCount(0);
+  await expect(readout(page, 'Speed')).toHaveText('80 km/h');
+  await expect(readout(page, 'Distance')).toHaveText('32.2 km');
+  const conditions = page.locator('[data-trip-conditions]');
+  await expect(conditions).toContainText('20 °C');
+  await expect(conditions).toContainText('138 kPa');
+  await expect(conditions).toContainText('No change');
+  const speed = page.locator('[data-trip-speed-profile]');
+  await speed.scrollIntoViewIfNeeded();
+  await expect(speed.locator('[data-speed-band="64–80"]')).toBeVisible();
+  await expect(speed).toContainText('Speed recorded for 30 of 30 min.');
+  await expect(speed).toContainText('km/h');
 });
 
 for (const width of [393, 1440]) {

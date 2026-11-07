@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildTripSpeedProfile } from './tripSpeedProfile';
+import { buildTripSpeedProfile, resolveTripDurationSeconds } from './tripSpeedProfile';
 
 const point = (elapsed_s: number, lng: number | null = null, speed_mph: number | null = null) => ({
   elapsed_s, speed_mph, lat: lng == null ? null : 40, lng,
@@ -69,5 +69,42 @@ describe('trip speed sources and coverage', () => {
     const result = buildTripSpeedProfile([point(0, null, Infinity), point(10, null, -3), point(20, null, NaN)], 60, 0);
     expect(result.bins).toEqual([]);
     expect(result.recordedValues).toEqual([null, null, null]);
+  });
+});
+
+describe('trip duration for speed coverage', () => {
+  // A 30 min drive whose end timestamp is 11 h 30 min after its start. The
+  // page showed "31m covered · 4%" and "10h 59m unavailable" for it.
+  const lateClosedTrip = {
+    started_at: '2026-10-08T06:00:00Z',
+    ended_at: '2026-10-08T17:30:00Z',
+    duration_min: 30,
+  };
+  const samples = Array.from({ length: 31 }, (_, index) => point(index * 60, null, 30));
+
+  it('uses the trip duration, not the span of its timestamps', () => {
+    expect(resolveTripDurationSeconds(lateClosedTrip)).toBe(1800);
+    expect(resolveTripDurationSeconds({ ...lateClosedTrip, duration_seconds: 1795 })).toBe(1795);
+    expect(resolveTripDurationSeconds({ ...lateClosedTrip, duration_min: 0 })).toBe(41_400);
+    expect(resolveTripDurationSeconds({ started_at: '2026-10-08T06:00:00Z', ended_at: null })).toBe(0);
+    expect(resolveTripDurationSeconds(null)).toBe(0);
+  });
+
+  it('never reports more missing time than the drive has (the 10h59m case)', () => {
+    const result = buildTripSpeedProfile(samples, resolveTripDurationSeconds(lateClosedTrip), 60);
+    expect(result.durationSeconds).toBe(1800);
+    expect(result.recordedSeconds).toBe(1800);
+    expect(result.missingSeconds).toBe(0);
+    expect(result.coverage).toBe(1);
+  });
+
+  it('clips samples after the trip end and keeps coverage inside the duration', () => {
+    const tooLong = [...samples, ...Array.from({ length: 600 }, (_, index) => point(1860 + index * 60, null, 40))];
+    const result = buildTripSpeedProfile(tooLong, 1800, 60);
+    expect(result.recordedSeconds + result.estimatedSeconds).toBeLessThanOrEqual(result.durationSeconds);
+    expect(result.missingSeconds).toBeLessThanOrEqual(
+      result.durationSeconds - result.recordedSeconds - result.estimatedSeconds);
+    expect(result.missingSeconds).toBe(0);
+    expect(result.bins.find(bin => bin.min === 40)).toBeUndefined();
   });
 });

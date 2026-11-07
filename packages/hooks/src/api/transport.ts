@@ -263,6 +263,8 @@ interface ApiFailureDetail {
   rateLimitRemaining?: number;
   rateLimitResetSeconds?: number;
   retryAfterSeconds?: number;
+  /** Owner action phrase for a failed mutation, for example "save the charge cost". */
+  action?: string;
 }
 
 const AUTH_REFRESH_EXCLUDED_PATHS = new Set([
@@ -607,6 +609,7 @@ export class AuthenticatedTransport {
         path,
         requestId: res.headers.get('x-request-id') ?? undefined,
         ...rateLimitHeaders,
+        ...(isBackgroundRead(method, path) ? {} : { action: describeMutationAction(method, path, body) }),
       };
       if (res.status === 429) this.rememberRateLimitCooldown(detail);
       const apiError = Object.assign(new Error(formatApiError(detail)), {
@@ -2099,17 +2102,22 @@ export class AuthenticatedTransport {
         return;
       }
 
-      const { title, message } = friendlyApiError(detail);
-      window.dispatchEvent(
-        new CustomEvent('riviamigo:toast', {
-          detail: {
-            title,
-            message,
-            variant: 'error',
-            code: detail.code,
-          },
-        })
-      );
+      // Toast policy: a background read (React Query, chart, or sensor read)
+      // shows its failure in its own card, so it never raises a global toast.
+      // Owner mutations and the session-level auth-expired flow still toast.
+      if (shouldToastFailure(detail)) {
+        const { title, message } = friendlyApiError(detail);
+        window.dispatchEvent(
+          new CustomEvent('riviamigo:toast', {
+            detail: {
+              title,
+              message,
+              variant: 'error',
+              code: detail.code,
+            },
+          })
+        );
+      }
 
       if (detail.code === 'AUTH_EXPIRED') {
         window.dispatchEvent(new CustomEvent('riviamigo:auth-expired', { detail }));
@@ -2261,8 +2269,13 @@ function friendlyApiError(detail: ApiFailureDetail): { title: string; message: s
     return { title: 'Session expired', message: 'Please sign in again to continue.' };
   if (status === 403)
     return { title: 'Access denied', message: "You don't have permission to do that." };
-  if (status === 404)
-    return { title: 'Not found', message: 'The requested resource could not be found.' };
+  if (status === 404) {
+    const action = detail.action ?? describeMutationAction(detail.method, detail.path);
+    return {
+      title: `Could not ${action}`,
+      message: 'The server did not find this item. Refresh the page and try again.',
+    };
+  }
   if (status === 429) {
     const source = detail.rateLimitSource;
     const waitHint =
@@ -2295,6 +2308,71 @@ function friendlyApiError(detail: ApiFailureDetail): { title: string; message: s
     title: 'Something went wrong',
     message: truncate(detail.message, 120) || 'An unexpected error occurred.',
   };
+}
+
+const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+/** POST endpoints that only read data (request bodies carry the query). */
+const READ_ONLY_POST_PATHS = new Set(['/v1/metrics/batch']);
+
+/** True for requests that load data without an owner action. */
+function isBackgroundRead(method: string, path: string): boolean {
+  const verb = method.toUpperCase();
+  return READ_METHODS.has(verb) || (verb === 'POST' && READ_ONLY_POST_PATHS.has(path));
+}
+
+function shouldToastFailure(detail: ApiFailureDetail): boolean {
+  if (detail.code === 'AUTH_EXPIRED') return true;
+  return !isBackgroundRead(detail.method, detail.path);
+}
+
+type MutationActionRule = {
+  pattern: RegExp;
+  actions: Partial<Record<'POST' | 'PUT' | 'PATCH' | 'DELETE', string>>;
+};
+
+const ID = '[^/]+';
+const MUTATION_ACTION_RULES: MutationActionRule[] = [
+  { pattern: new RegExp(`^/v1/vehicles/${ID}/charging-networks/${ID}$`), actions: { PATCH: 'save the charging network cost' } },
+  { pattern: new RegExp(`^/v1/vehicles/${ID}/charging-schedule$`), actions: { PUT: 'save the charging schedule' } },
+  { pattern: new RegExp(`^/v1/vehicles/${ID}/departure-schedules(/${ID})?$`), actions: { POST: 'add the departure schedule', PATCH: 'save the departure schedule', DELETE: 'delete the departure schedule' } },
+  { pattern: new RegExp(`^/v1/vehicles/${ID}/trip-tags/assignments$`), actions: { POST: 'save the trip tags' } },
+  { pattern: new RegExp(`^/v1/vehicles/${ID}/trip-tags(/${ID})?$`), actions: { POST: 'add the trip tag', PATCH: 'save the trip tag', DELETE: 'delete the trip tag' } },
+  { pattern: new RegExp(`^/v1/vehicles/${ID}/trip-gaps/${ID}/recover$`), actions: { POST: 'recover the missed drive' } },
+  { pattern: new RegExp(`^/v1/vehicles/${ID}/members(/${ID})?$`), actions: { POST: 'add the vehicle member', PUT: 'save the vehicle member', DELETE: 'remove the vehicle member' } },
+  { pattern: new RegExp(`^/v1/vehicles/${ID}/invites(/${ID})?$`), actions: { POST: 'send the invite', DELETE: 'cancel the invite' } },
+  { pattern: new RegExp(`^/v1/vehicles/${ID}/(settings|name|battery-config)$`), actions: { PUT: 'save the vehicle settings' } },
+  { pattern: new RegExp(`^/v1/vehicles/${ID}/default$`), actions: { POST: 'set the default vehicle' } },
+  { pattern: new RegExp(`^/v1/vehicles/${ID}$`), actions: { DELETE: 'remove the vehicle' } },
+  { pattern: new RegExp(`^/v1/places(/${ID})?$`), actions: { POST: 'add the place', PUT: 'save the place', DELETE: 'delete the place' } },
+  { pattern: new RegExp(`^/v1/api-keys(/${ID})?$`), actions: { POST: 'create the API key', DELETE: 'delete the API key' } },
+  { pattern: new RegExp(`^/v1/(admin/)?dashboards/${ID}/clone$`), actions: { POST: 'copy the dashboard' } },
+  { pattern: new RegExp(`^/v1/admin/dashboards/${ID}/lock$`), actions: { POST: 'change the dashboard lock' } },
+  { pattern: new RegExp(`^/v1/admin/dashboards/${ID}/restore-default$`), actions: { POST: 'restore the dashboard' } },
+  { pattern: new RegExp(`^/v1/(admin/)?dashboards(/${ID})?$`), actions: { POST: 'create the dashboard', PUT: 'save the dashboard', DELETE: 'delete the dashboard' } },
+  { pattern: new RegExp(`^/v1/(admin/)?charts/${ID}/clone$`), actions: { POST: 'copy the chart' } },
+  { pattern: new RegExp(`^/v1/(admin/)?charts/${ID}/restore$`), actions: { POST: 'restore the chart' } },
+  { pattern: new RegExp(`^/v1/(admin/)?charts(/${ID})?$`), actions: { POST: 'create the chart', PUT: 'save the chart', DELETE: 'delete the chart' } },
+  { pattern: /^\/v1\/auth\/preferences(\/.*)?$/, actions: { PUT: 'save your preferences' } },
+  { pattern: /^\/v1\/settings\/.+$/, actions: { PUT: 'save the settings' } },
+];
+
+/**
+ * Names the owner action behind a failed mutation, for toast titles such as
+ * "Could not save the charge cost". Falls back to a phrase per HTTP method.
+ */
+function describeMutationAction(method: string, path: string, body?: unknown): string {
+  const verb = method.toUpperCase() as 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  if (verb === 'PATCH' && new RegExp(`^/v1/vehicles/${ID}/charging-sessions/${ID}$`).test(path)) {
+    const update = isRecord(body) ? body : {};
+    if ('cost_mode' in update || 'cost_usd' in update) return 'save the charge cost';
+    if ('location_mode' in update || 'place_id' in update) return 'save the charge location';
+    return 'save the charge';
+  }
+  const action = MUTATION_ACTION_RULES.find((rule) => rule.pattern.test(path))?.actions[verb];
+  if (action) return action;
+  if (verb === 'DELETE') return 'delete the item';
+  if (verb === 'PUT' || verb === 'PATCH') return 'save the change';
+  return 'complete the action';
 }
 
 function isFetchConnectionError(error: unknown): boolean {

@@ -1,5 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import type { ToastPayload } from './toast';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  TOAST_DISMISS_MS,
+  TOAST_EVENT,
+  addToast,
+  toastRole,
+  type ToastEntry,
+  type ToastPayload,
+} from './toast';
 
 // Use crypto.randomUUID() for toast IDs so they remain unique across HMR
 // reloads (a module-level counter resets to 0 every time the module is
@@ -8,10 +15,6 @@ function nextToastId(): string {
   return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-interface Toast extends ToastPayload {
-  id: string;
 }
 
 const TOAST_VARIANT_CLASSNAMES: Record<NonNullable<ToastPayload['variant']> | 'default', {
@@ -41,59 +44,106 @@ const TOAST_VARIANT_CLASSNAMES: Record<NonNullable<ToastPayload['variant']> | 'd
 };
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
-  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [toasts, setToasts] = useState<ToastEntry[]>([]);
 
   useEffect(() => {
     function handleToast(event: Event) {
       const detail = (event as CustomEvent<ToastPayload>).detail;
       if (!detail?.message) return;
-
-      const id = nextToastId();
-      setToasts((current) => [...current.slice(-2), { ...detail, id }]);
-      window.setTimeout(() => {
-        setToasts((current) => current.filter((toast) => toast.id !== id));
-      }, 7000);
+      setToasts((current) => addToast(current, detail, nextToastId));
     }
 
-    window.addEventListener('riviamigo:toast', handleToast);
-    return () => window.removeEventListener('riviamigo:toast', handleToast);
+    window.addEventListener(TOAST_EVENT, handleToast);
+    return () => window.removeEventListener(TOAST_EVENT, handleToast);
   }, []);
+
+  const dismiss = useCallback(
+    (id: string) => setToasts((current) => current.filter((toast) => toast.id !== id)),
+    [],
+  );
 
   return (
     <>
       {children}
-      <div
-        aria-live="polite"
-        aria-atomic="true"
+      <section
+        aria-label="Notifications"
         className="fixed right-4 top-4 z-50 flex w-[min(420px,calc(100vw-2rem))] flex-col gap-3"
       >
         {toasts.map((toast) => (
-          <div
-            key={toast.id}
-            className={`rounded-xl border bg-bg-surface/95 px-4 py-3 text-base text-fg shadow-lg backdrop-blur-md ${TOAST_VARIANT_CLASSNAMES[toast.variant ?? 'default'].container}`}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className={`text-sm font-semibold leading-6 ${TOAST_VARIANT_CLASSNAMES[toast.variant ?? 'default'].title}`}>{toast.title}</p>
-                {toast.code && (
-                  <p className="mt-0.5 font-mono text-[11px] uppercase tracking-[0.14em] text-fg-secondary">
-                    {toast.code}
-                  </p>
-                )}
-                <p className="mt-1 break-words text-sm leading-6 text-fg">{toast.message}</p>
-              </div>
-              <button
-                type="button"
-                aria-label="Dismiss notification"
-                className="rounded-md px-2 py-1 text-sm font-medium text-fg-secondary hover:bg-bg-elevated hover:text-fg"
-                onClick={() => setToasts((current) => current.filter((item) => item.id !== toast.id))}
-              >
-                Close
-              </button>
-            </div>
-          </div>
+          <ToastItem key={toast.id} toast={toast} onDismiss={dismiss} />
         ))}
-      </div>
+      </section>
     </>
+  );
+}
+
+function ToastItem({ toast, onDismiss }: { toast: ToastEntry; onDismiss: (id: string) => void }) {
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const paused = hovered || focused;
+  const remainingMs = useRef(TOAST_DISMISS_MS);
+
+  // A merged duplicate restarts the full display time.
+  useEffect(() => {
+    remainingMs.current = TOAST_DISMISS_MS;
+  }, [toast.count]);
+
+  useEffect(() => {
+    if (paused) return;
+    const startedAt = Date.now();
+    const timer = window.setTimeout(() => onDismiss(toast.id), remainingMs.current);
+    return () => {
+      window.clearTimeout(timer);
+      remainingMs.current = Math.max(0, remainingMs.current - (Date.now() - startedAt));
+    };
+  }, [paused, toast.id, toast.count, onDismiss]);
+
+  const variant = TOAST_VARIANT_CLASSNAMES[toast.variant ?? 'default'];
+  return (
+    <div
+      role={toastRole(toast.variant)}
+      aria-atomic="true"
+      data-toast-count={toast.count}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocused(false);
+      }}
+      className={`rounded-xl border bg-bg-surface/95 px-4 py-3 text-base text-fg shadow-lg backdrop-blur-md ${variant.container}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className={`text-sm font-semibold leading-6 ${variant.title}`}>
+            {toast.title}
+            {toast.count > 1 && (
+              <>
+                <span
+                  aria-hidden="true"
+                  className="ml-2 rounded-full border border-border-strong px-2 py-0.5 font-mono text-[11px] text-fg-secondary"
+                >
+                  {toast.count}×
+                </span>
+                <span className="sr-only">{`, shown ${toast.count} times`}</span>
+              </>
+            )}
+          </p>
+          {toast.code && (
+            <p className="mt-0.5 font-mono text-[11px] uppercase tracking-[0.14em] text-fg-secondary">
+              {toast.code}
+            </p>
+          )}
+          <p className="mt-1 break-words text-sm leading-6 text-fg">{toast.message}</p>
+        </div>
+        <button
+          type="button"
+          aria-label="Dismiss notification"
+          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md px-2 text-sm font-medium text-fg-secondary hover:bg-bg-elevated hover:text-fg"
+          onClick={() => onDismiss(toast.id)}
+        >
+          Close
+        </button>
+      </div>
+    </div>
   );
 }

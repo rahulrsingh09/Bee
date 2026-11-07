@@ -1,5 +1,5 @@
 import React from 'react';
-import { createOrbitFrames, DEFAULT_FRAME, FRONT_FRAME, ORBIT_FRAMES, wrapFrame } from './orbitFrames';
+import { createOrbitFrames, DEFAULT_FRAME, FRONT_FRAME, loadArtworkPaint, ORBIT_FRAMES, wrapFrame, type Oklab } from './orbitFrames';
 import heroUrl from './assets/r2-hero.webp';
 
 const rememberedAngles = new Map<string, number>();
@@ -14,13 +14,19 @@ export interface RVehicleOrbitProps {
   onTurnStart?: () => void;
   /** The car stops at a frame after a turn. */
   onRest?: (frame: number) => void;
+  /**
+   * URL of the owner's side-profile artwork (same origin or blob). The body of
+   * each frame takes the paint sampled from it; without it, or when no paint can
+   * be sampled, the frames keep their own paint.
+   */
+  paintSource?: string | null;
 }
 
 /** Double-tap window and distance for "turn to the side view". */
 const DOUBLE_TAP_MS = 320;
 const DOUBLE_TAP_PX = 24;
 
-export function RVehicleOrbit({ vehicleId, label = 'Rotate vehicle. Use arrow keys to turn.', autoTurn = true, onTurnStart, onRest }: RVehicleOrbitProps) {
+export function RVehicleOrbit({ vehicleId, label = 'Rotate vehicle. Use arrow keys to turn.', autoTurn = true, onTurnStart, onRest, paintSource }: RVehicleOrbitProps) {
   const hintId = React.useId();
   const callbacks = React.useRef({ onTurnStart, onRest });
   callbacks.current = { onTurnStart, onRest };
@@ -37,6 +43,19 @@ export function RVehicleOrbit({ vehicleId, label = 'Rotate vehicle. Use arrow ke
   const reduced = React.useRef(false);
   const interacted = React.useRef(false);
   const drag = React.useRef<{ id: number; x: number; y: number; frame: number; time: number; velocity: number; moved: boolean } | null>(null);
+  const [paint, setPaint] = React.useState<Oklab | null>(null);
+  const paintRef = React.useRef<Oklab | null>(null);
+  paintRef.current = paint;
+  const framesRef = React.useRef<ReturnType<typeof createOrbitFrames> | null>(null);
+  const drawn = React.useRef(false);
+
+  React.useEffect(() => {
+    setPaint(null);
+    if (!paintSource) return;
+    let live = true;
+    void loadArtworkPaint(paintSource).then(next => { if (live) setPaint(next); });
+    return () => { live = false; };
+  }, [paintSource]);
 
   React.useEffect(() => {
     const media = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -49,6 +68,9 @@ export function RVehicleOrbit({ vehicleId, label = 'Rotate vehicle. Use arrow ke
     change();
     media.addEventListener('change', change);
     const frames = createOrbitFrames();
+    frames.setPaint(paintRef.current);
+    framesRef.current = frames;
+    drawn.current = false;
     let sequence = 0;
     let active = true;
     let rendering = false;
@@ -75,6 +97,7 @@ export function RVehicleOrbit({ vehicleId, label = 'Rotate vehicle. Use arrow ke
             if (context) {
               context.clearRect(0, 0, 840, 430);
               context.drawImage(image, 0, 0, 840, 430);
+              drawn.current = true;
               setReady(true);
               setError(false);
             }
@@ -137,8 +160,15 @@ export function RVehicleOrbit({ vehicleId, label = 'Rotate vehicle. Use arrow ke
       document.removeEventListener('visibilitychange', visibility);
       media.removeEventListener('change', change);
       frames.close();
+      if (framesRef.current === frames) framesRef.current = null;
     };
   }, [vehicleId, autoTurn]);
+
+  // A new paint re-tints the frame on screen; frames not drawn yet load tinted.
+  React.useEffect(() => {
+    framesRef.current?.setPaint(paint);
+    if (drawn.current) draw.current(frame.current);
+  }, [paint]);
 
   function animate(target: number, duration: number) {
     interacted.current = true;

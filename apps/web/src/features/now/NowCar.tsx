@@ -36,7 +36,7 @@ export function NowCar({ vehicle }: { vehicle: Vehicle }) {
   const hasOwnerArt = Boolean(owner.src);
   return <div className="now-car" data-mode="orbit" data-rest={hasOwnerArt && !turning ? 'artwork' : 'frames'}>
     <RVehicleOrbit key={vehicle.id} vehicleId={vehicle.id} label={spinLabel(vehicle)}
-      autoTurn={!hasOwnerArt} onTurnStart={onTurnStart} onRest={onRest} />
+      autoTurn={!hasOwnerArt} onTurnStart={onTurnStart} onRest={onRest} paintSource={owner.src} />
     {hasOwnerArt && <img className="now-car-artwork now-car-image" src={owner.src!} alt="" aria-hidden="true" draggable={false} />}
   </div>;
 }

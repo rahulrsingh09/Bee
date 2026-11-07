@@ -124,6 +124,7 @@ const sidebars: SidebarsConfig = {
       items: [
         'frontend/dashboard-authoring',
         'frontend/chart-compatibility-testing',
+        'frontend/vehicle-orbit-tint',
         'branding',
         { type: 'link', label: 'Security implementation', href: '/docs/security/' },
       ],

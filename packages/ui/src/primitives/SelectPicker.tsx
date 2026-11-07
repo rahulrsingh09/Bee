@@ -2,6 +2,7 @@ import * as React from 'react';
 import { OverlayPortal } from './ResponsiveDialog';
 import { Check, ChevronDown } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { controlBorderClassName } from '../tokens/colors';
 
 export interface SelectPickerOption<TValue extends string = string> {
   value: TValue;
@@ -209,8 +210,9 @@ export function SelectPicker<TValue extends string = string>({
         onClick={() => (open ? setOpen(false) : openPicker())}
         onKeyDown={handleTriggerKeyDown}
         className={cn(
-          'flex w-full min-w-0 items-center justify-between gap-3 rounded-lg border border-border bg-bg-elevated text-left text-fg-secondary transition-colors',
-          'hover:border-border-strong hover:text-fg focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent',
+          'flex w-full min-w-0 items-center justify-between gap-3 rounded-lg border bg-bg-elevated text-left text-fg-secondary transition-colors',
+          controlBorderClassName,
+          'hover:border-fg-tertiary hover:text-fg focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent',
           'disabled:cursor-not-allowed disabled:opacity-60',
           triggerSize,
           triggerClassName

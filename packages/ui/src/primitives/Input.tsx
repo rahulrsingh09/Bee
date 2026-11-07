@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { cn } from '../lib/utils';
+import { controlBorderClassName } from '../tokens/colors';
 
 export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
@@ -36,7 +37,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
               'focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent',
               error
                 ? 'border-status-danger/50 focus:ring-status-danger focus:border-status-danger'
-                : 'border-border hover:border-border-strong',
+                : cn(controlBorderClassName, 'hover:border-fg-tertiary'),
               iconLeft ? 'pl-9' : 'pl-3',
               iconRight ? 'pr-9' : 'pr-3',
               className

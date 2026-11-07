@@ -13,6 +13,7 @@ import {
   subHours,
 } from 'date-fns';
 import { cn } from '../lib/utils';
+import { controlBorderClassName } from '../tokens/colors';
 import {
   appDatePartsToDate,
   endOfAppDay,
@@ -206,8 +207,9 @@ export function DateRangePicker({
         aria-haspopup="dialog"
         aria-expanded={open}
         className={cn(
-          'flex h-9 items-center gap-2 rounded-lg border border-border bg-bg-elevated px-3 text-sm',
-          'text-fg-secondary transition-colors duration-150 hover:border-border-strong hover:text-fg',
+          'flex h-9 items-center gap-2 rounded-lg border bg-bg-elevated px-3 text-sm',
+          controlBorderClassName,
+          'text-fg-secondary transition-colors duration-150 hover:border-fg-tertiary hover:text-fg',
           triggerClassName
         )}
       >
@@ -428,7 +430,10 @@ function DateTimeRow({
           onChange={(event) => onInputChange(event.target.value)}
           onFocus={onTarget}
           placeholder="6/3/26"
-          className="h-8 w-full min-w-0 rounded-md border border-border bg-bg-elevated px-2 text-xs text-fg outline-none placeholder:text-fg-tertiary focus:border-accent"
+          className={cn(
+            'h-8 w-full min-w-0 rounded-md border bg-bg-elevated px-2 text-xs text-fg outline-none placeholder:text-fg-tertiary focus:border-accent',
+            controlBorderClassName
+          )}
         />
         <div className="flex items-center gap-2">
           <Clock className="h-3.5 w-3.5 text-fg-tertiary" />
@@ -491,11 +496,12 @@ function ThemedCalendar({
 
   return (
     <div className="rounded-lg border border-border bg-bg-surface p-2">
-      <div className="mb-2 flex items-center justify-between gap-2">
+      <div className="mb-2 flex items-center justify-between gap-1">
         <button
           type="button"
+          aria-label="Previous month"
           onClick={() => onMonth(startOfMonth(addMonths(month, -1)))}
-          className="rounded-md p-1 hover:bg-bg-elevated"
+          className={MONTH_NAV_CLASS}
         >
           <ChevronLeft className="h-4 w-4 text-fg-secondary" />
         </button>
@@ -523,20 +529,21 @@ function ThemedCalendar({
         </div>
         <button
           type="button"
+          aria-label="Next month"
           onClick={() => onMonth(startOfMonth(addMonths(month, 1)))}
-          className="rounded-md p-1 hover:bg-bg-elevated"
+          className={MONTH_NAV_CLASS}
         >
           <ChevronRight className="h-4 w-4 text-fg-secondary" />
         </button>
       </div>
-      <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-fg-tertiary">
+      <div className="grid grid-cols-7 gap-x-0 text-center text-[11px] text-fg-tertiary sm:gap-x-1">
         {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => (
           <div key={`${day}-${index}`}>{day}</div>
         ))}
       </div>
-      <div className="mt-1 grid grid-cols-7 gap-1">
+      <div className="mt-1 grid grid-cols-7 gap-x-0 gap-y-1 sm:gap-x-1" data-calendar-grid>
         {cells.map((date, index) => {
-          if (!date) return <div key={`blank-${index}`} className="h-8" />;
+          if (!date) return <div key={`blank-${index}`} className="h-11" />;
           const dateInstant = appDatePartsToDate({
             year: date.getFullYear(),
             month: date.getMonth() + 1,
@@ -558,11 +565,12 @@ function ThemedCalendar({
               type="button"
               onClick={() => onPick(date)}
               className={cn(
-                'h-8 rounded-md text-xs',
-                !isSameMonth(date, month) && 'text-fg-tertiary/40',
+                'h-11 min-w-0 rounded-md text-xs',
                 inRange
                   ? 'bg-accent-muted text-fg'
-                  : 'text-fg-secondary hover:bg-bg-elevated hover:text-fg',
+                  : isSameMonth(date, month)
+                    ? 'text-fg-secondary hover:bg-bg-elevated hover:text-fg'
+                    : 'text-fg-tertiary hover:bg-bg-elevated hover:text-fg',
                 selectedDay && 'ring-1 ring-accent text-accent'
               )}
             >
@@ -574,6 +582,10 @@ function ThemedCalendar({
     </div>
   );
 }
+
+/** 44 px hit area (WCAG 2.5.5) for the previous and next month buttons. */
+const MONTH_NAV_CLASS =
+  'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md hover:bg-bg-elevated';
 
 function timeframeToRange(timeframe: DashboardTimeframe): DateRange | null {
   switch (timeframe.kind) {

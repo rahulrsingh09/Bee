@@ -64,7 +64,7 @@ export function MetricTabs({
                     'flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all duration-150',
                     t.key === active
                       ? 'bg-accent text-bg-page shadow-sm'
-                      : 'text-fg-secondary hover:text-fg hover:bg-bg-overlay'
+                      : 'text-fg-secondary hover:text-fg hover:bg-bg-surface'
                   )}
                 >
                   {t.icon && <span className="w-3.5 h-3.5">{t.icon}</span>}

@@ -28,11 +28,9 @@ import {
 import { getChartDefinitions, type DashboardChartPage } from '../charts/catalog';
 import {
   getSensorDefinition,
-  getSensorDataAccent,
   resolveSensorColorToken,
   SENSOR_DEFINITIONS,
   type SensorDataSource,
-  type SensorValueColor,
 } from '../widgets/sensor/sensorDefinitions';
 import { IconPicker } from './IconPicker';
 import { resolveIconId } from './iconMigration';
@@ -86,7 +84,6 @@ export function WidgetEditForm({ widget, onChange, onClose, onRemove }: WidgetEd
   const iconId = resolveIconId(typeof options.icon === 'string' ? options.icon : sensorDefinition?.icon);
   const showSprite = typeof options.showSprite === 'boolean' ? options.showSprite : chartType !== 'none';
   const accentBorder = typeof options.accentBorder === 'boolean' ? options.accentBorder : sensorDefinition?.accent === true;
-  const valueColor = isSensorValueColor(options.valueColor) ? options.valueColor : sensorDefinition?.valueColor ?? 'accent';
   const showSubtitle = options.showSubtitle === true;
   const subtitle = typeof options.subtitle === 'string' ? options.subtitle : '';
   const valuePath = typeof options.valuePath === 'string' ? options.valuePath : sensorDefinition?.valuePath ?? '';
@@ -375,29 +372,14 @@ export function WidgetEditForm({ widget, onChange, onClose, onRemove }: WidgetEd
 
         {sensorMode ? (
           <Section title="Display Language">
-            <div className="grid grid-cols-2 gap-2">
-              <Field label="Label suffix">
-                <input
-                  value={labelSuffix}
-                  onChange={(e) => patch({ labelSuffix: e.target.value })}
-                  placeholder="now/new"
-                  className={`w-full rounded-lg border border-border ${FIELD_BG} px-3 py-2 text-sm text-fg outline-none focus:border-accent`}
-                />
-              </Field>
-              <Field label="Value color">
-                <SelectPicker
-                  className="w-full"
-                  value={valueColor}
-                  onChange={(value) => patch({ valueColor: value as SensorValueColor })}
-                  aria-label="Value color"
-                  options={[
-                    ...(getSensorDataAccent(metric, sensorDefinition) ? [{ value: 'data', label: 'Automatic' }] : []),
-                    { value: 'accent', label: 'Accent' },
-                    { value: 'default', label: 'Default' },
-                  ]}
-                />
-              </Field>
-            </div>
+            <Field label="Label suffix">
+              <input
+                value={labelSuffix}
+                onChange={(e) => patch({ labelSuffix: e.target.value })}
+                placeholder="now/new"
+                className={`w-full rounded-lg border border-border ${FIELD_BG} px-3 py-2 text-sm text-fg outline-none focus:border-accent`}
+              />
+            </Field>
             <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,5rem)] gap-2">
               <Field label="Inline path">
                 <input
@@ -528,17 +510,6 @@ export function WidgetEditForm({ widget, onChange, onClose, onRemove }: WidgetEd
                     />
                   </Field>
                 ) : null}
-                <ChartColorField
-                  value={curveColor}
-                  {...(sensorMode ? {
-                    automatic: {
-                      active: options.curveColor == null,
-                      color: automaticCurveColor,
-                      onSelect: () => clearOption('curveColor'),
-                    },
-                  } : {})}
-                  onChange={(color) => patch({ curveColor: color.mode === 'token' ? color.token : color })}
-                />
               </div>
             ) : null}
           </Section>
@@ -546,6 +517,19 @@ export function WidgetEditForm({ widget, onChange, onClose, onRemove }: WidgetEd
 
         {sensorMode ? (
           <Section title="Appearance">
+            <div className="grid gap-1" data-testid="sensor-accent-color">
+              <ChartColorField
+                label="Accent color"
+                value={curveColor}
+                automatic={{
+                  active: options.curveColor == null,
+                  color: automaticCurveColor,
+                  onSelect: () => clearOption('curveColor'),
+                }}
+                onChange={(color) => patch({ curveColor: color.mode === 'token' ? color.token : color })}
+              />
+              <p className="text-[11px] text-fg-tertiary">{ACCENT_COLOR_HINT}</p>
+            </div>
             <ToggleSwitch
               label="Orange accent border"
               checked={accentBorder}
@@ -694,6 +678,15 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
+/**
+ * Help text for the sensor accent color (`curveColor`). The number always
+ * shows in primary ink (docs/branding.md, number color rule), so the accent
+ * only colors the small marks. The old `valueColor` option has no visual
+ * effect since the number color rule; the editor no longer shows it, and
+ * saved values stay readable.
+ */
+const ACCENT_COLOR_HINT = 'Sets the color of the icon, sprite and border. The number stays in the text color.';
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="grid gap-1 text-xs font-medium text-fg-secondary">
@@ -792,10 +785,6 @@ function isSensorDataSource(value: unknown): value is SensorDataSource {
     value === 'chargingSummary' ||
     value === 'vehicleStatus'
   );
-}
-
-function isSensorValueColor(value: unknown): value is SensorValueColor {
-  return value === 'accent' || value === 'data' || value === 'default';
 }
 
 function supportsSpriteTimeFilter(chartType: string) {

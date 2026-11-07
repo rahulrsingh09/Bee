@@ -2,7 +2,7 @@
 import { createAdminFixture } from './r-admin.fixture.ts';
 import { createAnalysisFixture } from './r-analysis.fixture.ts';
 import type { Page, WebSocketRoute } from '@playwright/test';
-import type { VehicleStatus } from '@riviamigo/types';
+import type { Insight, VehicleStatus } from '@riviamigo/types';
 import { readFileSync } from 'node:fs';
 
 export async function installRFixture(page: Page, options: {
@@ -26,6 +26,8 @@ export async function installRFixture(page: Page, options: {
   role?: 'user' | 'super_user';
   tripGaps?: boolean;
   parallaxQuiet?: boolean;
+  /** Insights for `/v1/vehicles/{id}/insights`; a function receives the `scope` query. Default: none. */
+  insights?: Insight[] | ((scope: string) => Insight[]);
 } = {}) {
   const writes: string[] = [];
   const metricRequests: Record<string, unknown>[] = [];
@@ -190,6 +192,11 @@ export async function installRFixture(page: Page, options: {
       tripGaps = tripGaps.filter((gap) => gap.id !== id);
       return json({ trip_id: '99999999-9999-4999-8999-999999999999' });
     }
+    if (/\/vehicles\/[^/]+\/insights$/.test(path)) {
+      const scope = url.searchParams.get('scope') ?? 'now';
+      const insights = typeof options.insights === 'function' ? options.insights(scope) : options.insights ?? [];
+      return json({ insights });
+    }
     if (/\/vehicles\/[^/]+\/health$/.test(path)) return json({
       vehicle_id: vehicle.id, extended_telemetry: { collector: null },
       vehicle: { name: 'Your Rivian', model: 'R2', trim: 'Performance' },
@@ -309,6 +316,14 @@ export async function installRFixture(page: Page, options: {
     if (path === '/v1/charging') return json({ items: [charge], total: 1, page: 1, per_page: 10 });
     if (path === '/v1/charging/charge-1') return json(charge);
     if (path === '/v1/charging/sessions/charge-1/curve') return json([]);
+    // Cross-session DC curve rows; empty unless the fixture asks for populated analytics.
+    if (path === '/v1/charging/curve-analysis') return json(options.populatedAnalytics
+      ? ['charge-2', 'charge-4'].flatMap((sessionId, session) => Array.from({ length: 8 }, (_, index) => ({
+        session_id: sessionId, minutes_elapsed: index * 4, soc_pct: 20 + index * 8,
+        charge_rate_kw: Math.round(Math.max(40, 150 - index * 14 - session * 6)), charger_type: 'dc',
+        sample_source: 'telemetry',
+      })))
+      : []);
     if (path === '/v1/charging/chart-series') return json(options.populatedAnalytics ? {
       daily: days, daily_sessions: days.map((day, index) => ({
         ...day, session_id: `charge-${index + 1}`, started_at: day.day_start,

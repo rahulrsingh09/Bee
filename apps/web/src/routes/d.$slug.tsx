@@ -1,5 +1,5 @@
 import React from 'react';
-import { createRoute, redirect, useNavigate, useParams, useSearch } from '@tanstack/react-router';
+import { createRoute, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { z } from 'zod';
 import { rootRoute } from './__root';
 import {
@@ -11,18 +11,19 @@ import { ProtectedRoute } from '../components/layout/ProtectedRoute';
 import { Copy, Download, Upload } from 'lucide-react';
 import { DashboardPageShell } from '../components/dashboard/DashboardPageShell';
 
+export const DASHBOARD_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const searchSchema = z.object({
   edit: z.literal(1).optional(),
-  dashboardId: z.string().uuid().optional(),
+  // Bundled default dashboards use fixed ids such as 00000000-0000-0000-0000-000000000001,
+  // which are not RFC 4122 version UUIDs, so accept any 8-4-4-4-12 hex id.
+  dashboardId: z.string().regex(DASHBOARD_ID_PATTERN).optional(),
 });
 
 export const userDashboardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/d/$slug',
   validateSearch: searchSchema,
-  beforeLoad: ({ params, search }) => {
-    if (params.slug === 'dashboard' && !search.edit && !search.dashboardId) throw redirect({ to: '/', replace: true });
-  },
   component: UserDashboardPageWrapper,
 });
 
@@ -102,13 +103,15 @@ function UserDashboardPage() {
                 if (activeConfig) downloadDashboardYaml(activeConfig);
               }}
               title="Export as YAML"
-              className="p-1.5 rounded-lg border border-border hover:bg-bg-elevated transition-colors text-fg-tertiary hover:text-fg"
+              aria-label="Export as YAML"
+              className="inline-flex min-h-11 min-w-11 items-center justify-center p-1.5 rounded-lg border border-border hover:bg-bg-elevated transition-colors text-fg-tertiary hover:text-fg"
             >
               <Download className="h-3.5 w-3.5" />
             </button>
             <label
               title="Import from YAML"
-              className="cursor-pointer p-1.5 rounded-lg border border-border hover:bg-bg-elevated transition-colors text-fg-tertiary hover:text-fg"
+              aria-label="Import from YAML"
+              className="inline-flex min-h-11 min-w-11 cursor-pointer items-center justify-center p-1.5 rounded-lg border border-border hover:bg-bg-elevated transition-colors text-fg-tertiary hover:text-fg"
             >
               <Upload className="h-3.5 w-3.5" />
               <input type="file" accept=".yaml,.yml" className="sr-only" onChange={(event) => {

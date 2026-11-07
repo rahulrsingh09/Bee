@@ -1,9 +1,10 @@
 import React from 'react';
-import type { DashboardPageShellRenderState } from '../../components/dashboard/dashboardShellTypes';
-import { RHomeWorkspace } from './RHomeWorkspace';
-import { RRecentActivity } from './RRecentActivity';
-import './r-overview.css';
+import { NowBody } from '../now/NowPage';
 
-export function ROverview({ state, actions }: { state: DashboardPageShellRenderState; actions: React.ReactNode }) {
-  return <RHomeWorkspace state={state} actions={actions} activity={<RRecentActivity ctx={state.ctx} />} />;
+/**
+ * "/" renders the Now page directly (routes/index.tsx). A dashboard shell that still asks
+ * for the R overview on "/" gets the same Now body instead of the former dashboard layout.
+ */
+export function ROverview(_props: { state: unknown; actions: React.ReactNode }) {
+  return <NowBody />;
 }

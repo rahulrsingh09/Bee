@@ -10,6 +10,7 @@ import { useDocumentTheme } from '@riviamigo/ui/hooks';
 import { RVehicleOrbit } from './RVehicleOrbit';
 import { RVehicleDetails } from './RVehicleDetails';
 import { RVehicleLockStatus } from './RVehicleLockStatus';
+import { spinLabel, vehicleConfiguration } from '../now/nowModel';
 import './r-overview.css';
 
 export function RVehicleStage({ vehicle, status, distance, trips, efficiency, headingLevel = 'h1' }: {
@@ -25,12 +26,12 @@ export function RVehicleStage({ vehicle, status, distance, trips, efficiency, he
   return (
     <section className="r-vehicle-stage" aria-label="Vehicle snapshot">
       <header className="r-scene-heading">
-        <div><Heading>{vehicle.display_name || vehicle.model}</Heading><p>{configured ? 'R2 Performance · Catalina Cove' : [vehicle.model, vehicle.trim, vehicle.color].filter(Boolean).join(' · ')}</p>
+        <div><Heading>{vehicle.display_name || vehicle.model}</Heading><p>{vehicleConfiguration(vehicle)}</p>
           {vehicle.is_demo && <small>Demo vehicle · Illustrative data</small>}</div>
         <div className="r-car-status"><span>{vehicleState(status)}</span>
           <RVehicleLockStatus status={status} /></div>
       </header>
-      {configured ? <RVehicleOrbit key={vehicle.id} vehicleId={vehicle.id} /> : <div className="r-static-car">
+      {configured ? <RVehicleOrbit key={vehicle.id} vehicleId={vehicle.id} label={spinLabel(vehicle)} /> : <div className="r-static-car">
         <AuthenticatedVehicleArtwork source={dark ? artwork.dark ?? artwork.light : artwork.light} fallbackSource={artwork.fallback}
           alt={`${vehicle.model} vehicle artwork`} />
       </div>}

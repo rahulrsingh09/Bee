@@ -1,11 +1,30 @@
 import React from 'react';
-import { RotateCcw, Play } from 'lucide-react';
 import { createOrbitFrames, DEFAULT_FRAME, FRONT_FRAME, ORBIT_FRAMES, wrapFrame } from './orbitFrames';
 import heroUrl from './assets/r2-hero.webp';
 
 const rememberedAngles = new Map<string, number>();
 
-export function RVehicleOrbit({ vehicleId }: { vehicleId: string }) {
+export interface RVehicleOrbitProps {
+  vehicleId: string;
+  /** Accessible name of the turn control, for example "Your R2, Catalina Cove. Use arrow keys to turn." */
+  label?: string;
+  /** One slow turn on first visible entry. Off when the owner's own artwork rests on top of the frames. */
+  autoTurn?: boolean;
+  /** The owner starts to turn the car (drag, double-tap or arrow key). */
+  onTurnStart?: () => void;
+  /** The car stops at a frame after a turn. */
+  onRest?: (frame: number) => void;
+}
+
+/** Double-tap window and distance for "turn to the side view". */
+const DOUBLE_TAP_MS = 320;
+const DOUBLE_TAP_PX = 24;
+
+export function RVehicleOrbit({ vehicleId, label = 'Rotate vehicle. Use arrow keys to turn.', autoTurn = true, onTurnStart, onRest }: RVehicleOrbitProps) {
+  const hintId = React.useId();
+  const callbacks = React.useRef({ onTurnStart, onRest });
+  callbacks.current = { onTurnStart, onRest };
+  const lastTap = React.useRef<{ time: number; x: number; y: number } | null>(null);
   const canvas = React.useRef<HTMLCanvasElement>(null);
   const frame = React.useRef(rememberedAngles.get(vehicleId) ?? DEFAULT_FRAME);
   const [angle, setAngle] = React.useState(frame.current);
@@ -77,7 +96,7 @@ export function RVehicleOrbit({ vehicleId }: { vehicleId: string }) {
     };
     const restore = rememberedAngles.has(vehicleId);
     if (restore) draw.current(frame.current);
-    let entered = false;
+    let entered = !autoTurn;
     const observer = new IntersectionObserver(entries => {
       const visible = entries.some(entry => entry.isIntersecting);
       if (!visible) {
@@ -119,19 +138,21 @@ export function RVehicleOrbit({ vehicleId }: { vehicleId: string }) {
       media.removeEventListener('change', change);
       frames.close();
     };
-  }, [vehicleId]);
+  }, [vehicleId, autoTurn]);
 
   function animate(target: number, duration: number) {
     interacted.current = true;
     cancelAnimationFrame(motion.current);
     failed.current = false;
-    if (reduced.current) { draw.current(target); return; }
+    const rest = () => callbacks.current.onRest?.(wrapFrame(frame.current));
+    if (reduced.current) { draw.current(target); rest(); return; }
     const start = frame.current;
     const began = performance.now();
     const tick = (time: number) => {
       const progress = Math.min(1, (time - began) / duration);
       draw.current(start + (target - start) * (1 - Math.pow(1 - progress, 3)));
       if (progress < 1) motion.current = requestAnimationFrame(tick);
+      else rest();
     };
     motion.current = requestAnimationFrame(tick);
   }
@@ -141,22 +162,39 @@ export function RVehicleOrbit({ vehicleId }: { vehicleId: string }) {
     if (!previous || previous.id !== event.pointerId) return;
     drag.current = null;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-    if (!cancelled && previous.moved && !reduced.current) {
-      animate(frame.current + Math.max(-12, Math.min(12, previous.velocity * 160)), 500);
+    if (cancelled) {
+      if (previous.moved) callbacks.current.onRest?.(wrapFrame(frame.current));
+      return;
     }
+    if (!previous.moved) {
+      const tap = lastTap.current;
+      const now = performance.now();
+      if (tap && now - tap.time < DOUBLE_TAP_MS && Math.hypot(event.clientX - tap.x, event.clientY - tap.y) < DOUBLE_TAP_PX) {
+        lastTap.current = null;
+        callbacks.current.onTurnStart?.();
+        animate(frame.current + ((DEFAULT_FRAME - wrapFrame(frame.current) + 108) % 72 - 36), 650);
+      } else {
+        lastTap.current = { time: now, x: event.clientX, y: event.clientY };
+      }
+      return;
+    }
+    if (!reduced.current) animate(frame.current + Math.max(-12, Math.min(12, previous.velocity * 160)), 500);
+    else callbacks.current.onRest?.(wrapFrame(frame.current));
   }
 
   return (
     <div className="r-orbit">
-      <div className="r-orbit-stage" role="slider" tabIndex={0} aria-label="Rotate vehicle"
+      <div className="r-orbit-stage" role="slider" tabIndex={0} aria-label={label}
         aria-valuemin={0} aria-valuemax={355} aria-valuenow={angle * 5}
-        aria-valuetext={`${angle * 5} degrees`} aria-describedby="r-orbit-hint"
+        aria-valuetext={`${angle * 5} degrees`} aria-describedby={error ? hintId : undefined}
+        data-loading={(loading && !ready) || undefined}
         onKeyDown={event => {
           const next = event.key === 'ArrowRight' ? frame.current + 2
             : event.key === 'ArrowLeft' ? frame.current - 2
             : event.key === 'Home' ? FRONT_FRAME : event.key === 'End' ? DEFAULT_FRAME : null;
           if (next === null) return;
-          event.preventDefault(); interacted.current = true; cancelAnimationFrame(motion.current); failed.current = false; draw.current(next);
+          event.preventDefault(); interacted.current = true; cancelAnimationFrame(motion.current); failed.current = false;
+          callbacks.current.onTurnStart?.(); draw.current(next); callbacks.current.onRest?.(wrapFrame(next));
         }}
         onPointerDown={event => {
           if (!event.isPrimary || event.button !== 0) return;
@@ -174,6 +212,7 @@ export function RVehicleOrbit({ vehicleId }: { vehicleId: string }) {
           const dy = event.clientY - previous.y;
           if (!previous.moved && Math.abs(dy) > Math.abs(dx) + 6) { finish(event, true); return; }
           if (!previous.moved && Math.abs(dx) < 6) return;
+          if (!previous.moved) callbacks.current.onTurnStart?.();
           previous.moved = true;
           const next = previous.frame + dx / Math.max(5, event.currentTarget.clientWidth / ORBIT_FRAMES);
           const now = performance.now();
@@ -182,15 +221,11 @@ export function RVehicleOrbit({ vehicleId }: { vehicleId: string }) {
           draw.current(next);
         }}
         onPointerUp={event => finish(event)} onPointerCancel={event => finish(event, true)}>
-        <img src={heroUrl} alt="Rivian R2 Performance in Catalina Cove with 21-inch wheels" draggable={false} className={ready ? 'r-orbit-poster r-orbit-hidden' : 'r-orbit-poster'} />
+        <img src={heroUrl} alt="" draggable={false} className={ready ? 'r-orbit-poster r-orbit-hidden' : 'r-orbit-poster'} />
         <canvas ref={canvas} width={840} height={430} aria-hidden="true" className={ready ? '' : 'r-orbit-hidden'} />
       </div>
-      <div className="r-orbit-controls">
-        <span id="r-orbit-hint">{error ? 'Rotation unavailable. Try again.' : loading && !ready ? 'Loading rotation…' : 'Drag to turn · 360°'}</span>
-        <button type="button" onClick={() => animate(frame.current + ((FRONT_FRAME - wrapFrame(frame.current) + 108) % 72 - 36), 600)}>Front</button>
-        <button type="button" aria-label="Reset vehicle view" onClick={() => animate(frame.current + ((DEFAULT_FRAME - wrapFrame(frame.current) + 108) % 72 - 36), 650)}><RotateCcw /></button>
-        <button type="button" aria-label="Replay vehicle rotation" onClick={() => animate(frame.current + ORBIT_FRAMES, 2600)}><Play /></button>
-      </div>
+      {/* No visible hint: text near the car overlaps it. Screen readers get the failure state. */}
+      <span id={hintId} className="sr-only" role="status">{error ? 'Rotation unavailable. Drag or press an arrow key to try again.' : ''}</span>
     </div>
   );
 }

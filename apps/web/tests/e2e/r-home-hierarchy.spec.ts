@@ -1,95 +1,205 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { installRFixture } from './r-experience.fixture';
 
-for (const width of [320, 393, 901, 1280, 1920]) for (const mode of ['dark', 'light'] as const) {
-  test(`Home prioritizes the vehicle and recent activity at ${width}px in ${mode}`, async ({ page }, testInfo) => {
+/** Now-page reads that the shared fixture does not answer. Times are relative to the test run. */
+async function installNowData(page: Page, options: { ownerArtwork?: boolean } = {}) {
+  const now = Date.now();
+  const hoursAgo = (hours: number) => new Date(now - hours * 3_600_000).toISOString();
+  const trips = [
+    { id: 'trip-1', started_at: hoursAgo(1.2), ended_at: hoursAgo(0.6), distance_mi: 18.4, duration_min: 34, energy_used_kwh: 5.9, efficiency_wh_mi: 320, start_place: 'Office', end_place: 'Home' },
+    { id: 'trip-2', started_at: hoursAgo(26), ended_at: hoursAgo(25.5), distance_mi: 31, duration_min: 30, energy_used_kwh: 9.9, efficiency_wh_mi: 320, start_place: 'Home', end_place: 'Office' },
+    { id: 'trip-3', started_at: hoursAgo(74), ended_at: hoursAgo(73), distance_mi: 42, duration_min: 60, energy_used_kwh: 13.4, efficiency_wh_mi: 320, start_place: 'Home', end_place: 'Lake' },
+  ].map(trip => ({ ...trip, vehicle_id: 'owner-vehicle', max_speed_mph: 50, drive_mode: 'all_purpose', soc_start: 75, soc_end: 68, tags: [] }));
+  const charges = [{
+    id: 'charge-1', vehicle_id: 'owner-vehicle', location_name: 'Home', started_at: hoursAgo(14), ended_at: hoursAgo(10),
+    energy_added_kwh: 20, duration_min: 240, cost_usd: 2.4, charger_type: 'ac', soc_start: 27, soc_end: 49, peak_power_kw: 11,
+  }];
+  await page.route(/\/v1\/trips(\?|$)/, route => route.fulfill({ json: { items: trips, total: trips.length, page: 1, per_page: 200 } }));
+  await page.route(/\/v1\/charging(\?|$)/, route => route.fulfill({ json: { items: charges, total: 1, page: 1, per_page: 200 } }));
+  await page.route(/\/v1\/trips\/trip-1\/track(\?|$)/, route => route.fulfill({ json: Array.from({ length: 24 }, (_, index) => ({
+    ts: hoursAgo(1.2 - index / 40), lat: 47.6 + index * .0012 + Math.sin(index / 3) * .001, lng: -122.34 + index * .0018, speed_mph: 30, altitude_m: 20,
+  })) }));
+  await page.route(/\/v1\/vehicles\/[^/]+\/insights(\?|$)/, route => route.fulfill({ json: { insights: [
+    { id: 'days_of_range:now', kind: 'days_of_range', severity: 'info', values: { range_mi: 218, median_daily_mi: 70, days: 3.1, days_with_data: 21 }, baseline: null, sample_size: 21, evidence: [] },
+    { id: 'high_parked_loss:now', kind: 'high_parked_loss', severity: 'attention', values: { loss_pct: 4, usual_loss_pct: 1.3, ratio: 3.1, duration_hours: 8.6, started_at: hoursAgo(10), ended_at: hoursAgo(1.4) }, baseline: null, sample_size: 9, evidence: [] },
+  ] } }));
+  await page.route(/\/v1\/vehicles\/[^/]+\/charging-schedule$/, route => route.fulfill({ json: {
+    id: 's1', enabled: true, start_time_minutes: 23 * 60, duration_minutes: 360, amperage: 48, location_lat: null, location_lng: null,
+    week_days: null, rivian_updated_at: null, updated_at: hoursAgo(48),
+  } }));
+  await page.route(/\/v1\/vehicles\/[^/]+\/idle-drain(\?|$)/, route => route.fulfill({ json: { vehicle_id: 'owner-vehicle', periods: [{
+    period_start: hoursAgo(10), period_end: hoursAgo(1.4), duration_hours: 8.6, sleep_share_pct: 90, state_coverage_pct: 100,
+    soc_start: 72, soc_end: 68, soc_lost_pct: 4, drain_pct_per_hour: .47, range_start_mi: 230, range_end_mi: 218, range_lost_mi: 12,
+    range_lost_per_hour_mi: 1.4, energy_drained_kwh: 3.5, avg_power_w: 400, has_reduced_range: false, validation_status: 'validated',
+    validation_reason: null, sample_count: 40, start_sample_at: null, end_sample_at: null, movement_detected: false,
+  }] } }));
+  if (options.ownerArtwork) await page.route(/\/v1\/vehicles(\?|$)/, route => route.fulfill({ json: { vehicles: [{
+    id: 'owner-vehicle', user_id: '33333333-3333-4333-8333-333333333333', rivian_vehicle_id: 'fixture-r2', vin: null,
+    model: 'R2', year: null, trim: 'Performance', color: 'Catalina Cove', wheel_option: null, interior_color: null,
+    battery_capacity_kwh: 88, is_demo: false, display_name: 'Your Rivian', created_at: '2026-01-01T00:00:00Z', membership_role: 'owner',
+    images: { all: [], side: { light: '/vehicle-images/fallbacks/r2s/side.webp', dark: '/vehicle-images/fallbacks/r2s/side.webp' } },
+  }] } }));
+}
+
+/** Boxes of every visible text, chip and dock element that overlap the visible car image. */
+async function carOverlaps(page: Page) {
+  return page.evaluate(() => {
+    const area = document.querySelector('.now-car')!.getBoundingClientRect();
+    const clip = (rect: DOMRect) => ({
+      left: Math.max(rect.left, area.left), right: Math.min(rect.right, area.right),
+      top: Math.max(rect.top, area.top), bottom: Math.min(rect.bottom, area.bottom),
+    });
+    const visible = (element: Element) => {
+      const style = getComputedStyle(element);
+      return style.visibility !== 'hidden' && style.display !== 'none' && Number(style.opacity) > 0;
+    };
+    const cars = [...document.querySelectorAll('.now-car canvas, .now-car img')].filter(visible)
+      .map(element => clip(element.getBoundingClientRect())).filter(box => box.right > box.left && box.bottom > box.top);
+    const textual = [...document.querySelectorAll('body *')].filter(element => !element.closest('.now-car')
+      && [...element.childNodes].some(node => node.nodeType === Node.TEXT_NODE && node.textContent!.trim()));
+    // The part of an element that is painted: its box cut by every ancestor that clips overflow.
+    const painted = (element: Element) => {
+      const rect = element.getBoundingClientRect();
+      let box = { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+      for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+        const style = getComputedStyle(parent);
+        if (style.position === 'fixed') break;
+        if (style.overflowX === 'visible' && style.overflowY === 'visible') continue;
+        const clipRect = parent.getBoundingClientRect();
+        box = { left: Math.max(box.left, clipRect.left), right: Math.min(box.right, clipRect.right),
+          top: Math.max(box.top, clipRect.top), bottom: Math.min(box.bottom, clipRect.bottom) };
+      }
+      return box;
+    };
+    const others = [...new Set([...document.querySelectorAll('.now-chip, .r-navigation'), ...textual])].filter(visible)
+      .map(element => ({ element, rect: painted(element) }))
+      .filter(({ rect }) => rect.right - rect.left > 1 && rect.bottom - rect.top > 1);
+    const hits: string[] = [];
+    for (const car of cars) for (const { element, rect } of others) {
+      if (rect.left < car.right && rect.right > car.left && rect.top < car.bottom && rect.bottom > car.top) {
+        hits.push(`${element.tagName.toLowerCase()}.${element.className}: ${element.textContent?.trim().slice(0, 40)}`);
+      }
+    }
+    return { cars: cars.length, hits };
+  });
+}
+
+for (const width of [320, 390, 901, 1280, 1920]) for (const mode of ['dark', 'light'] as const) {
+  test(`Now puts status, car, battery, odometer, needs-a-look and the story rail in order at ${width}px in ${mode}`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 900 });
     await page.emulateMedia({ reducedMotion: 'reduce' });
-    const fixture = await installRFixture(page, { mode, populatedAdmin: true, populatedAnalytics: true, secondVehicle: true });
+    const fixture = await installRFixture(page, { mode });
+    await installNowData(page);
     await page.goto('/');
-    const vehicle = page.locator('.r-home-vehicle');
-    const totals = page.locator('.r-home-totals');
-    const activity = page.getByRole('complementary', { name: 'Recent activity' });
-    const charts = page.getByRole('region', { name: 'Overview charts', exact: true });
-    await expect(vehicle.getByRole('heading', { name: 'Your Rivian', exact: true })).toBeVisible();
-    await expect(totals.locator('[data-testid="sensor-chip"]')).toHaveCount(4);
-    await expect(activity.getByRole('heading', { name: 'Recent trips', exact: true })).toBeVisible();
-    const boxes = await Promise.all([vehicle, totals, activity, charts].map(locator => locator.boundingBox()));
-    const [car, summary, recent, graph] = boxes.map(box => box!);
-    if (width > 900) {
-      expect(recent.x).toBeGreaterThan(car.x + car.width);
-      expect(Math.abs(recent.y - car.y)).toBeLessThan(12);
-      expect(Math.abs(summary.x - recent.x)).toBeLessThan(1);
-      expect(Math.abs(summary.width - recent.width)).toBeLessThan(1);
-      expect(summary.y).toBeGreaterThan(recent.y + recent.height);
-      expect(summary.y - (recent.y + recent.height)).toBeLessThan(48);
-      const summaryCards = await totals.locator('[data-ui-card]').evaluateAll(elements =>
-        elements.map(element => {
-          const { x, y, width, height } = element.getBoundingClientRect();
-          const value = element.querySelector('.font-mono')?.getBoundingClientRect();
-          const sprite = element.querySelector('[data-testid="sensor-sprite-layer"]')?.getBoundingClientRect();
-          return {
-            x, y, width, height, fits: element.scrollWidth <= element.clientWidth + 1,
-            readable: !value || !sprite || value.bottom + 4 <= sprite.y,
-          };
-        }));
-      expect(summaryCards.every(card => card.fits)).toBe(true);
-      expect(summaryCards.every(card => card.readable)).toBe(true);
-      expect(Math.abs(summaryCards[0]!.y - summaryCards[1]!.y)).toBeLessThan(1);
-      expect(Math.abs(summaryCards[2]!.y - summaryCards[3]!.y)).toBeLessThan(1);
-      expect(Math.abs(summaryCards[0]!.x - summaryCards[2]!.x)).toBeLessThan(1);
-      expect(summaryCards[2]!.y).toBeGreaterThan(summaryCards[0]!.y + summaryCards[0]!.height);
-      expect(graph.y).toBeGreaterThan(Math.max(car.y + car.height, summary.y + summary.height));
+    // A longer first wait: other work in the same checkout can make the dev server reload once.
+    await expect(page.getByRole('heading', { level: 1, name: 'Parked at Home' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('Your Rivian · R2 Performance · Catalina Cove')).toBeVisible();
+    const chips = page.getByRole('list', { name: 'Vehicle status' }).getByRole('listitem');
+    await expect(chips).toHaveText(['Locked', 'Unplugged', 'Charges 11 PM']);
+    await expect(page.getByText('Limit 80% · enough for about 3 days of your usual driving')).toBeVisible();
+    await expect(page.getByText(/^This week: 91 mi · 3 drives · 3\.1 mi\/kWh · \$2\.40 energy cost$/)).toBeVisible();
+    const attention = page.getByRole('region', { name: 'Needs a look' });
+    await expect(attention.getByRole('link', { name: /Parked loss was high/ })).toHaveAttribute('href', '/battery/phantom-drain');
+    const stories = page.getByRole('region', { name: 'Today' });
+    await expect(stories.getByRole('link', { name: /Last drive/ })).toHaveAttribute('href', '/trips/trip-1');
+    await expect(stories.locator('.now-route path')).toHaveAttribute('d', /^M[\d.]+,[\d.]+( L[\d.]+,[\d.]+)+$/);
+    await expect(stories.getByRole('link', { name: /Last charge/ })).toHaveAttribute('href', '/charging/charge-1');
+    await expect(stories.getByRole('link', { name: /Last park/ })).toContainText('3.1× your usual loss');
+    expect(await page.getByRole('heading', { level: 2 }).allTextContents()).toEqual(['Odometer', 'Needs a look', 'Today']);
+
+    const box = async (selector: string) => (await page.locator(selector).boundingBox())!;
+    const [header, car, energy, odometer, look, rail] = await Promise.all(
+      ['.now-header', '.now-car', '.now-energy', '.now-odometer', '.now-attention', '.now-stories'].map(box));
+    const chipBoxes = await chips.evaluateAll(elements => elements.map(element => element.getBoundingClientRect().toJSON() as DOMRect));
+    expect(new Set(chipBoxes.map(chip => Math.round(chip.y))).size).toBe(1);
+    expect(Math.max(...chipBoxes.map(chip => chip.bottom))).toBeLessThanOrEqual(car.y);
+    expect(car.y).toBeGreaterThanOrEqual(header.y + header.height);
+    expect(energy.y).toBeGreaterThanOrEqual(car.y + car.height);
+    if (width < 1024) {
+      expect(Math.round(car.height)).toBe(230);
+      expect(odometer.y).toBeGreaterThan(energy.y + energy.height);
     } else {
-      expect(summary.y).toBeGreaterThanOrEqual(car.y + car.height);
-      expect(recent.y).toBeGreaterThan(summary.y + summary.height);
-      expect(graph.y).toBeGreaterThan(recent.y + recent.height);
+      expect(odometer.x).toBeGreaterThan(car.x + car.width);
+      expect(odometer.y).toBeLessThan(car.y);
     }
-    const orbit = (await vehicle.locator('.r-orbit').boundingBox())!;
-    const trip = (await vehicle.locator('.r-trip-instruments').boundingBox())!;
-    const energy = (await vehicle.locator('.r-energy-summary').boundingBox())!;
-    expect(trip.y).toBeGreaterThanOrEqual(orbit.y + orbit.height);
-    expect(energy.y).toBeGreaterThan(trip.y + trip.height);
-    expect(Math.abs(trip.x - energy.x)).toBeLessThan(1);
-    expect(Math.abs(trip.width - energy.width)).toBeLessThan(1);
-    const socValue = (await vehicle.locator('.r-soc-summary strong').boundingBox())!;
-    const rangeValue = (await vehicle.getByRole('link', { name: 'Estimated remaining range' }).locator('strong').boundingBox())!;
-    expect(Math.abs(socValue.y - rangeValue.y)).toBeLessThan(2);
-    const cards = await page.locator('.r-trip-instruments > a, .r-energy-summary > a, .r-home-totals [data-ui-card]').evaluateAll(elements =>
-      elements.map(element => {
-        const style = getComputedStyle(element);
-        return { background: style.backgroundColor, radius: style.borderRadius };
-      }));
-    expect(cards).toHaveLength(10);
-    expect(new Set(cards.map(card => card.background)).size).toBe(1);
-    expect(new Set(cards.map(card => card.radius)).size).toBe(1);
-    expect(await page.locator('.r-dashboard-vehicle').evaluate(element => getComputedStyle(element).overflow)).toBe('visible');
-    expect(await page.locator('.r-workspace-heading').evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    expect(look.y).toBeGreaterThan(odometer.y + odometer.height);
+    expect(rail.y).toBeGreaterThan(look.y + look.height);
+
+    const overlap = await carOverlaps(page);
+    expect(overlap.cars).toBeGreaterThan(0);
+    expect(overlap.hits).toEqual([]);
+    const small = await page.locator('.now').evaluate(root => [...root.querySelectorAll('a, button, [role="slider"], [role="combobox"]')]
+      .map(element => ({ name: element.textContent?.trim().slice(0, 30) || element.getAttribute('aria-label'), ...element.getBoundingClientRect().toJSON() }))
+      .filter(target => target.height < 44 || target.width < 44));
+    expect(small).toEqual([]);
+    await expect(page.getByText(/Drag to turn/i)).toHaveCount(0);
+    await expect(page.locator('[data-dashboard-grid], [data-chart-id], [data-testid="sensor-chip"]')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /date range|Chart|Dashboard tools/i })).toHaveCount(0);
+    await expect(page.getByPlaceholder(/Search charts/i)).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
-    await page.screenshot({ path: testInfo.outputPath('home-viewport.png') });
-    await page.screenshot({ path: testInfo.outputPath('home-full.png'), fullPage: true });
+    await page.screenshot({ path: testInfo.outputPath('now-full.png'), fullPage: true });
     expect(fixture.unsupportedRequests).toEqual([]);
     expect(fixture.writes).toEqual([]);
   });
 }
 
-test('a previously shortened vehicle widget cannot create an inner scrollbar on Home', async ({ page }) => {
+test('the data story runs on the first view of a session only, and never with reduced motion', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await installRFixture(page, { mode: 'dark' });
+  await installNowData(page);
+  await page.goto('/');
+  await expect(page.locator('.now-roll[data-animate]')).toHaveCount(1);
+  await expect(page.locator('.now-week-bar > span[data-animate]')).toHaveCount(7);
+  const roll = page.locator('.now-roll-column').first();
+  await expect.poll(() => roll.evaluate(element => getComputedStyle(element).transitionProperty)).toBe('transform');
+  await page.reload();
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  await expect(page.locator('.now-odometer-value')).toContainText('12,486');
+  await expect(page.locator('[data-animate]')).toHaveCount(0);
+  await page.evaluate(() => sessionStorage.clear());
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.reload();
+  await expect(page.locator('.now-odometer-value')).toContainText('12,486');
+  await expect(page.locator('[data-animate], .now-viz-wipe')).toHaveCount(0);
+});
+
+test('the owner artwork rests on the car and cross-fades to the frames while the car turns', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await installRFixture(page, { mode: 'dark' });
+  await installNowData(page, { ownerArtwork: true });
+  await page.goto('/');
+  const car = page.locator('.now-car');
+  await expect(car).toHaveAttribute('data-rest', 'artwork');
+  await expect(car.locator('.now-car-artwork')).toHaveAttribute('src', '/vehicle-images/fallbacks/r2s/side.webp');
+  const spin = page.getByRole('slider', { name: 'Your R2, Catalina Cove. Use arrow keys to turn.' });
+  const area = (await spin.boundingBox())!;
+  await page.mouse.move(area.x + area.width / 2, area.y + area.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(area.x + area.width / 2 + 90, area.y + area.height / 2, { steps: 6 });
+  await expect(car).toHaveAttribute('data-rest', 'frames');
+  await page.mouse.up();
+  await spin.dblclick();
+  await expect(spin).toHaveAttribute('aria-valuenow', '280');
+  await expect(car).toHaveAttribute('data-rest', 'artwork');
+});
+
+test('an edited Home layout stays reachable as a custom dashboard', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await installRFixture(page, { populatedAdmin: true });
-  const config = JSON.parse(readFileSync(new URL('../../../../packages/dashboards/src/defaults/dashboard.json', import.meta.url), 'utf8'));
-  config.widgets[0].layout = { x: 0, y: 0, w: 4, h: 1 };
-  await page.route('**/v1/dashboards/by-slug/dashboard', route => route.fulfill({
-    contentType: 'application/json', body: JSON.stringify(config),
-  }));
-  await page.goto('/');
-  await expect(page.locator('.r-home-workspace')).not.toHaveAttribute('data-r-default-layout');
-  const vehicle = page.locator('.r-dashboard-vehicle');
-  await expect(vehicle.getByRole('link', { name: /Software/ })).toBeVisible();
-  expect(await vehicle.evaluate(element => element.scrollHeight <= element.clientHeight + 1)).toBe(true);
-  expect(await vehicle.evaluate(element => getComputedStyle(element).overflow)).toBe('visible');
-  const totalCards = page.locator('.r-home-totals [data-ui-card]');
-  await expect(totalCards).toHaveCount(4);
-  expect(await totalCards.evaluateAll(elements => elements.every(element => element.scrollHeight <= element.clientHeight + 1))).toBe(true);
+  const personal = {
+    ...JSON.parse(readFileSync(new URL('../../../../packages/dashboards/src/defaults/dashboard.json', import.meta.url), 'utf8')),
+    id: '11111111-1111-4111-8111-111111111111', ownerId: '33333333-3333-4333-8333-333333333333', isDefault: false, isLocked: false,
+  };
+  await page.route(`**/v1/dashboards/${personal.id}`, route => route.fulfill({ json: personal }));
+  await page.goto('/d/dashboard');
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.locator('.now')).toBeVisible();
+  await page.goto(`/d/dashboard?dashboardId=${personal.id}`);
+  await expect(page.locator('.r-dashboard-vehicle')).toBeVisible();
+  await expect(page.locator('.now')).toHaveCount(0);
+  await expect(page.locator('[data-testid="sensor-chip"]').first()).toBeVisible();
+  await expect(page.locator('.r-scene-heading p')).toHaveText('R2 Performance · Catalina Cove');
 });

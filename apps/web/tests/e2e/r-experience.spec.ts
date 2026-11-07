@@ -25,13 +25,16 @@ for (const width of [390, 1280]) {
       ];
       for (const path of paths) {
         await page.goto(path);
-        await expect(page.locator('.r-app')).toBeVisible();
-        await expect(page.locator('h1').first()).toBeVisible();
+        await expect(page.locator('.r-app'), path).toBeVisible();
+        await expect(page.locator('h1').first(), path).toBeVisible();
         await expect(page.locator('html')).toHaveClass(new RegExp(mode));
         const primary = page.getByRole('navigation', { name: 'Primary navigation' });
-        for (const name of ['Home','Trips','Charging','Battery','Explore', ...(width > 900 ? ['Efficiency'] : [])]) {
+        await expect(primary.getByRole('link')).toHaveText(['Now', 'Activity', 'Insights', 'Car']);
+        for (const name of ['Now', 'Activity', 'Insights', 'Car']) {
           await expect(primary.getByRole('link', { name, exact: true })).toBeVisible();
         }
+        await expect(page.getByRole('link', { name: 'Explore', exact: true })).toHaveCount(0);
+        await expect(page.getByRole('button', { name: /^Switch to (light|dark) mode$/ })).toHaveCount(0);
         await expect(page.getByText(/something went wrong/i)).toHaveCount(0);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), path).toBe(true);
         if (['/', '/settings', '/vehicle-health', '/charging'].includes(path)) {
@@ -47,15 +50,17 @@ for (const width of [390, 1280]) {
   }
 }
 
-test('vehicle rotation loads once on interaction and works with light mode and reduced motion', async ({ page }) => {
+test('vehicle rotation loads once on interaction, has no hint text or toy buttons, and works with reduced motion', async ({ page }) => {
   await installRFixture(page, { mode: 'dark' });
   await page.emulateMedia({ reducedMotion: 'reduce' });
   const packs: string[] = [];
   page.on('request', request => { if (request.resourceType() === 'fetch' && orbitPackUrl.test(request.url())) packs.push(request.url()); });
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Your Rivian' })).toBeVisible();
-  const orbit = page.getByRole('slider', { name: 'Rotate vehicle' });
+  await expect(page.getByRole('heading', { level: 1, name: 'Parked at Home' })).toBeVisible();
+  const orbit = page.getByRole('slider', { name: 'Your R2, Catalina Cove. Use arrow keys to turn.' });
   await expect(orbit).toBeVisible();
+  await expect(page.getByText(/Drag to turn|double-tap/i)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^(Front|Reset vehicle view|Replay vehicle rotation)$/ })).toHaveCount(0);
   expect(packs).toHaveLength(0);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await orbit.focus();
@@ -70,12 +75,10 @@ test('vehicle rotation loads once on interaction and works with light mode and r
   await page.mouse.move(box.x + box.width / 2 + 80, box.y + box.height / 2, { steps: 5 });
   await page.mouse.up();
   await expect(orbit).not.toHaveAttribute('aria-valuenow', '335');
-  await page.getByRole('button', { name: 'Switch to light mode' }).click();
-  await expect(page.locator('html')).toHaveClass(/light/);
-  expect(await page.locator('.r-vehicle-stage').evaluate(element => getComputedStyle(element).backgroundColor))
-    .toBe(await page.locator('body').evaluate(element => getComputedStyle(element).backgroundColor));
-  await page.getByRole('link', { name: 'Explore', exact: true }).click();
-  await page.getByRole('link', { name: 'Home', exact: true }).click();
+  await orbit.dblclick();
+  await expect(orbit).toHaveAttribute('aria-valuenow', '280');
+  await page.getByRole('link', { name: 'Insights', exact: true }).click();
+  await page.getByRole('link', { name: 'Now', exact: true }).click();
   await expect(page.locator('.r-orbit canvas')).toBeVisible();
   expect(packs).toHaveLength(1);
 });
@@ -104,13 +107,13 @@ test('settings navigation, search, units and compatibility URLs have no interfac
 test('changing vehicle clears old readings until the selected vehicle snapshot arrives', async ({ page }) => {
   await installRFixture(page, { secondVehicle: true, statusDelay: 1500 });
   await page.goto('/');
-  await expect(page.locator('.r-soc-summary')).toContainText('68%');
+  await expect(page.locator('.now-energy')).toContainText('68%');
   await page.getByLabel('Select vehicle', { exact: true }).click();
   await page.getByRole('option', { name: /Other vehicle/ }).click();
-  await expect(page.getByRole('heading', { name: 'Other vehicle' })).toBeVisible();
-  await expect(page.locator('.r-soc-summary')).not.toContainText('68%');
-  await expect(page.locator('.r-soc-summary')).toContainText('20%');
-  await expect(page.getByRole('slider', { name: 'Rotate vehicle' })).toHaveCount(0);
+  await expect(page.locator('.now-vehicle').first()).toContainText('Other vehicle');
+  await expect(page.locator('.now-energy')).not.toContainText('68%');
+  await expect(page.locator('.now-energy')).toContainText('20%');
+  await expect(page.getByRole('slider')).toHaveCount(0);
 });
 
 for (const width of [390, 1280]) {
@@ -141,22 +144,23 @@ for (const width of [390, 1280]) {
     await page.goto('/trips/trip-1');
     const canvas = page.getByLabel('Inspect trip route. Tap or drag to select a point; arrow keys move along the route.');
     await expect(canvas).toBeVisible();
-    const mapCard = page.getByRole('heading', { name: 'Route Map', exact: true }).locator('../..');
-    await canvas.scrollIntoViewIfNeeded();
-    await canvas.focus();
+    const time = page.getByRole('slider', { name: 'Drive time' });
+    await expect(time).toBeEnabled();
+    await time.focus();
     await page.keyboard.press('End');
-    await expect(mapCard).toContainText('30:00');
+    await expect(time).toHaveValue('30');
     await page.keyboard.press('Home');
-    await expect(mapCard).toContainText('0:00');
+    await expect(time).toHaveValue('0');
+    await canvas.scrollIntoViewIfNeeded();
     const box = (await canvas.boundingBox())!;
     await page.mouse.click(box.x + box.width * .7, box.y + box.height * .3);
-    await expect(mapCard.locator('p')).not.toHaveText('0:00');
-    const selected = await mapCard.locator('p').textContent();
+    await expect(time).not.toHaveValue('0');
+    const selected = await time.inputValue();
     await page.mouse.move(box.x + box.width * .7, box.y + box.height * .3);
     await page.mouse.down();
     await page.mouse.move(box.x + box.width * .3, box.y + box.height * .7, { steps: 12 });
     await page.mouse.up();
-    await expect(mapCard.locator('p')).not.toHaveText(selected!);
+    await expect(time).not.toHaveValue(selected);
     await page.getByRole('button', { name: 'Pan map', exact: true }).click();
     await expect(page.getByLabel('Pan trip map', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Inspect route', exact: true }).click();
@@ -165,7 +169,7 @@ for (const width of [390, 1280]) {
   });
 }
 
-test('failed rotation pauses until an explicit retry', async ({ page }) => {
+test('failed rotation pauses until the owner turns the car again', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await installRFixture(page);
   let failedLoads = 0;
@@ -175,11 +179,15 @@ test('failed rotation pauses until an explicit retry', async ({ page }) => {
     return route.fulfill({ status: 503, body: 'Unavailable' });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Replay vehicle rotation' }).click();
-  await expect(page.getByText('Rotation unavailable. Try again.')).toBeVisible();
+  const orbit = page.getByRole('slider', { name: /Use arrow keys to turn/ });
+  await orbit.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(page.locator('.r-orbit [role="status"]')).toHaveText('Rotation unavailable. Drag or press an arrow key to try again.');
+  await expect(orbit).toHaveAccessibleDescription('Rotation unavailable. Drag or press an arrow key to try again.');
+  await expect(page.locator('.r-orbit-poster')).toBeVisible();
   await page.waitForTimeout(700);
   expect(failedLoads).toBe(1);
-  await page.getByRole('button', { name: 'Front', exact: true }).click();
+  await page.keyboard.press('ArrowRight');
   await expect.poll(() => failedLoads).toBe(2);
 });
 
@@ -187,7 +195,7 @@ test('cached vehicle readings retain visible browser reconnection status', async
   await installRFixture(page);
   await page.routeWebSocket('**/v1/vehicles/live**', socket => socket.close());
   await page.goto('/');
-  await expect(page.locator('.r-soc-summary')).toContainText('68%');
+  await expect(page.locator('.now-energy')).toContainText('68%');
   await expect(page.getByText('Reconnecting live updates · Showing last recorded readings.')).toBeVisible();
 });
 

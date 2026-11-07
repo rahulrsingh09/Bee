@@ -2063,6 +2063,8 @@ async fn load_active_charge_snapshot(
                 t.battery_capacity_wh,
                 t.battery_limit,
                 t.power_kw,
+                (t.charger_state = 'charging' OR t.power_state = 'charging'
+                    OR t.time_to_end_of_charge_min > 0) AS charging_evidence,
                 LAG(t.ts) OVER (PARTITION BY t.charge_session_id ORDER BY t.ts) AS prev_ts,
                 LAG(ABS(t.power_kw)) OVER (PARTITION BY t.charge_session_id ORDER BY t.ts) AS prev_power_kw
             FROM timeseries.telemetry t
@@ -2080,7 +2082,8 @@ async fn load_active_charge_snapshot(
             SELECT
                 charge_session_id AS session_id,
                 MIN(ts) AS started_at,
-                MAX(ts) AS last_charge_ts,
+                MAX(ts) AS last_sample_ts,
+                COALESCE(MAX(ts) FILTER (WHERE charging_evidence), MAX(ts)) AS last_charge_ts,
                 MAX(ts) FILTER (WHERE power_kw IS NOT NULL) AS last_power_ts,
                 (ARRAY_AGG(latitude ORDER BY ts) FILTER (
                     WHERE latitude IS NOT NULL
@@ -2121,8 +2124,8 @@ async fn load_active_charge_snapshot(
             energy_used_wh,
             peak_charge_kw
         FROM candidate_sessions
-        WHERE last_charge_ts >= now() - ($3::int * interval '1 minute')
-        ORDER BY last_charge_ts DESC
+        WHERE last_sample_ts >= now() - ($3::int * interval '1 minute')
+        ORDER BY last_sample_ts DESC
         LIMIT 1
         "#,
     )
@@ -3302,6 +3305,30 @@ async fn persist_charge_session(
         _ => MatchedLocation::none(),
     };
     let energy_added_kwh = session.energy_added_wh.map(|wh| wh / 1000.0);
+    // The R2 sends no charge power on the canonical stream, so its peak comes
+    // from the recorded charging-graph points. The higher peak decides the type.
+    let recorded_peak = match crate::services::charging::recorded_peak_kw(
+        pool,
+        session.vehicle_id,
+        session.session_id,
+        session.started_at,
+        session.ended_at,
+    )
+    .await
+    {
+        Ok(peak) => peak,
+        Err(error) => {
+            tracing::warn!(session_id=%session.session_id, error=%error, "worker.recorded_peak_lookup_failed");
+            None
+        }
+    };
+    let peak_charge_kw = match (session.peak_charge_kw, recorded_peak) {
+        (Some(detected), Some(recorded)) => Some(detected.max(recorded)),
+        (detected, recorded) => detected.or(recorded),
+    };
+    let charger_type = peak_charge_kw
+        .map(|kw| crate::services::charging::classify_charger_type(kw).to_string())
+        .or_else(|| session.charger_type.clone());
 
     sqlx::query(
         r#"INSERT INTO riviamigo.charge_sessions
@@ -3351,17 +3378,19 @@ async fn persist_charge_session(
     .bind(session.charge_limit)
     .bind(duration_minutes)
     .bind(energy_added_kwh)
-    .bind(session.peak_charge_kw)
+    .bind(peak_charge_kw)
     .bind(Option::<f64>::None)
     .bind(session.energy_added_wh)
     .bind(session.energy_used_wh)
     .bind(session.avg_charge_rate_kw)
-    .bind(session.peak_charge_kw)
+    // peak_voltage: the detector records no voltage. Binding the peak power
+    // here stored kW in a volts column.
+    .bind(Option::<f64>::None)
     .bind(location_match.geofence_id)
     .bind(location_match.address_id)
     .bind(Option::<Uuid>::None)
     .bind(Option::<&str>::None)
-    .bind(session.charger_type.as_deref())
+    .bind(charger_type.as_deref())
     .execute(pool)
     .await?;
 

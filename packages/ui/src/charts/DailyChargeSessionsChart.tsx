@@ -47,6 +47,8 @@ export interface DailyChargeSessionsChartProps {
 
 export interface DailyEnergyBarChartProps {
   daily: DailyChargeSessionsDay[];
+  /** When given, each day stacks by charger type (AC and DC). */
+  dailySessions?: DailyChargeSessionsSession[] | undefined;
   height?: number;
   loading?: boolean;
   emptyTitle?: string | undefined;
@@ -741,6 +743,7 @@ export function DailyChargeSessionsChart(props: DailyChargeSessionsChartProps) {
 
 export function DailyEnergyBarChart({
   daily,
+  dailySessions,
   height,
   loading,
   emptyTitle = 'No charging energy for this period',
@@ -752,7 +755,9 @@ export function DailyEnergyBarChart({
     <DailyChargingBarChart
       daily={daily}
       emptyTitle={emptyTitle}
-      variant="total"
+      {...(dailySessions?.length
+        ? { dailySessions, variant: 'stacked' as const }
+        : { variant: 'total' as const })}
       {...(height !== undefined ? { height } : {})}
       {...(loading !== undefined ? { loading } : {})}
       {...(yRange !== undefined ? { yRange } : {})}

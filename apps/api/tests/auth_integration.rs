@@ -2780,6 +2780,170 @@ async fn charging_curve_analysis_uses_elapsed_time_and_strict_dc_sessions() {
         .any(|row| row["session_id"] == json!(vendor_only_session_id)));
 }
 
+/// Shape of the Nov 6 2026 R2 DC fast charge: no telemetry power, a stored
+/// `ac_l2` type from the old average-rate rule, and Rivian's per-minute
+/// charging graph in the Parallax points.
+#[tokio::test]
+async fn dc_session_without_telemetry_power_is_dc_on_every_read_path() {
+    let app = TestApp::new().await;
+    let token = register_and_login(&app, "r2-dc-session@example.com").await;
+    let user_id: uuid::Uuid = sqlx::query_scalar!(
+        "SELECT id FROM riviamigo.users WHERE email = $1",
+        "r2-dc-session@example.com"
+    )
+    .fetch_one(&app.pool)
+    .await
+    .expect("user id");
+    let vehicle_id = insert_vehicle(&app.pool, user_id, "r2-dc-session-vehicle", "R2").await;
+
+    let started_at = chrono::Utc::now() - chrono::Duration::days(1);
+    let ended_at = started_at + chrono::Duration::minutes(46);
+    let session_id: uuid::Uuid = sqlx::query_scalar(
+        r#"INSERT INTO riviamigo.charge_sessions
+           (vehicle_id, started_at, ended_at, charger_type, is_home, soc_start, soc_end,
+            kwh_added, duration_minutes, avg_charge_rate_kw)
+           VALUES ($1, $2, $3, 'ac_l2', FALSE, 28.2, 66.2, 34.78, 46, 45.3)
+           RETURNING id"#,
+    )
+    .bind(vehicle_id)
+    .bind(started_at)
+    .bind(ended_at)
+    .fetch_one(&app.pool)
+    .await
+    .expect("dc session");
+
+    // State of charge only, as the R2 sends it.
+    for (offset_seconds, battery_level) in [(0_i64, 28.7_f64), (20, 29.0), (300, 41.0), (900, 71.9)]
+    {
+        sqlx::query(
+            r#"INSERT INTO timeseries.telemetry (ts, vehicle_id, charge_session_id, battery_level)
+               VALUES ($1, $2, $3, $4)"#,
+        )
+        .bind(started_at + chrono::Duration::seconds(offset_seconds))
+        .bind(vehicle_id)
+        .bind(session_id)
+        .bind(battery_level)
+        .execute(&app.pool)
+        .await
+        .expect("soc telemetry");
+    }
+    for (index, (offset_seconds, power_kw, soc)) in [
+        (2_i64, 26.2_f64, 28_f64),
+        (62, 184.0, 31.0),
+        (245, 189.5, 41.0),
+        (910, 116.5, 71.0),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        sqlx::query(
+            r#"INSERT INTO timeseries.parallax_charge_curve_points
+               (vehicle_id, source_at, segment_index, charge_session_id, power_kw, soc)
+               VALUES ($1, $2, $3, $4, $5, $6)"#,
+        )
+        .bind(vehicle_id)
+        .bind(started_at + chrono::Duration::seconds(offset_seconds))
+        .bind(index as i32)
+        .bind(session_id)
+        .bind(power_kw)
+        .bind(soc)
+        .execute(&app.pool)
+        .await
+        .expect("parallax curve point");
+    }
+
+    let query_time = |value: chrono::DateTime<chrono::Utc>| value.to_rfc3339().replace('+', "%2B");
+    let window = format!(
+        "from={}&to={}",
+        query_time(chrono::Utc::now() - chrono::Duration::days(7)),
+        query_time(chrono::Utc::now())
+    );
+
+    // Session curve: the recorded graph, not a capped state-of-charge estimate.
+    let curve = app
+        .request(
+            Method::GET,
+            &format!("/v1/charging/sessions/{session_id}/curve?vehicle_id={vehicle_id}"),
+            None,
+            Some(&token),
+            None,
+        )
+        .await;
+    assert_eq!(curve.status, StatusCode::OK);
+    let points = curve.body.as_array().expect("curve points");
+    assert_eq!(points.len(), 4);
+    assert!(points
+        .iter()
+        .all(|point| point["power_method"] == json!("recorded")));
+    assert!(points
+        .iter()
+        .all(|point| point["sample_source"] == json!("parallax_charge_curve_points")));
+    assert_eq!(points[2]["charge_rate_kw"], json!(189.5));
+    assert_eq!(points[2]["soc"], json!(41.0));
+
+    // Curve trend: included by the shared rule, with measured state of charge.
+    let analysis = app
+        .request(
+            Method::GET,
+            &format!("/v1/charging/curve-analysis?vehicle_id={vehicle_id}&{window}"),
+            None,
+            Some(&token),
+            None,
+        )
+        .await;
+    assert_eq!(analysis.status, StatusCode::OK);
+    let rows = analysis.body.as_array().expect("analysis rows");
+    assert_eq!(rows.len(), 4);
+    assert!(rows
+        .iter()
+        .all(|row| row["session_id"] == json!(session_id)));
+    assert!(rows
+        .iter()
+        .any(|row| row["charge_rate_kw"] == json!(189.5) && row["soc_pct"] == json!(41.0)));
+
+    // Charts and tiles: DC by the shared rule.
+    let series = app
+        .request(
+            Method::GET,
+            &format!("/v1/charging/chart-series?vehicle_id={vehicle_id}&{window}"),
+            None,
+            Some(&token),
+            None,
+        )
+        .await;
+    assert_eq!(series.status, StatusCode::OK, "{:?}", series.body);
+    assert_eq!(
+        series.body["daily_sessions"][0]["charger_type"],
+        json!("DC")
+    );
+    assert_eq!(series.body["daily"][0]["dc_energy_kwh"], json!(34.78));
+    assert_eq!(series.body["daily"][0]["ac_energy_kwh"], json!(0.0));
+
+    let summary = app
+        .request(
+            Method::GET,
+            &format!("/v1/charging/summary?vehicle_id={vehicle_id}&{window}"),
+            None,
+            Some(&token),
+            None,
+        )
+        .await;
+    assert_eq!(summary.status, StatusCode::OK, "{:?}", summary.body);
+    assert_eq!(summary.body["by_type"]["dc_kwh"], json!(34.78));
+
+    let list = app
+        .request(
+            Method::GET,
+            &format!("/v1/charging/sessions?vehicle_id={vehicle_id}&{window}"),
+            None,
+            Some(&token),
+            None,
+        )
+        .await;
+    assert_eq!(list.status, StatusCode::OK, "{:?}", list.body);
+    assert_eq!(list.body["items"][0]["charger_type"], json!("dc"));
+}
+
 #[tokio::test]
 async fn auth_public_limit_uses_forwarded_ip_and_sets_api_source_header() {
     let app = TestApp::new_with_rate_limit(deterministic_rate_limit_config()).await;

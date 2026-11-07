@@ -1079,6 +1079,7 @@ function ChargingSeriesSource({
     <DailyEnergyChart
       definition={definition}
       daily={daily}
+      dailySessions={data?.daily_sessions ?? []}
       loading={isLoading}
       height={height}
       interactionMode={chartInteractionMode(presentation)}
@@ -1649,6 +1650,21 @@ function ChargingSessionsChart({
   );
 }
 
+/**
+ * Time-axis ticks for a charge session, in Unix seconds. A DC fast charge
+ * lasts minutes and an AC charge lasts hours, so the step follows the span:
+ * about two to six ticks either way.
+ */
+export function chargeSessionTimeSplits(startSeconds: number, endSeconds: number): number[] {
+  const span = endSeconds - startSeconds;
+  const step = span <= 45 * 60 ? 5 * 60 : span <= 2 * 3600 ? 15 * 60 : span <= 8 * 3600 ? 3600 : 2 * 3600;
+  const splits: number[] = [];
+  for (let tick = Math.ceil(startSeconds / step) * step; tick <= endSeconds; tick += step) {
+    splits.push(tick);
+  }
+  return splits;
+}
+
 function ChargeSessionCurveChart({
   definition,
   chartDefinition,
@@ -1765,12 +1781,7 @@ function ChargeSessionCurveChart({
 
     const start = xSeconds[0]!;
     const end = xSeconds[xSeconds.length - 1]!;
-    const firstWholeHour = Math.ceil(start / 3600) * 3600;
-    const splits: number[] = [];
-    for (let tick = firstWholeHour; tick <= end; tick += 3600) {
-      splits.push(tick);
-    }
-
+    const splits = chargeSessionTimeSplits(start, end);
     return splits.length >= 2 ? splits : undefined;
   }, [points, useTime]);
 
@@ -2207,6 +2218,7 @@ function normalizeChargeCurveType(chargerType: ChargeCurveAnalysisPoint['charger
 function DailyEnergyChart({
   definition,
   daily,
+  dailySessions,
   loading,
   height,
   yRange,
@@ -2220,6 +2232,7 @@ function DailyEnergyChart({
     total_energy_kwh: number;
     session_count: number;
   }>;
+  dailySessions: React.ComponentProps<typeof DailyChargeSessionsChart>['dailySessions'];
   loading: boolean;
   height: number;
   yRange?: [number, number];
@@ -2229,6 +2242,7 @@ function DailyEnergyChart({
   return (
     <DailyEnergyBarChart
       daily={daily}
+      dailySessions={dailySessions}
       loading={loading}
       emptyTitle={definition.emptyTitle}
       height={height}

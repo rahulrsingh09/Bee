@@ -22,6 +22,7 @@ const mockSession = vi.hoisted(() => ({
   live_power_kw: null as number | null,
   live_charge_rate_kph: null as number | null,
   live_charger_state: null as string | null,
+  curve: [] as Array<{ minutes_elapsed: number; power_kw: number; soc_pct: number; power_method: string }>,
 }));
 const correctionMutation = vi.hoisted(() => ({
   mutate: vi.fn(),
@@ -39,6 +40,9 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
 
 vi.mock('@riviamigo/dashboards', () => ({
   ChargeSessionCurveDetail: () => <div data-testid="charge-curve-chart" />,
+  ChargeCurveInsightNote: ({ points }: { points: unknown[] }) => (
+    <div data-testid="charge-curve-insight">{points.length} curve points</div>
+  ),
   SensorChipSummary: ({ title, value, secondary }: { title: string; value: string; secondary?: string }) => (
     <div data-testid={`sensor-chip-${title.toLowerCase().replace(/\s+/g, '-')}`}>
       <span>{title}</span>
@@ -54,6 +58,7 @@ vi.mock('@riviamigo/hooks', () => ({
   useSavedPlaces: () => ({ data: [], isLoading: false }),
   useUpdateChargeSession: () => ({ mutate: correctionMutation.mutate, isPending: false, isLoading: false, error: null }),
   useVehicles: () => ({ data: [{ id: 'vehicle-1', membership_role: correctionMutation.role }] }),
+  useChargeCurve: () => ({ data: mockSession.curve }),
   useChargeSession: () => ({
     data: {
       id: 'session-1',
@@ -118,6 +123,7 @@ describe('ChargeSessionContent', () => {
     mockNavigate.mockClear();
     mockSession.cost_usd = 8.75;
     mockSession.location_name = 'Home Charger';
+    mockSession.curve = [];
     mockSession.range_added_km = 88.4;
     mockSession.source = 'telemetry+rivian_api';
     mockSession.telemetry_sample_count = 12;
@@ -131,6 +137,21 @@ describe('ChargeSessionContent', () => {
     mockSession.live_charger_state = null;
     correctionMutation.role = 'owner';
     correctionMutation.mutate.mockClear();
+  });
+
+  it('adds the peak and slowdown note under a recorded curve', () => {
+    mockSession.curve = [
+      { minutes_elapsed: 0, power_kw: 26.2, soc_pct: 28, power_method: 'recorded' },
+      { minutes_elapsed: 4, power_kw: 189.5, soc_pct: 41, power_method: 'recorded' },
+      { minutes_elapsed: 15, power_kw: 116.5, soc_pct: 71, power_method: 'recorded' },
+    ];
+    render(<ChargeSessionContent />);
+    expect(screen.getByTestId('charge-curve-insight')).toHaveTextContent('3 curve points');
+  });
+
+  it('shows no note without curve points', () => {
+    render(<ChargeSessionContent />);
+    expect(screen.queryByTestId('charge-curve-insight')).not.toBeInTheDocument();
   });
 
   it('renders session details and the charge curve chart', () => {

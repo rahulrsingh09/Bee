@@ -108,6 +108,35 @@ change-only frames and richer power rows as periodic telemetry. A legacy
 power-only row is indistinguishable, so this remains a replay limitation;
 live fusion uses the actual sample source.
 
+## Charging sessions
+
+Riviamigo uses one rule to mark a charging session as AC or DC on every page.
+A rate of 20 kW or more is DC, because AC charging cannot go above 19.2 kW.
+Home sessions stay AC, and a type that Rivian reports is kept. The R2 sends no
+charge power on the canonical stream, so its peak comes from Rivian's own
+charging graph, which Parallax sends once a minute. One unusual reading on an
+AC session is ignored until a second reading confirms it.
+
+A session ends when the charger reports that it is done or unplugged. When the
+vehicle stops reporting charging without such a signal, the session ends at
+the last charging reading. A rising state of charge also counts as charging.
+The session also ends at that reading when a new odometer reading shows that
+the vehicle moved at least 1 mile. Idle or driving time after a charge does not
+lengthen the session or change its end state of charge, peak or energy.
+
+The charging trace on a session page shows the charge power over time. For an
+R2 it uses Rivian's per-minute graph, so a DC fast charge shows its ramp, peak
+and taper. Under a DC curve, a note shows the peak and end power. The note
+also gives an estimated reason when power changed:
+
+- **Normal taper:** power falls steadily as the battery fills.
+- **Charger limit:** power falls and then recovers. A battery does not do this,
+  so the charger probably limited the rate, for example by sharing power with
+  another car.
+
+Rivian does not send a reason for a slower charge, so the note is an estimate
+from the curve shape.
+
 ## Recover a missed drive
 
 Riviamigo compares stored telemetry with recorded trips for the last 7 days.

@@ -35,7 +35,7 @@ Used to ensure full parity with the best-in-class EV trackers.
 
 | Metric | Unit | Source | Notes |
 |--------|------|--------|-------|
-| Charger type | AC/L2/DCFC | Per session | |
+| Charger type | AC/DC | Per session | One rule for every page. A rate of 20 kW or more is DC, because AC charging stops at 19.2 kW. Home sessions and Rivian's own type are kept. |
 | Charger power (live) | kW | Time-series | Peak and live |
 | Energy added | kWh | Per session | |
 | SoC start → end | % | Per session | |

@@ -1,4 +1,5 @@
 use super::charging_sql as c;
+use crate::services::charging::PLAUSIBLE_MAX_CHARGE_KW;
 use crate::{
     db::vehicles::{
         require_vehicle_manager_access, require_vehicle_membership, require_vehicle_read_access,
@@ -312,8 +313,7 @@ fn build_fallback_curve_samples(
     started_at: DateTime<Utc>,
     ended_at: DateTime<Utc>,
     charger_type: Option<&str>,
-    soc_start: f64,
-    soc_end: f64,
+    soc_bounds: Option<(f64, f64)>,
     points: &[RawCurvePointRow],
     cap_kw: f64,
 ) -> Vec<CurveSampleRow> {
@@ -333,13 +333,16 @@ fn build_fallback_curve_samples(
         .iter()
         .map(|row| {
             let elapsed_minutes = (row.ts - started_at).num_seconds() as f64 / 60.0;
-            let soc = if points.len() == 1 {
-                Some((soc_start + soc_end) / 2.0)
-            } else {
-                let ratio =
-                    ((row.ts - first_ts).num_seconds() as f64 / point_span_seconds).clamp(0.0, 1.0);
-                Some(soc_start + (soc_end - soc_start) * ratio)
-            };
+            let soc = row.soc.or_else(|| {
+                let (soc_start, soc_end) = soc_bounds?;
+                if points.len() == 1 {
+                    Some((soc_start + soc_end) / 2.0)
+                } else {
+                    let ratio = ((row.ts - first_ts).num_seconds() as f64 / point_span_seconds)
+                        .clamp(0.0, 1.0);
+                    Some(soc_start + (soc_end - soc_start) * ratio)
+                }
+            });
 
             CurveSampleRow {
                 session_id,
@@ -392,8 +395,6 @@ struct CurveRow {
     soc: Option<f64>,
     #[sqlx(default)]
     power_method: Option<String>,
-    #[sqlx(default)]
-    sample_source: Option<String>,
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -421,7 +422,61 @@ struct CurveSampleRow {
 struct RawCurvePointRow {
     ts: DateTime<Utc>,
     power_kw: Option<f64>,
+    #[sqlx(default)]
+    soc: Option<f64>,
     sample_source: String,
+}
+
+/// Recorded charge power for a session: the Parallax charging graph (which
+/// also carries state of charge) and the Rivian live-session points. A
+/// Parallax point wins an exact timestamp collision because it carries the
+/// richer sample.
+async fn load_recorded_curve_points(
+    pool: &sqlx::PgPool,
+    vehicle_id: Uuid,
+    session_id: Uuid,
+    started_at: DateTime<Utc>,
+    ended_at: DateTime<Utc>,
+) -> Result<Vec<RawCurvePointRow>, AppError> {
+    Ok(sqlx::query_as::<_, RawCurvePointRow>(
+        r#"WITH candidates AS (
+               SELECT ts,power_kw,NULL::float8 AS soc,'rivian_charge_curve_points'::text AS sample_source,1 AS precedence
+               FROM riviamigo.rivian_charge_curve_points
+               WHERE vehicle_id=$1 AND charge_session_id=$2 AND power_kw IS NOT NULL AND power_kw > 0
+               UNION ALL
+               SELECT source_at AS ts,power_kw,soc,'parallax_charge_curve_points'::text AS sample_source,2 AS precedence
+               FROM timeseries.parallax_charge_curve_points
+               WHERE vehicle_id=$1 AND charge_session_id=$2 AND power_kw IS NOT NULL AND power_kw > 0
+           )
+           SELECT DISTINCT ON (ts) ts,power_kw,soc,sample_source
+           FROM candidates
+           WHERE ts >= $3 - interval '2 minutes' AND ts <= $4 + interval '2 minutes'
+           ORDER BY ts,precedence DESC"#,
+    )
+    .bind(vehicle_id)
+    .bind(session_id)
+    .bind(started_at)
+    .bind(ended_at)
+    .fetch_all(pool)
+    .await?)
+}
+
+fn recorded_curve_json(
+    points: &[RawCurvePointRow],
+    started_at: DateTime<Utc>,
+) -> Vec<serde_json::Value> {
+    points
+        .iter()
+        .map(|point| {
+            serde_json::json!({
+                "minutes_elapsed": (point.ts - started_at).num_milliseconds() as f64 / 60_000.0,
+                "charge_rate_kw": point.power_kw.map(|kw| kw.clamp(0.0, PLAUSIBLE_MAX_CHARGE_KW)),
+                "soc": point.soc,
+                "sample_source": point.sample_source,
+                "power_method": "recorded",
+            })
+        })
+        .collect()
 }
 
 #[allow(dead_code)]
@@ -452,8 +507,6 @@ struct ChartSeriesSessionSourceRow {
     cost_usd: Option<f64>,
     location_name: Option<String>,
     charger_type: Option<String>,
-    network_vendor: Option<String>,
-    peak_power_kw: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -473,6 +526,8 @@ struct ChargeChartSeriesDay {
     day_local: String,
     day_start: DateTime<Utc>,
     total_energy_kwh: f64,
+    ac_energy_kwh: f64,
+    dc_energy_kwh: f64,
     session_count: i64,
 }
 
@@ -873,7 +928,7 @@ async fn get_curve_analysis(
     require_vehicle_read_access(&state.pool, &auth, vehicle_id).await?;
     let (from, to) = resolve_time_bounds(p.from, p.to, p.lifetime.unwrap_or(false), 365);
 
-    let sessions = sqlx::query_as::<_, CurveAnalysisSessionRow>(
+    let sessions = sqlx::query_as::<_, CurveAnalysisSessionRow>(concat!(
         r#"SELECT
                cs.id,
                cs.started_at,
@@ -887,9 +942,11 @@ async fn get_curve_analysis(
              AND cs.started_at <= $3
              AND cs.ended_at IS NOT NULL
              AND cs.is_home IS DISTINCT FROM true
-             AND lower(COALESCE(cs.charger_type, '')) = ANY(ARRAY['dc', 'dcfc'])
+             AND "#,
+        crate::charger_type_sql!("cs"),
+        r#" = 'dc'
            ORDER BY cs.started_at ASC, cs.id ASC"#,
-    )
+    ))
     .bind(vehicle_id)
     .bind(from)
     .bind(to)
@@ -960,17 +1017,7 @@ async fn list_sessions_response(
                 cs.source_location_lat, cs.source_location_lng, cs.location_override_mode, \
                 cs.cost_override_mode, cs.cost_override_usd, \
                 COALESCE(g.name, a.display_name, CASE WHEN cs.is_home THEN 'Home' END) AS location_name, \
-                cs.is_home, COALESCE(cs.charger_type, \
-                    CASE \
-                        WHEN lower(COALESCE(cs.network_vendor, '')) = ANY(ARRAY['tesla','rivian','electrify america','evgo']) THEN 'dc' \
-                        WHEN COALESCE(cs.max_charge_rate_kw, cs.avg_charge_rate_kw, \
-                            CASE WHEN cs.duration_minutes > 0 THEN COALESCE(cs.kwh_added, cs.energy_added_wh / 1000.0) / (cs.duration_minutes::float8 / 60.0) END) < 12 THEN 'ac' \
-                        WHEN COALESCE(cs.max_charge_rate_kw, cs.avg_charge_rate_kw, \
-                            CASE WHEN cs.duration_minutes > 0 THEN COALESCE(cs.kwh_added, cs.energy_added_wh / 1000.0) / (cs.duration_minutes::float8 / 60.0) END) < 50 THEN 'ac_l2' \
-                        WHEN COALESCE(cs.max_charge_rate_kw, cs.avg_charge_rate_kw, \
-                            CASE WHEN cs.duration_minutes > 0 THEN COALESCE(cs.kwh_added, cs.energy_added_wh / 1000.0) / (cs.duration_minutes::float8 / 60.0) END) IS NOT NULL THEN 'dc' \
-                    END \
-                ) AS charger_type, \
+                cs.is_home, {} AS charger_type, \
                 COALESCE(cs.kwh_added, cs.energy_added_wh / 1000.0) AS kwh_added, cs.soc_start, cs.soc_end, \
                 COALESCE(cs.max_charge_rate_kw, cs.avg_charge_rate_kw, CASE WHEN cs.duration_minutes > 0 THEN COALESCE(cs.kwh_added, cs.energy_added_wh / 1000.0) / (cs.duration_minutes::float8 / 60.0) END) AS max_charge_rate_kw, cs.duration_minutes, \
                 {}, cs.network_vendor, cs.range_added_km, cs.is_free_session, \
@@ -984,7 +1031,7 @@ async fn list_sessions_response(
             WHERE cs.vehicle_id=$1 AND cs.started_at>=$2 AND cs.started_at<=$3 \
               AND ($6 IS NULL OR TO_CHAR((cs.started_at AT TIME ZONE COALESCE((SELECT value FROM riviamigo.system_config WHERE key = 'app_timezone'), 'UTC'))::date, 'YYYY-MM-DD') = $6) \
             ORDER BY cs.started_at DESC, cs.id DESC LIMIT $4 OFFSET $5",
-        c::COST, c::LIST, c::LATEST,
+        crate::charger_type_sql!("cs"), c::COST, c::LIST, c::LATEST,
     )))
         .bind(vehicle_id)
         .bind(from)
@@ -1029,7 +1076,7 @@ async fn get_chart_series_response(
     require_vehicle_membership(&state.pool, user_id, vehicle_id).await?;
     let (from, to) = resolve_time_bounds(p.from, p.to, p.lifetime.unwrap_or(false), 90);
 
-    let rows = sqlx::query_as::<_, ChartSeriesSessionSourceRow>(
+    let rows = sqlx::query_as::<_, ChartSeriesSessionSourceRow>(concat!(
         "SELECT
             cs.id AS session_id,
             cs.started_at,
@@ -1037,20 +1084,15 @@ async fn get_chart_series_response(
             COALESCE(cs.kwh_added, cs.energy_added_wh / 1000.0) AS energy_kwh,
             cs.cost_usd,
             COALESCE(g.name, a.display_name, CASE WHEN cs.is_home THEN 'Home' END) AS location_name,
-            cs.charger_type,
-            cs.network_vendor,
-            COALESCE(cs.max_charge_rate_kw, cs.avg_charge_rate_kw,
-                CASE
-                    WHEN cs.duration_minutes > 0
-                    THEN COALESCE(cs.kwh_added, cs.energy_added_wh / 1000.0) / (cs.duration_minutes::float8 / 60.0)
-                END
-            ) AS peak_power_kw
+            ",
+        crate::charger_type_sql!("cs"),
+        " AS charger_type
          FROM riviamigo.charge_sessions cs
          LEFT JOIN riviamigo.geofences g ON g.id = cs.geofence_id
          LEFT JOIN riviamigo.addresses a ON a.id = cs.address_id
          WHERE cs.vehicle_id=$1 AND cs.started_at>=$2 AND cs.started_at<=$3
          ORDER BY cs.started_at ASC, cs.id ASC",
-    )
+    ))
     .bind(vehicle_id)
     .bind(from)
     .bind(to)
@@ -1064,6 +1106,8 @@ async fn get_chart_series_response(
             "day_local": day.day_local,
             "day_start": day.day_start,
             "total_energy_kwh": day.total_energy_kwh,
+            "ac_energy_kwh": day.ac_energy_kwh,
+            "dc_energy_kwh": day.dc_energy_kwh,
             "session_count": day.session_count,
         })).collect::<Vec<_>>(),
         "daily_sessions": daily_sessions.iter().map(|session| serde_json::json!({
@@ -1095,11 +1139,7 @@ fn build_charge_chart_series(
                 started_at: row.started_at,
                 energy_added_kwh: row.energy_kwh,
                 cost_usd: row.cost_usd,
-                charger_type: normalize_chart_charger_type(
-                    row.charger_type.as_deref(),
-                    row.network_vendor.as_deref(),
-                    row.peak_power_kw,
-                ),
+                charger_type: normalize_chart_charger_type(row.charger_type.as_deref()),
                 location_name: row.location_name,
             }
         })
@@ -1115,9 +1155,16 @@ fn build_charge_chart_series(
     let mut daily = Vec::<ChargeChartSeriesDay>::new();
     for session in &sessions {
         let energy = session.energy_added_kwh.unwrap_or(0.0).max(0.0);
+        let (ac, dc) = match session.charger_type.as_deref() {
+            Some("AC") => (energy, 0.0),
+            Some("DC") => (0.0, energy),
+            _ => (0.0, 0.0),
+        };
         if let Some(current) = daily.last_mut() {
             if current.day_local == session.day_local {
                 current.total_energy_kwh += energy;
+                current.ac_energy_kwh += ac;
+                current.dc_energy_kwh += dc;
                 current.session_count += 1;
                 continue;
             }
@@ -1127,6 +1174,8 @@ fn build_charge_chart_series(
             day_local: session.day_local.clone(),
             day_start: session.day_start,
             total_energy_kwh: energy,
+            ac_energy_kwh: ac,
+            dc_energy_kwh: dc,
             session_count: 1,
         });
     }
@@ -1142,35 +1191,16 @@ fn day_start_from_label(day_local: &str) -> DateTime<Utc> {
         .unwrap_or_else(Utc::now)
 }
 
-fn normalize_chart_charger_type(
-    charger_type: Option<&str>,
-    network_vendor: Option<&str>,
-    peak_power_kw: Option<f64>,
-) -> Option<String> {
-    let explicit = charger_type.map(|value| value.trim().to_ascii_lowercase());
-    match explicit.as_deref() {
-        Some("dc") | Some("dcfc") => return Some("DC".to_string()),
-        Some("ac") | Some("ac_l2") => return Some("AC".to_string()),
-        _ => {}
+/// Map the shared SQL rule's result ('dc', 'ac' or NULL) to the chart labels.
+fn normalize_chart_charger_type(charger_type: Option<&str>) -> Option<String> {
+    match charger_type
+        .map(|value| value.trim().to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("dc") | Some("dcfc") => Some("DC".to_string()),
+        Some("ac") | Some("ac_l2") => Some("AC".to_string()),
+        _ => None,
     }
-
-    let vendor = network_vendor
-        .unwrap_or_default()
-        .trim()
-        .to_ascii_lowercase();
-    if ["tesla", "rivian", "electrify america", "evgo"].contains(&vendor.as_str()) {
-        return Some("DC".to_string());
-    }
-
-    peak_power_kw.and_then(|value| {
-        if !value.is_finite() {
-            None
-        } else if value < 20.0 {
-            Some("AC".to_string())
-        } else {
-            Some("DC".to_string())
-        }
-    })
 }
 
 async fn get_session_response(
@@ -1188,17 +1218,7 @@ async fn get_session_response(
                 cs.source_location_lat, cs.source_location_lng, cs.location_override_mode, \
                 cs.cost_override_mode, cs.cost_override_usd, \
                 COALESCE(g.name, a.display_name, CASE WHEN cs.is_home THEN 'Home' END) AS location_name, \
-                cs.is_home, COALESCE(cs.charger_type, \
-                    CASE \
-                        WHEN lower(COALESCE(cs.network_vendor, '')) = ANY(ARRAY['tesla','rivian','electrify america','evgo']) THEN 'dc' \
-                        WHEN COALESCE(cs.max_charge_rate_kw, cs.avg_charge_rate_kw, \
-                            CASE WHEN cs.duration_minutes > 0 THEN COALESCE(cs.kwh_added, cs.energy_added_wh / 1000.0) / (cs.duration_minutes::float8 / 60.0) END) < 12 THEN 'ac' \
-                        WHEN COALESCE(cs.max_charge_rate_kw, cs.avg_charge_rate_kw, \
-                            CASE WHEN cs.duration_minutes > 0 THEN COALESCE(cs.kwh_added, cs.energy_added_wh / 1000.0) / (cs.duration_minutes::float8 / 60.0) END) < 50 THEN 'ac_l2' \
-                        WHEN COALESCE(cs.max_charge_rate_kw, cs.avg_charge_rate_kw, \
-                            CASE WHEN cs.duration_minutes > 0 THEN COALESCE(cs.kwh_added, cs.energy_added_wh / 1000.0) / (cs.duration_minutes::float8 / 60.0) END) IS NOT NULL THEN 'dc' \
-                    END \
-                ) AS charger_type, \
+                cs.is_home, {} AS charger_type, \
                 COALESCE(cs.kwh_added, cs.energy_added_wh / 1000.0) AS kwh_added, cs.soc_start, cs.soc_end, \
                 COALESCE(cs.max_charge_rate_kw, cs.avg_charge_rate_kw, CASE WHEN cs.duration_minutes > 0 THEN COALESCE(cs.kwh_added, cs.energy_added_wh / 1000.0) / (cs.duration_minutes::float8 / 60.0) END) AS max_charge_rate_kw, cs.duration_minutes, \
                 {}, cs.network_vendor, cs.range_added_km, cs.is_free_session, \
@@ -1217,7 +1237,7 @@ async fn get_session_response(
          ) telem ON true \
          {} \
             WHERE cs.id=$1 AND cs.vehicle_id=$2",
-        c::COST, c::DETAIL, c::TELEM,
+        crate::charger_type_sql!("cs"), c::COST, c::DETAIL, c::TELEM,
     )))
         .bind(id)
         .bind(vehicle_id)
@@ -1250,7 +1270,11 @@ async fn get_session_curve_response(
     require_vehicle_membership(&state.pool, user_id, vehicle_id).await?;
 
     let session = sqlx::query_as::<_, SessionBoundsRow>(
-        "SELECT id, started_at, ended_at, charger_type, soc_start, soc_end FROM riviamigo.charge_sessions WHERE id=$1 AND vehicle_id=$2",
+        concat!(
+            "SELECT cs.id, cs.started_at, cs.ended_at, ",
+            crate::charger_type_sql!("cs"),
+            " AS charger_type, cs.soc_start, cs.soc_end FROM riviamigo.charge_sessions cs WHERE cs.id=$1 AND cs.vehicle_id=$2"
+        ),
     )
     .bind(id)
     .bind(vehicle_id)
@@ -1280,7 +1304,7 @@ async fn get_summary_response(
     require_vehicle_membership(&state.pool, user_id, vehicle_id).await?;
     let (from, to) = resolve_time_bounds(p.from, p.to, p.lifetime.unwrap_or(false), 365);
 
-    let agg = sqlx::query_as::<_, SummaryAggRow>(
+    let agg = sqlx::query_as::<_, SummaryAggRow>(concat!(
         "WITH normalized AS (
             SELECT
                 COALESCE(kwh_added, energy_added_wh / 1000.0) AS energy_kwh,
@@ -1295,19 +1319,15 @@ async fn get_summary_response(
                 rivian_paid_total,
                 COALESCE(max_charge_rate_kw, avg_charge_rate_kw,
                     CASE WHEN duration_minutes > 0 THEN COALESCE(kwh_added, energy_added_wh / 1000.0) / (duration_minutes::float8 / 60.0) END
-                ) AS rate_kw
-            FROM riviamigo.charge_sessions
+                ) AS rate_kw,
+                ",
+        crate::charger_type_sql!("cs"),
+        " AS derived_type
+            FROM riviamigo.charge_sessions cs
             WHERE vehicle_id=$1 AND started_at>=$2 AND started_at<=$3
         ),
         typed AS (
-            SELECT *,
-                COALESCE(charger_type, CASE
-                    WHEN lower(COALESCE(network_vendor, '')) = ANY(ARRAY['tesla','rivian','electrify america','evgo']) THEN 'dc'
-                    WHEN rate_kw < 12 THEN 'ac'
-                    WHEN rate_kw < 50 THEN 'ac_l2'
-                    WHEN rate_kw IS NOT NULL THEN 'dc'
-                END) AS derived_type
-            FROM normalized
+            SELECT * FROM normalized
         )
         SELECT COALESCE(SUM(energy_kwh),0) AS total_kwh,
             COUNT(*) AS session_count,
@@ -1328,7 +1348,7 @@ async fn get_summary_response(
             SUM(range_added_km) AS total_range_added_km,
             SUM(rivian_paid_total) AS rivian_paid_total_usd
          FROM typed"
-    )
+    ))
     .bind(vehicle_id)
     .bind(from)
     .bind(to)
@@ -1382,28 +1402,32 @@ async fn get_summary_response(
     .fetch_all(&state.pool)
     .await?;
 
-    let network_breakdown = sqlx::query_as::<_, NetworkBreakdownRow>(
-        "SELECT
+    let network_breakdown = sqlx::query_as::<_, NetworkBreakdownRow>(concat!(
+        "WITH typed AS (
+            SELECT cs.*, ",
+        crate::charger_type_sql!("cs"),
+        " AS derived_type
+            FROM riviamigo.charge_sessions cs
+            WHERE cs.vehicle_id=$1 AND cs.started_at>=$2 AND cs.started_at<=$3
+         )
+         SELECT
                 CASE
                     WHEN is_home = true THEN 'Home Charging'
                     WHEN network_vendor IS NOT NULL THEN network_vendor
-                    WHEN charger_type IN ('ac', 'ac_l2') THEN 'Other AC'
+                    WHEN derived_type = 'ac' THEN 'Other AC'
                     ELSE NULL
                 END AS network_vendor,
                 COUNT(*) AS session_count,
                 SUM(COALESCE(kwh_added, energy_added_wh / 1000.0)) AS energy_kwh,
                 SUM(cost_usd) AS cost_usd,
                 COUNT(*) FILTER (WHERE is_free_session) AS free_sessions
-         FROM riviamigo.charge_sessions
-         WHERE vehicle_id=$1 AND started_at>=$2 AND started_at<=$3
-           AND (
-               is_home = true
-               OR network_vendor IS NOT NULL
-               OR charger_type IN ('ac', 'ac_l2')
-           )
+         FROM typed
+         WHERE is_home = true
+            OR network_vendor IS NOT NULL
+            OR derived_type = 'ac'
          GROUP BY 1
          ORDER BY energy_kwh DESC NULLS LAST",
-    )
+    ))
     .bind(vehicle_id)
     .bind(from)
     .bind(to)
@@ -1642,8 +1666,6 @@ mod tests {
                 cost_usd: Some(2.25),
                 location_name: Some("Home".into()),
                 charger_type: Some("ac".into()),
-                network_vendor: None,
-                peak_power_kw: Some(11.2),
             },
             ChartSeriesSessionSourceRow {
                 session_id: second,
@@ -1653,8 +1675,6 @@ mod tests {
                 cost_usd: Some(6.50),
                 location_name: Some("Office".into()),
                 charger_type: Some("dc".into()),
-                network_vendor: None,
-                peak_power_kw: Some(105.0),
             },
         ]);
 
@@ -1667,6 +1687,9 @@ mod tests {
         assert_eq!(sessions[1].session_id, second);
         assert_eq!(sessions[0].cost_usd, Some(2.25));
         assert_eq!(sessions[1].cost_usd, Some(6.50));
+        // Energy Charged stacks the day by charger type.
+        assert!((daily[0].ac_energy_kwh - 18.5).abs() < f64::EPSILON);
+        assert!((daily[0].dc_energy_kwh - 24.0).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -1679,9 +1702,8 @@ mod tests {
             energy_kwh: Some(12.0),
             cost_usd: None,
             location_name: Some("Road Trip".into()),
-            charger_type: None,
-            network_vendor: Some("tesla".into()),
-            peak_power_kw: Some(148.0),
+            // The SQL rule already turned the Tesla network into 'dc'.
+            charger_type: Some("dc".into()),
         }]);
 
         assert_eq!(daily[0].day_local, "2026-06-20");
@@ -1702,8 +1724,6 @@ mod tests {
                 cost_usd: None,
                 location_name: None,
                 charger_type: Some("ac".into()),
-                network_vendor: None,
-                peak_power_kw: Some(9.6),
             })
             .collect::<Vec<_>>();
 
@@ -1722,11 +1742,13 @@ mod tests {
             super::RawCurvePointRow {
                 ts: Utc.with_ymd_and_hms(2026, 6, 1, 8, 2, 0).unwrap(),
                 power_kw: Some(160.0),
+                soc: None,
                 sample_source: "rivian_charge_curve_points".to_string(),
             },
             super::RawCurvePointRow {
                 ts: Utc.with_ymd_and_hms(2026, 6, 1, 8, 10, 0).unwrap(),
                 power_kw: Some(120.0),
+                soc: None,
                 sample_source: "parallax_charge_curve_points".to_string(),
             },
         ];
@@ -1736,8 +1758,7 @@ mod tests {
             started_at,
             ended_at,
             Some("dc"),
-            18.0,
-            76.0,
+            Some((18.0, 76.0)),
             &points,
             300.0,
         );
@@ -1748,6 +1769,63 @@ mod tests {
         assert!((rows[0].soc.unwrap_or_default() - 18.0).abs() < 0.01);
         assert!((rows[1].soc.unwrap_or_default() - 76.0).abs() < 0.01);
         assert!(rows.iter().all(|row| row.charge_rate_kw > 0.0));
+    }
+
+    #[test]
+    fn recorded_points_keep_their_measured_soc_and_power() {
+        let session_id = Uuid::new_v4();
+        let started_at = Utc.with_ymd_and_hms(2026, 11, 6, 19, 47, 20).unwrap();
+        let ended_at = Utc.with_ymd_and_hms(2026, 11, 6, 20, 3, 4).unwrap();
+        let points = vec![
+            super::RawCurvePointRow {
+                ts: Utc.with_ymd_and_hms(2026, 11, 6, 19, 51, 25).unwrap(),
+                power_kw: Some(189.5),
+                soc: Some(41.0),
+                sample_source: "parallax_charge_curve_points".to_string(),
+            },
+            super::RawCurvePointRow {
+                ts: Utc.with_ymd_and_hms(2026, 11, 6, 20, 2, 30).unwrap(),
+                power_kw: Some(116.5),
+                soc: Some(71.0),
+                sample_source: "parallax_charge_curve_points".to_string(),
+            },
+        ];
+
+        let rows = super::build_fallback_curve_samples(
+            session_id,
+            started_at,
+            ended_at,
+            Some("dc"),
+            None,
+            &points,
+            300.0,
+        );
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].soc, Some(41.0));
+        assert!((rows[0].charge_rate_kw - 189.5).abs() < 0.01);
+        assert_eq!(rows[1].soc, Some(71.0));
+
+        let json = super::recorded_curve_json(&points, started_at);
+        assert_eq!(json[0]["charge_rate_kw"], 189.5);
+        assert_eq!(json[0]["power_method"], "recorded");
+        assert!((json[1]["minutes_elapsed"].as_f64().unwrap() - 15.1667).abs() < 0.01);
+    }
+
+    #[test]
+    fn chart_type_labels_follow_the_shared_rule_output() {
+        assert_eq!(
+            super::normalize_chart_charger_type(Some("dc")).as_deref(),
+            Some("DC")
+        );
+        assert_eq!(
+            super::normalize_chart_charger_type(Some("ac")).as_deref(),
+            Some("AC")
+        );
+        assert_eq!(
+            super::normalize_chart_charger_type(Some("ac_l2")).as_deref(),
+            Some("AC")
+        );
+        assert_eq!(super::normalize_chart_charger_type(None), None);
     }
 }
 
@@ -1774,8 +1852,8 @@ async fn load_curve(
         Some("dc" | "dcfc")
     );
 
-    let linked_sample_count = sqlx::query_scalar::<_, i64>(
-        r#"SELECT COUNT(*)::int8
+    let (linked_sample_count, linked_power_count) = sqlx::query_as::<_, (i64, i64)>(
+        r#"SELECT COUNT(*)::int8, COUNT(power_kw)::int8
            FROM timeseries.telemetry
            WHERE vehicle_id=$1
              AND charge_session_id=$2
@@ -1788,6 +1866,18 @@ async fn load_curve(
     .bind(ended_at)
     .fetch_one(pool)
     .await?;
+
+    // Telemetry power, where the vehicle sends it, has the finest resolution.
+    // Without it (the R2), the recorded charging graph is measured power, and
+    // a state-of-charge estimate is the last resort.
+    let recorded = if linked_power_count < 2 {
+        load_recorded_curve_points(pool, vehicle_id, session_id, started_at, ended_at).await?
+    } else {
+        Vec::new()
+    };
+    if recorded.len() >= 2 {
+        return Ok(recorded_curve_json(&recorded, started_at));
+    }
 
     let (rows, sample_source) = if linked_sample_count >= 2 {
         (
@@ -1915,50 +2005,14 @@ async fn load_curve(
     };
 
     if rows.len() < 2 {
-        // Fallback: combine the two explicitly associated curve stores. A
-        // Parallax point wins an exact timestamp collision because it carries
-        // the richer graph sample; canonical telemetry still owns lifecycle.
-        let fallback = sqlx::query_as::<_, CurveRow>(
-            r#"WITH candidates AS (
-                   SELECT ts,power_kw,NULL::float8 AS soc,'rivian_charge_curve_points'::text AS sample_source,1 AS precedence
-                   FROM riviamigo.rivian_charge_curve_points
-                   WHERE vehicle_id=$1 AND charge_session_id=$3 AND power_kw IS NOT NULL AND power_kw > 0
-                   UNION ALL
-                   SELECT source_at AS ts,power_kw,soc,'parallax_charge_curve_points'::text AS sample_source,2 AS precedence
-                   FROM timeseries.parallax_charge_curve_points
-                   WHERE vehicle_id=$1 AND charge_session_id=$3 AND power_kw IS NOT NULL AND power_kw > 0
-               ), resolved AS (
-                   SELECT DISTINCT ON (ts) ts,power_kw,soc,sample_source
-                   FROM candidates ORDER BY ts,precedence DESC
-               )
-               SELECT EXTRACT(EPOCH FROM (ts - $2))::float8 / 60.0 AS minutes_elapsed,
-                      LEAST(CASE WHEN $4 THEN 300.0 ELSE 22.0 END,
-                            GREATEST(0.0, power_kw)) AS charge_rate_kw,
-                      soc,
-                      'recorded'::text AS power_method,
-                      sample_source
-               FROM resolved
-               ORDER BY ts"#,
-        )
-        .bind(vehicle_id)
-        .bind(started_at)
-        .bind(session_id)
-        .bind(is_dc)
-        .fetch_all(pool)
-        .await?;
+        // Fallback: a single recorded point is still better than no curve.
+        let fallback = if linked_power_count < 2 {
+            recorded
+        } else {
+            load_recorded_curve_points(pool, vehicle_id, session_id, started_at, ended_at).await?
+        };
         if !fallback.is_empty() {
-            return Ok(fallback
-                .iter()
-                .map(|r| {
-                    serde_json::json!({
-                        "minutes_elapsed": r.minutes_elapsed,
-                        "charge_rate_kw": r.charge_rate_kw,
-                        "soc": r.soc,
-                        "sample_source": r.sample_source.as_deref().unwrap_or("rivian_charge_curve_points"),
-                        "power_method": r.power_method,
-                    })
-                })
-                .collect());
+            return Ok(recorded_curve_json(&fallback, started_at));
         }
     }
 
@@ -1998,10 +2052,9 @@ async fn load_curve_analysis_samples(
             .as_deref(),
         Some("dc" | "dcfc")
     );
-    let cap_kw = if is_dc { 300.0 } else { 22.0 };
 
-    let linked_sample_count = sqlx::query_scalar::<_, i64>(
-        r#"SELECT COUNT(*)::int8
+    let (linked_sample_count, linked_power_count) = sqlx::query_as::<_, (i64, i64)>(
+        r#"SELECT COUNT(*)::int8, COUNT(power_kw)::int8
            FROM timeseries.telemetry
            WHERE vehicle_id=$1
              AND charge_session_id=$2
@@ -2014,6 +2067,29 @@ async fn load_curve_analysis_samples(
     .bind(ended_at)
     .fetch_one(pool)
     .await?;
+
+    // Telemetry power, where the vehicle sends it, has the finest resolution.
+    // Without it (the R2), the recorded charging graph is measured power, and
+    // a state-of-charge estimate is the last resort.
+    let recorded = if linked_power_count < 2 {
+        load_recorded_curve_points(pool, vehicle_id, session_id, started_at, ended_at).await?
+    } else {
+        Vec::new()
+    };
+    let soc_bounds = soc_start.zip(soc_end);
+    if recorded.len() >= 2
+        && (soc_bounds.is_some() || recorded.iter().all(|point| point.soc.is_some()))
+    {
+        return Ok(build_fallback_curve_samples(
+            session_id,
+            started_at,
+            ended_at,
+            charger_type.as_deref(),
+            soc_bounds,
+            &recorded,
+            PLAUSIBLE_MAX_CHARGE_KW,
+        ));
+    }
 
     let primary_rows = if linked_sample_count >= 2 {
         sqlx::query_as::<_, CurveAnalysisValueRow>(
@@ -2222,28 +2298,14 @@ async fn load_curve_analysis_samples(
             .collect());
     }
 
-    let fallback = sqlx::query_as::<_, RawCurvePointRow>(
-        r#"WITH candidates AS (
-               SELECT ts,power_kw,'rivian_charge_curve_points'::text AS sample_source,1 AS precedence
-               FROM riviamigo.rivian_charge_curve_points
-               WHERE vehicle_id=$1 AND charge_session_id=$2 AND power_kw IS NOT NULL AND power_kw > 0
-               UNION ALL
-               SELECT source_at AS ts,power_kw,'parallax_charge_curve_points'::text AS sample_source,2 AS precedence
-               FROM timeseries.parallax_charge_curve_points
-               WHERE vehicle_id=$1 AND charge_session_id=$2 AND power_kw IS NOT NULL AND power_kw > 0
-           )
-           SELECT DISTINCT ON (ts) ts,power_kw,sample_source
-           FROM candidates ORDER BY ts,precedence DESC"#,
-    )
-    .bind(vehicle_id)
-    .bind(session_id)
-    .fetch_all(pool)
-    .await?;
-
-    let Some((soc_start, soc_end)) = soc_start.zip(soc_end) else {
-        return Ok(vec![]);
+    let fallback = if linked_power_count < 2 {
+        recorded
+    } else {
+        load_recorded_curve_points(pool, vehicle_id, session_id, started_at, ended_at).await?
     };
-    if fallback.is_empty() {
+    if fallback.is_empty()
+        || (soc_bounds.is_none() && fallback.iter().any(|point| point.soc.is_none()))
+    {
         return Ok(vec![]);
     }
 
@@ -2252,9 +2314,8 @@ async fn load_curve_analysis_samples(
         started_at,
         ended_at,
         charger_type.as_deref(),
-        soc_start,
-        soc_end,
+        soc_bounds,
         &fallback,
-        cap_kw,
+        PLAUSIBLE_MAX_CHARGE_KW,
     ))
 }

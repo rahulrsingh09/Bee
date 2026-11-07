@@ -744,4 +744,69 @@ mod tests {
             other => panic!("expected a completed trip, got {other:?}"),
         }
     }
+
+    #[tokio::test]
+    #[ignore = "requires an explicit isolated synthetic TimescaleDB"]
+    async fn saved_session_takes_its_peak_and_type_from_the_recorded_charging_graph() {
+        let db = TestDb::new().await;
+        let session_id = Uuid::new_v4();
+        let started_at = Utc::now() - Duration::hours(3);
+        // R2 shape: the detector saw no power and classified from its average.
+        let session = crate::ingestion::charge_detector::CompletedChargeSession {
+            session_id,
+            vehicle_id: db.vehicle_id,
+            started_at,
+            ended_at: started_at + Duration::minutes(16),
+            location_lat: None,
+            location_lng: None,
+            soc_start: Some(28.0),
+            soc_end: Some(72.0),
+            charge_limit: Some(80.0),
+            battery_capacity_wh: Some(91_500.0),
+            energy_used_wh: None,
+            energy_added_wh: Some(40_260.0),
+            peak_charge_kw: None,
+            avg_charge_rate_kw: Some(15.0),
+            charger_type: Some("ac".to_string()),
+        };
+        sqlx::query(
+            "INSERT INTO riviamigo.charge_sessions(id,vehicle_id,started_at,source) VALUES($1,$2,$3,'telemetry')",
+        )
+        .bind(session_id)
+        .bind(db.vehicle_id)
+        .bind(started_at)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+        for (index, (seconds, kw)) in [(2_i64, 26.2_f64), (245, 189.5), (910, 116.5), (930, 950.0)]
+            .into_iter()
+            .enumerate()
+        {
+            sqlx::query("INSERT INTO timeseries.parallax_charge_curve_points(vehicle_id,source_at,segment_index,charge_session_id,power_kw) VALUES($1,$2,$3,$4,$5)")
+                .bind(db.vehicle_id)
+                .bind(started_at + Duration::seconds(seconds))
+                .bind(index as i32)
+                .bind(session_id)
+                .bind(kw)
+                .execute(&db.pool)
+                .await
+                .unwrap();
+        }
+
+        super::super::persist_charge_session(&db.pool, &session)
+            .await
+            .unwrap();
+
+        let (charger_type, peak, voltage): (Option<String>, Option<f64>, Option<f64>) =
+            sqlx::query_as("SELECT charger_type, max_charge_rate_kw, peak_voltage FROM riviamigo.charge_sessions WHERE id=$1")
+                .bind(session_id)
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
+        assert_eq!(charger_type.as_deref(), Some("dc"));
+        // The implausible 950 kW reading is ignored.
+        assert_eq!(peak, Some(189.5));
+        assert_eq!(voltage, None, "no kW in the volts column");
+        db.finish().await;
+    }
 }

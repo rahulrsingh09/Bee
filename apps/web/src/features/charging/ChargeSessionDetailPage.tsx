@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from '@tanstack/react-router';
-import { useChargeSession, useResolvedVehicleSelection, useSavedPlaces, useUpdateChargeSession, useVehicles } from '@riviamigo/hooks';
+import { useChargeCurve, useChargeSession, useResolvedVehicleSelection, useSavedPlaces, useUpdateChargeSession, useVehicles } from '@riviamigo/hooks';
 import type { ChargeSessionUpdate, Place } from '@riviamigo/types';
 import {
   PageLayout, Card, CardContent, CardHeader, CardTitle, Button, Input, SelectPicker,
 } from '@riviamigo/ui/primitives';
-import { ChargeSessionCurveDetail, SensorChipSummary } from '@riviamigo/dashboards';
+import { ChargeCurveInsightNote, ChargeSessionCurveDetail, SensorChipSummary } from '@riviamigo/dashboards';
 import { AppLayout } from '../../components/layout/AppLayout';
 import { NoVehicleState } from '../../components/layout/NoVehicleState';
 import { formatKwh, formatDuration, formatCurrency, formatDistanceKm, formatPercent } from '@riviamigo/ui/lib/utils';
@@ -25,6 +25,8 @@ function ChargeSessionContentInner() {
   const { sessionId } = useParams({ from: '/charging/$sessionId' });
 
   const { data: session } = useChargeSession(sessionId, effectiveVehicleId);
+  const isCurveActive = session != null && session.ended_at == null;
+  const { data: curve = [] } = useChargeCurve(sessionId, effectiveVehicleId, isCurveActive);
   const {
     data: places = [],
     isLoading: placesLoading,
@@ -214,6 +216,7 @@ function ChargeSessionContentInner() {
                     />
                   )}
                 </div>
+                {curve.length > 0 ? <ChargeCurveInsightNote points={curve} /> : null}
               </CardContent>
             </Card>
           </>

@@ -4,6 +4,7 @@ import {
   formatAppDate, formatAppDateTime, formatAppTime, getAppDateParts, shiftAppCalendarDays, startOfAppDay,
 } from '@riviamigo/ui/lib/dateTime';
 import { chargeKind } from '../charging/detail/chargeDetailModel';
+import { chargePlace } from '../../lib/placeNames';
 import { measuredEfficiencyWhMi, SHORT_TRIP_MILES } from '../r-experience/efficiencyUnit';
 import { vehicleLockReading } from '../r-experience/vehicleLockReading';
 
@@ -157,7 +158,8 @@ export function isDcCharge(charge: ChargeSession) {
 
 /** "DC fast · Ridgefield", else the place name. */
 export function chargeTitle(charge: ChargeSession) {
-  const place = shortPlace(charge.location_name || 'Charge');
+  // The shared place-name rule: a coordinate or address label becomes the nearest town, as on Activity and Insights.
+  const place = shortPlace(chargePlace(charge, null).name || 'Charge');
   return isDcCharge(charge) ? `DC fast · ${place}` : place;
 }
 

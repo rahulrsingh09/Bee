@@ -1,3 +1,4 @@
+import { chargePlace } from '../../lib/placeNames';
 import React from 'react';
 import type { ChargeSession, Trip, Vehicle, VehicleStatus } from '@riviamigo/types';
 import type { LiveSession } from '@riviamigo/hooks';
@@ -41,7 +42,7 @@ export function NowLiveCharging({ vehicle, status, session, place, places, contr
   const limit = status?.battery_limit ?? null;
   const dc = session ? chargeKind(session) === 'dc' : /dc/i.test(live.data?.charger_type ?? '');
   const color = session ? CATEGORY_COLOR[chargeCategory(session, places)] : 'var(--now-other)';
-  const name = session?.location_name ? shortPlace(session.location_name) : place;
+  const name = session ? shortPlace(chargePlace(session, null).name) : place;
   const done = reading.battery != null && limit != null && reading.battery >= limit - 0.3;
   const estimated = (curve.data ?? []).some(point => point.power_method === 'soc_delta');
   const points = (curve.data ?? []).filter(point => finite(point.soc_pct) && finite(point.power_kw))

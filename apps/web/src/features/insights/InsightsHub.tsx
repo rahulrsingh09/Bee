@@ -7,6 +7,7 @@ import { RAppLayout } from '../r-experience/RAppLayout';
 import { TipLayer } from './chartKit';
 import { useSegInk } from './controls';
 import type { InsightsData } from './InsightsContext';
+import { usableCapacityNow } from '../../lib/batteryHealth';
 import { capacityByDay, chargeRows, dayKeyOf, firstDay, monthDay, tripRows } from './insightsModel';
 import { useAllCharges, useAllTrips } from './useInsightsData';
 import { BatteryTab } from './tabs/BatteryTab';
@@ -82,7 +83,7 @@ function InsightsBody({ tab, vehicleId, onFirstDay }: { tab: InsightTab; vehicle
           ) : (
             <TipLayer className="ri-ins-grid">
               {tab === 'cost' && <CostTab data={data} />}
-              {tab === 'charging' && <ChargingTab data={data} capacityKwh={capacity[capacity.length - 1]?.kwh ?? null} />}
+              {tab === 'charging' && <ChargingTab data={data} capacityKwh={usableCapacityNow(capacity)} />}
               {tab === 'battery' && <BatteryTab data={data} capacity={capacity} />}
               {tab === 'efficiency' && <EfficiencyTab data={data} />}
               {tab === 'lifetime' && <LifetimeTab data={data} />}

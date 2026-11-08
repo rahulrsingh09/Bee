@@ -5,6 +5,8 @@ import {
 } from '../insightsModel';
 import { profileInput, profileSource, rateDetail, ratePlace } from '../placeTags';
 import { homePlace, officePlace, places, sessions, trips } from './insightsFixture';
+import { batteryHealthPct, usableCapacityNow } from '../../../lib/batteryHealth';
+import { batteryHealthPct as carBatteryHealthPct } from '../../health/carModel';
 
 const TZ = 'America/Los_Angeles';
 
@@ -126,10 +128,22 @@ describe('trips, battery and lifetime', () => {
     expect(band[0]).toMatchObject({ day: '2026-10-06', lo: 40, hi: 62 });
   });
 
-  it('keeps the last capacity reading of each day', () => {
+  it('keeps the median capacity reading of each day', () => {
     expect(capacityByDay([
-      { ts: '2026-10-07T18:00:00Z', usable_kwh: 91.4 }, { ts: '2026-10-07T20:00:00Z', usable_kwh: 91.2 }, { ts: '2026-10-08T18:00:00Z', usable_kwh: 0 },
+      { ts: '2026-10-07T18:00:00Z', usable_kwh: 91.4 }, { ts: '2026-10-07T19:00:00Z', usable_kwh: 91.0 },
+      { ts: '2026-10-07T20:00:00Z', usable_kwh: 91.2 }, { ts: '2026-10-08T18:00:00Z', usable_kwh: 0 },
     ], TZ)).toEqual([{ day: '2026-10-07', kwh: 91.2 }]);
+  });
+
+  it('gives Insights and Car the same battery health', () => {
+    const readings = [
+      { ts: '2026-10-06T18:00:00Z', usable_kwh: 91.4 }, { ts: '2026-10-06T19:00:00Z', usable_kwh: 91.2 }, { ts: '2026-10-06T20:00:00Z', usable_kwh: 91.4 },
+      { ts: '2026-11-07T17:00:00Z', usable_kwh: 91.0 }, { ts: '2026-11-07T18:00:00Z', usable_kwh: 91.3 }, { ts: '2026-11-07T19:00:00Z', usable_kwh: 91.3 },
+    ];
+    const days = capacityByDay(readings, TZ);
+    expect(usableCapacityNow(days)).toBe(91.3);
+    expect(batteryHealthPct(days)).toBeCloseTo(91.3 / 91.4 * 100, 6);
+    expect(carBatteryHealthPct(readings, TZ)).toBe(batteryHealthPct(days));
   });
 
   it('counts only validated parked periods', () => {

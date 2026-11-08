@@ -332,17 +332,7 @@ export function speedGroups(charges: readonly ChargeRow[], curves: ReadonlyMap<s
 
 /* ------------------------------------------------------------------ battery */
 
-export interface CapacityDay { day: DayKey; kwh: number }
-
-/** The last usable-capacity reading of each day. */
-export function capacityByDay(rows: ReadonlyArray<{ ts: string; usable_kwh: number }>, timezone: string): CapacityDay[] {
-  const map = new Map<DayKey, number>();
-  for (const row of [...rows].sort((a, b) => a.ts.localeCompare(b.ts))) {
-    if (!Number.isFinite(row.usable_kwh) || row.usable_kwh <= 0) continue;
-    map.set(dayKeyOf(row.ts, timezone), row.usable_kwh);
-  }
-  return [...map.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([day, kwh]) => ({ day, kwh }));
-}
+export { capacityByDay, type CapacityDay } from '../../lib/batteryHealth';
 
 export interface BandDay { index: number; day: DayKey; lo: number; hi: number }
 

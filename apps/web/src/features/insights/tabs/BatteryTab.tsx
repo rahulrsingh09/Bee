@@ -3,6 +3,7 @@ import { usePhantomDrainPeriods } from '@riviamigo/hooks';
 import { BarChart, Card, Chart, CountUp, DataTable, Legend, LineChart, RangeBars, tip } from '../chartKit';
 import { Kpi, Spec } from '../controls';
 import type { InsightsData } from '../InsightsContext';
+import { batteryHealthPct, usableCapacityNow } from '../../../lib/batteryHealth';
 import {
   addDays, batteryBand, dayRange, drainByDay, monthDay, n0, n1, n2, sum, weekdayMonthDay, type CapacityDay,
 } from '../insightsModel';
@@ -20,12 +21,12 @@ export function BatteryTab({ data, capacity }: { data: InsightsData; capacity: C
   const limit = status?.battery_limit ?? null;
   const kwh = sum(charges, c => c.kwh);
 
-  const capNow = capacity[capacity.length - 1]?.kwh ?? null;
+  const capNow = usableCapacityNow(capacity);
   const cap0 = capacity[0]?.kwh ?? null;
   const capValues = capacity.map(c => c.kwh);
   const cmin = capValues.length ? Math.min(...capValues) : 0;
   const cmax = capValues.length ? Math.max(...capValues) : 0;
-  const health = capNow != null && cap0 ? capNow / cap0 * 100 : null;
+  const health = batteryHealthPct(capacity);
   const lost = capNow != null && cap0 != null ? cap0 - capNow : 0;
   const level = status?.battery_level ?? null;
   const range = status?.range_miles ?? null;

@@ -67,7 +67,7 @@ describe('Car tab model', () => {
       { ts: '2026-10-06T05:00:00Z', usable_kwh: 88 },
       { ts: '2026-10-06T09:00:00Z', usable_kwh: 88 },
       { ts: '2026-11-07T09:00:00Z', usable_kwh: 87.8 },
-    ])).toBeCloseTo(99.77, 1);
+    ], 'UTC')).toBeCloseTo(99.77, 1);
     expect(batteryHealthPct([])).toBeNull();
   });
 

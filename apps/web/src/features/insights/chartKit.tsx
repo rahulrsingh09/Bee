@@ -224,6 +224,31 @@ export function DataTable({ head, rows, caption }: { head: readonly string[]; ro
 /* ------------------------------------------------------------------ charts */
 
 const scaleH = (h: number, big: boolean) => (big ? h * 2.2 : h);
+
+/** Estimated width of one character of an 11 px axis label (Inter stays under 0.62 em per character). */
+const AXIS_CHAR_PX = 6.8;
+/** Space kept between two axis labels. */
+const AXIS_LABEL_GAP = 14;
+
+export interface AxisLabel { x: number; text: string; anchor: 'start' | 'middle' | 'end' }
+
+/**
+ * The axis labels that fit side by side in `width` px: every k-th label, counted back from the newest,
+ * with the smallest k that keeps AXIS_LABEL_GAP px between neighbours. Labels that cross an edge are left out.
+ */
+export function fitAxisLabels<T extends AxisLabel>(labels: readonly T[], width: number): T[] {
+  const span = (label: AxisLabel) => {
+    const size = label.text.length * AXIS_CHAR_PX;
+    const left = label.anchor === 'start' ? label.x : label.anchor === 'end' ? label.x - size : label.x - size / 2;
+    return [left, left + size] as const;
+  };
+  const inside = labels.filter(label => { const [left, right] = span(label); return left >= -0.5 && right <= width + 0.5; });
+  for (let k = 1; k <= inside.length; k++) {
+    const kept = inside.filter((_, i) => (inside.length - 1 - i) % k === 0);
+    if (kept.every((label, i) => i === 0 || span(label)[0] - span(kept[i - 1]!)[1] >= AXIS_LABEL_GAP)) return kept;
+  }
+  return inside.slice(-1);
+}
 const pathOf = (points: ReadonlyArray<{ x: number; y: number }>) =>
   points.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join('');
 const lengthOf = (points: ReadonlyArray<{ x: number; y: number }>) =>
@@ -272,7 +297,8 @@ export function LineChart({ width: w, big, label, points, xDomain, yDomain, tick
           <text className="ri-lab1" x={p.x} y={p.y - 9} textAnchor={anchor}>{text}</text></g>); })}
       <g className="ri-axis">
         {ticks.filter(t => !ends.some(p => Math.abs(p.y - Y(t)) < 16 && p.x < 70)).map(t => <text key={t} x="2" y={Y(t) - 4}>{tickFormat ? tickFormat(t) : t}</text>)}
-        {xLabels.map(([v, text, anchor], k) => <text key={k} x={X(v)} y={h - 4} textAnchor={anchor}>{text}</text>)}
+        {fitAxisLabels(xLabels.map(([v, text, anchor]) => ({ x: X(v), text, anchor })), w)
+          .map((item, k) => <text key={k} x={item.x} y={h - 4} textAnchor={item.anchor}>{item.text}</text>)}
       </g>
       {hp && <><line x1={hp.x} x2={hp.x} y1={pt} y2={h - pb} stroke="var(--ri-t3)" strokeWidth="1" />
         <circle cx={hp.x} cy={hp.y} r="5" fill={color} stroke="var(--ri-s1)" strokeWidth="2" /></>}
@@ -294,14 +320,17 @@ export function BarChart({ width: w, big, label, bars, max, height = 150, pt = 2
   const gap = Math.max(2, Math.min(10, w / n * 0.3)); const bw = (w - gap * (n - 1)) / n;
   const top = max ?? Math.max(...bars.map(b => b.segs.reduce((s, x) => s + x.v, 0)), 1);
   const H = (v: number) => v / (top || 1) * (h - pt - pb);
+  const axis = fitAxisLabels(bars.flatMap((bar, i) => {
+    if (!bar.label) return [];
+    const x = i * (bw + gap); const edge = n > 12 && (i === 0 || i === n - 1);
+    const anchor: AxisLabel['anchor'] = edge ? (i === 0 ? 'start' : 'end') : 'middle';
+    return [{ x: edge ? (i === 0 ? x : x + bw) : x + bw / 2, text: bar.label, anchor }];
+  }), w);
   return (
     <svg viewBox={`0 0 ${w} ${h}`} height={h} role="img" aria-label={label}>
       <line x1="0" x2={w} y1={h - pb} y2={h - pb} stroke="var(--ri-line2)" />
       {bars.map((bar, i) => {
         const x = i * (bw + gap); let y = h - pb; const total = bar.segs.reduce((s, x) => s + x.v, 0);
-        const edge = n > 12 && (i === 0 || i === n - 1);
-        const anchor = edge ? (i === 0 ? 'start' : 'end') : 'middle';
-        const lx = edge ? (i === 0 ? x : x + bw) : x + bw / 2;
         return (
           <g key={i}>
             {bar.segs.map((seg, j) => {
@@ -313,10 +342,10 @@ export function BarChart({ width: w, big, label, bars, max, height = 150, pt = 2
               return <path key={j} className="ri-grow" style={{ '--i': i } as React.CSSProperties} d={d} fill={seg.color} data-tip={seg.tip} />;
             })}
             {bar.top && (total > 0 || bar.zero) && <text className="ri-lab" x={x + bw / 2} y={h - pb - H(total) - 6} textAnchor="middle">{bar.top}</text>}
-            {bar.label && <text className="ri-ax" x={lx} y={h - 5} textAnchor={anchor}>{bar.label}</text>}
           </g>
         );
       })}
+      {axis.map((item, k) => <text key={k} className="ri-ax" x={item.x} y={h - 5} textAnchor={item.anchor}>{item.text}</text>)}
     </svg>
   );
 }

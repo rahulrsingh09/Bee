@@ -56,7 +56,9 @@ for (const width of [390, 1280]) {
           await expect(primary.getByRole('link', { name, exact: true })).toBeVisible();
         }
         await expect(page.getByRole('link', { name: 'Explore', exact: true })).toHaveCount(0);
-        await expect(page.getByRole('button', { name: /^Switch to (light|dark) mode$/ })).toHaveCount(1);
+        // Phone detail pages have their own back row and no gear and theme row.
+        const phoneDetail = width < 960 && /^\/(trips|charging)\/[^/]+$/.test(path);
+        await expect(page.getByRole('button', { name: /^Switch to (light|dark) mode$/ })).toHaveCount(phoneDetail ? 0 : 1);
         await expect(page.getByText(/something went wrong/i)).toHaveCount(0);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), path).toBe(true);
         if (['/', '/settings', '/vehicle-health', '/charging'].includes(path)) {

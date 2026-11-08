@@ -90,6 +90,7 @@ describe('place tags', () => {
     const rows = chargeRows(sessions, places, TZ);
     expect(profileSource('Home charging (PSE Schedule 7)')).toBe('PSE Schedule 7');
     expect(profileSource('Office charging (free)')).toBeNull();
+    expect(profileSource('Home')).toBeNull();
     expect(rateDetail(homePlace, rows)).toBe('Kirkland · PSE Schedule 7');
     expect(rateDetail(officePlace, rows)).toBe('Bellevue');
     const atOffice = rows.map(r => (r.id === 'c-office-1' ? { ...r, session: { ...r.session, network_vendor: 'chargepoint' } } : r));

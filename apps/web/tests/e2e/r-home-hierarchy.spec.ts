@@ -141,7 +141,9 @@ for (const width of [320, 390, 901, 1280, 1920]) for (const mode of ['dark', 'li
     const overlap = await carOverlaps(page);
     expect(overlap.cars).toBeGreaterThan(0);
     expect(overlap.hits).toEqual([]);
+    // Hidden controls (the gear on desktop, where the rail has Settings) have no box and are not targets.
     const small = await page.locator('.now').evaluate(root => [...root.querySelectorAll('a, button, [role="slider"], [role="combobox"]')]
+      .filter(element => element.getClientRects().length > 0)
       .map(element => ({ name: element.textContent?.trim().slice(0, 30) || element.getAttribute('aria-label'), ...element.getBoundingClientRect().toJSON() }))
       .filter(target => target.height < 44 || target.width < 44));
     expect(small).toEqual([]);

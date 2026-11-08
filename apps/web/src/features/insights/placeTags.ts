@@ -17,7 +17,7 @@ export function ratePlace(places: readonly Place[], category: Category): Place |
 export function profileSource(name: string | null | undefined) {
   const trimmed = name?.trim() ?? '';
   const inner = /\(([^)]+)\)\s*$/.exec(trimmed)?.[1]?.trim() ?? trimmed;
-  if (!inner || /^(free|paid)$/i.test(inner) || /\bcharging$/i.test(inner)) return null;
+  if (!inner || /^(free|paid|home|office|work)$/i.test(inner) || /\bcharging$/i.test(inner)) return null;
   return inner;
 }
 

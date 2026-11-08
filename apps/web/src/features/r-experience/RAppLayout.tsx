@@ -114,6 +114,22 @@ function RTopActions({ area }: { area: RAreaKey }) {
 const HeaderSlot = React.createContext<{ area: RAreaKey; claim: () => () => void } | null>(null);
 
 /**
+ * The gear and theme buttons inside a page's own title row. A page that renders it takes the
+ * buttons out of the layout's separate row, so they stay beside the title when a banner shows.
+ */
+export function RPageActions() {
+  const slot = React.useContext(HeaderSlot);
+  React.useLayoutEffect(() => slot?.claim(), [slot]);
+  return slot ? <RTopActions area={slot.area} /> : null;
+}
+
+/** For pages with their own back control (phone detail pages): no gear and theme row. */
+export function useHidePageActions() {
+  const slot = React.useContext(HeaderSlot);
+  React.useLayoutEffect(() => slot?.claim(), [slot]);
+}
+
+/**
  * Page header from the trial (`top()`): title, optional sub line, and the gear and theme buttons.
  * Use it as the first element of a page. Without it, the layout shows the buttons at the top right.
  */

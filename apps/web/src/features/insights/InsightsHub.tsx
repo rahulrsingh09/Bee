@@ -3,7 +3,7 @@ import { Link } from '@tanstack/react-router';
 import { useCurrentVehicleStatus, useDegradation, useMe, useResolvedVehicleSelection, useSavedPlaces } from '@riviamigo/hooks';
 import { getAppTimezone } from '@riviamigo/ui/lib/dateTime';
 import { NoVehicleState } from '../../components/layout/NoVehicleState';
-import { RAppLayout } from '../r-experience/RAppLayout';
+import { RAppLayout, RPageActions } from '../r-experience/RAppLayout';
 import { TipLayer } from './chartKit';
 import { useSegInk } from './controls';
 import type { InsightsData } from './InsightsContext';
@@ -101,8 +101,11 @@ export function InsightsHub({ tab = 'cost' }: { tab?: InsightTab }) {
     <RAppLayout activeKey="insights">
       <div className="ri">
         <div className="ri-top">
-          <h1>Insights</h1>
-          <p className="ri-sub">{first ? `Since ${monthDay(first)}, the first day of data` : '\u00a0'}</p>
+          <div className="ri-top-text">
+            <h1>Insights</h1>
+            <p className="ri-sub">{first ? `Since ${monthDay(first)}, the first day of data` : '\u00a0'}</p>
+          </div>
+          <RPageActions />
         </div>
         <InsightTabs tab={tab} />
         {!authReady || !vehicleSelectionReady ? <p className="ri-muted" role="status" aria-busy="true">Loading your vehicle…</p>

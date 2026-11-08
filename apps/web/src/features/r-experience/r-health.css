@@ -1,5 +1,8 @@
 /* R Car tab (v5 trial: viewCar, statusRow; .spec .topdown .closures .hlist .hrow .swline). Tokens only. */
+.r-car-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-top: 18px; }
+.r-car-heading-text { min-width: 0; }
 .r-car-heading p { margin-top: 6px; }
+@media (min-width: 960px) { .r-car-heading { padding-top: 28px; } }
 .r-car { display: grid; gap: 16px; min-width: 0; }
 .r-car-grid { display: grid; gap: 4px; min-width: 0; }
 .r-car-column { display: grid; gap: 4px; align-content: start; min-width: 0; }
@@ -57,6 +60,7 @@
 .r-car-hrow > div { display: grid; gap: 2px; min-width: 0; }
 .r-car-hrow small { color: var(--rm-text-tertiary); font-size: 12.5px; line-height: 1.4; }
 .r-car-hrow > strong { max-width: 14ch; font-weight: 650; text-align: right; }
+.r-car-hrow[data-row="location"] > strong, .r-car-hrow[data-row="battery"] > strong { max-width: none; white-space: nowrap; }
 .r-car-hrow[data-state="none"] > strong { color: var(--rm-text-tertiary); font-weight: 500; }
 .r-car-samples { padding-top: 6px; border-top: 1px solid var(--rm-border-default); }
 .r-car-ctitle { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 10px 0 8px; }

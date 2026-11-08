@@ -7,6 +7,7 @@ import { formatAppDate, formatAppTime } from '@riviamigo/ui/lib/dateTime';
 import { AppLayout } from '../../../components/layout/AppLayout';
 import { NoVehicleState } from '../../../components/layout/NoVehicleState';
 import { RMissedDriveBanner } from '../../r-experience/RMissedDrives';
+import { RPageActions, useHidePageActions } from '../../r-experience/RAppLayout';
 import { useEfficiencyUnit } from '../../r-experience/efficiencyUnit';
 import { ChargeDetailPane, CATEGORY_COLOR } from '../../charging/detail/ChargeDetailPane';
 import { TripDetailPane } from '../detail/TripDetailPane';
@@ -90,7 +91,7 @@ export function ActivityPage({ vehicleId, selection, search, canManage }: {
   React.useEffect(() => { listMemory.animated = true; }, []);
 
   if (!wide && selection) {
-    return <div className="r-act r-act-single" data-activity-detail-page>{detail}</div>;
+    return <div className="r-act r-act-single" data-activity-detail-page><HidePageActions />{detail}</div>;
   }
 
   const list = (
@@ -112,6 +113,7 @@ export function ActivityPage({ vehicleId, selection, search, canManage }: {
         <h1>Activity</h1>
         <p className="r-act-sub">Trips, charges and parked time</p>
       </div>
+      <RPageActions />
     </header>
   );
 
@@ -128,6 +130,12 @@ export function ActivityPage({ vehicleId, selection, search, canManage }: {
       {list}
     </div>
   );
+}
+
+/** The phone detail page has its own back row, so the gear and theme row does not show above it. */
+function HidePageActions() {
+  useHidePageActions();
+  return null;
 }
 
 function positionOf(order: ActivityEvent[], selected: NonNullable<ActivitySelection>): DetailPosition | null {

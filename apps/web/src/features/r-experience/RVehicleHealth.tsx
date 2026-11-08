@@ -35,7 +35,7 @@ import { vehicleConfiguration } from '../now/nowModel';
 import { NoVehicleState } from '../../components/layout/NoVehicleState';
 import { getFeedHealthIssue } from '../../components/layout/vehicleConnection';
 import { emitToast } from '../../components/feedback/toast';
-import { RAppLayout } from './RAppLayout';
+import { RAppLayout, RPageActions } from './RAppLayout';
 import { RMissedDrives } from './RMissedDrives';
 import { RSettingsEntry } from './RSettingsNavigation';
 import { RVehicleOrbit } from './RVehicleOrbit';
@@ -58,7 +58,10 @@ function clock(value: string | null | undefined) {
   if (!value) return null;
   const time = new Date(value).getTime();
   if (!Number.isFinite(time)) return null;
-  return time >= startOfAppDay(Date.now()).getTime() ? formatAppTime(value) : formatAppDateTime(value);
+  if (time >= startOfAppDay(Date.now()).getTime()) return formatAppTime(value);
+  // "Nov 7, 7:42 PM"; the year shows only for an earlier year.
+  const sameYear = formatAppDate(value, { month: undefined, day: undefined }) === formatAppDate(Date.now(), { month: undefined, day: undefined });
+  return formatAppDateTime(value, sameYear ? { year: undefined } : {});
 }
 
 function shortDate(value: string) {
@@ -74,8 +77,11 @@ export function RVehicleHealth() {
   return (
     <RAppLayout activeKey="car" footer={<RSettingsEntry />}>
       <div className="r-page-heading r-car-heading">
-        <h1>Car</h1>
-        {vehicle ? <p>{carSubtitle(vehicle)}</p> : null}
+        <div className="r-car-heading-text">
+          <h1>Car</h1>
+          {vehicle ? <p>{carSubtitle(vehicle)}</p> : null}
+        </div>
+        <RPageActions />
       </div>
       {!ready ? (
         <CarSkeleton />

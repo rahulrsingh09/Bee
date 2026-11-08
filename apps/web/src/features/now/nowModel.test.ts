@@ -43,8 +43,15 @@ describe('status', () => {
     expect(nowActivity(null)).toBe('waiting');
     expect(nowActivity(status({ power_state: 'charging' }))).toBe('charging');
     expect(nowActivity(status({ charger_status: 'chrgr_sts_connected_charging' }))).toBe('charging');
-    expect(nowActivity(status({ power_state: 'drive' }))).toBe('driving');
+    expect(nowActivity(status({ power_state: 'drive', gear_status: 'drive' }))).toBe('driving');
     expect(nowActivity(status({ power_state: 'ready', gear_status: 'drive', speed_mph: 30 }))).toBe('driving');
+    expect(nowActivity(status({ power_state: 'go', gear_status: 'reverse' }))).toBe('driving');
+    expect(nowActivity(status({ power_state: 'go', gear_status: 'neutral' }))).toBe('driving');
+    expect(nowActivity(status({ power_state: 'go', speed_mph: 12 }))).toBe('driving');
+    // The car is on in park: the power state says "go", but the car is parked.
+    expect(nowActivity(status({ power_state: 'go', gear_status: 'park' }))).toBe('parked');
+    expect(nowActivity(status({ power_state: 'drive', gear_status: 'park', speed_mph: 0 }))).toBe('parked');
+    expect(nowActivity(status({ power_state: 'go' }))).toBe('parked');
     expect(nowActivity(status({ power_state: 'sleep', telemetry_stale: true }))).toBe('parked');
   });
 

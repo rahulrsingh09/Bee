@@ -13,9 +13,11 @@ export type NowActivity = 'waiting' | 'charging' | 'driving' | 'parked';
 export function nowActivity(status: VehicleStatus | null | undefined): NowActivity {
   if (!status) return 'waiting';
   if (isVehicleCharging(status)) return 'charging';
-  if (/drive|go/.test(status.power_state?.toLowerCase() ?? '')) return 'driving';
+  // The power state stays "go" or "drive" while the car is on in park, so the gear decides.
   const gear = status.gear_status?.toLowerCase() ?? '';
-  if (gear && !gear.includes('park') && (status.speed_mph ?? 0) > 0) return 'driving';
+  if (gear.includes('park')) return 'parked';
+  if (/drive|reverse|neutral/.test(gear)) return 'driving';
+  if ((status.speed_mph ?? 0) > 0) return 'driving';
   return 'parked';
 }
 

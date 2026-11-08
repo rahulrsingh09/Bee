@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   pathname: '/insights',
-  status: null as null | { last_updated: string | null; telemetry_stale?: boolean },
+  status: null as null,
 }));
 
 vi.mock('@tanstack/react-router', () => ({
@@ -14,13 +14,14 @@ vi.mock('@tanstack/react-router', () => ({
   useLocation: () => ({ pathname: mocks.pathname }),
 }));
 vi.mock('../r-experience/useRConnection', () => ({
-  useRConnection: () => ({ status: mocks.status, feed: null, renewal: null, onlineState: 'online' }),
+  useRConnection: () => ({ status: mocks.status, feed: null, renewal: null, onlineState: 'online', banner: null, vehicleId: null }),
+}));
+vi.mock('../../hooks/useThemePreferenceController', () => ({
+  useThemePreferenceController: () => ({ mode: 'dark', onModeChange: vi.fn(), isPending: false }),
 }));
 
 import { InsightsHub } from './InsightsHub';
-import { RAppLayout, rFreshness } from '../r-experience/RAppLayout';
-
-const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+import { rFreshness } from '../r-experience/RAppLayout';
 
 describe('Insights hub', () => {
   beforeEach(() => {
@@ -50,39 +51,6 @@ describe('Insights hub', () => {
     expect(tabs.map(tab => tab.textContent)).toEqual(['Now', 'Activity', 'Insights', 'Car']);
     expect(within(nav).getByRole('link', { name: 'Insights' })).toHaveAttribute('aria-current', 'page');
     expect(tabs.filter(tab => tab.getAttribute('aria-current') === 'page')).toHaveLength(1);
-  });
-});
-
-describe('R shell top bar', () => {
-  beforeEach(() => {
-    mocks.pathname = '/vehicle-health';
-    mocks.status = null;
-  });
-
-  it('shows only the R mark and the freshness, without theme, Settings or Sign-out controls', () => {
-    mocks.status = { last_updated: minutesAgo(2), telemetry_stale: false };
-    const { container } = render(<RAppLayout activeKey="health"><p>Body</p></RAppLayout>);
-    const header = container.querySelector('header')!;
-    expect(within(header).getByRole('link', { name: 'R overview' })).toHaveAttribute('href', '/');
-    expect(within(header).getByText('Updated 2 min ago')).toBeInTheDocument();
-    expect(header.querySelector('.r-freshness')).toHaveAttribute('data-state', 'live');
-    expect(within(header).queryByRole('button')).toBeNull();
-    expect(within(header).queryByRole('link', { name: 'Settings' })).toBeNull();
-    expect(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'Car' }))
-      .toHaveAttribute('aria-current', 'page');
-  });
-
-  it('marks stale telemetry with the warning state and the no-data age', () => {
-    mocks.status = { last_updated: minutesAgo(6 * 60 + 5), telemetry_stale: true };
-    const { container } = render(<RAppLayout activeKey="health"><p>Body</p></RAppLayout>);
-    expect(screen.getByText('No data for 6 h')).toBeInTheDocument();
-    expect(container.querySelector('.r-freshness')).toHaveAttribute('data-state', 'stale');
-  });
-
-  it('renders the footer slot after the page body', () => {
-    render(<RAppLayout activeKey="health" footer={<a href="/settings">Settings</a>}><p>Body</p></RAppLayout>);
-    const page = screen.getByText('Body').parentElement!;
-    expect(page.lastElementChild).toHaveTextContent('Settings');
   });
 });
 

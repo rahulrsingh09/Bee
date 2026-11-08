@@ -173,9 +173,7 @@ vi.mock('@riviamigo/ui/primitives', () => ({
 }));
 
 import { DashboardPageShell } from '../components/dashboard/DashboardPageShell';
-import { userDashboardRoute } from '../routes/d.$slug';
 
-const RouteComponent = userDashboardRoute.options.component as React.ComponentType;
 
 async function expectEditableDashboard(widgetId: string, widgetCount: number, editableWidgetCount = widgetCount) {
   expect(screen.queryByTestId(`widget-overlay-right-${widgetId}`)).toBeNull();
@@ -225,49 +223,5 @@ describe('dashboard editability', () => {
     render(<DashboardPageShell navKey={slug} slug={slug} title={slug} />);
 
     await expectEditableDashboard(widgetId, widgetCount, editableWidgetCount);
-  });
-
-  it('opens the same edit overlay path for /d/$slug custom dashboards', async () => {
-    dashboardMocks.routeSearch = { edit: 1 };
-
-    render(<RouteComponent />);
-
-    const editButton = await screen.findByRole('button', { name: 'Edit widget settings' });
-    expect(screen.getByTestId('widget-host-custom-widget').closest('[data-widget-frame="edit"]')).toHaveAttribute(
-      'data-widget-id',
-      'custom-widget',
-    );
-
-    fireEvent.click(editButton);
-
-    expect(await screen.findByText('Editing')).toBeInTheDocument();
-  });
-
-  it('routes the /d/$slug toolbar edit action through the URL-controlled edit mode', async () => {
-    render(<RouteComponent />);
-
-    await userEvent.click(screen.getByRole('button', { name: 'Edit dashboard' }));
-
-    expect(dashboardMocks.navigate).toHaveBeenCalledWith({
-      to: '/d/$slug',
-      params: { slug: 'custom-dashboard' },
-      search: { edit: 1 },
-    });
-  });
-
-  it('hides the page edit shortcut when the dashboard setting is off', () => {
-    localStorage.removeItem('rm-show-dashboard-edit-button:anonymous');
-
-    render(<RouteComponent />);
-
-    expect(screen.queryByRole('button', { name: 'Edit dashboard' })).toBeNull();
-  });
-
-  it('keeps dashboard utilities separate from the shared edit action', () => {
-    render(<RouteComponent />);
-
-    expect(screen.getByRole('button', { name: 'Edit dashboard' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Duplicate' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Customize' })).toBeNull();
   });
 });

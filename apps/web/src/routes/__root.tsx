@@ -5,6 +5,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { api, queryKeys, themeClient, useAuth, useAuthReady } from '@riviamigo/hooks';
 import { resolveThemeRuntimeResponse, ThemeRuntimeProvider } from '@riviamigo/ui/lib/theme';
 import { APP_TIMEZONE_CHANGE_EVENT, setAppTimezone } from '@riviamigo/ui/lib/dateTime';
+import { setUnitPreferences } from '@riviamigo/ui/lib/utils';
 import { RExperienceRoot } from '../features/r-experience/RExperienceRoot';
 
 interface RouterContext {
@@ -33,6 +34,17 @@ function Root() {
     queryFn: () => api.getAppTimezone(),
     enabled: authReady && !!accessToken,
   });
+
+  // The account keeps the unit preferences; apply them to this browser on every load.
+  const unitPreferences = useQuery({
+    queryKey: queryKeys.unitPreferences.current,
+    queryFn: () => api.getUnitPreferences(),
+    enabled: authReady && !!accessToken,
+  });
+  React.useEffect(() => {
+    const next = unitPreferences.data?.units;
+    if (next) setUnitPreferences(next);
+  }, [unitPreferences.data]);
 
   React.useEffect(() => {
     const refresh = () => setTimezoneVersion((version) => version + 1);

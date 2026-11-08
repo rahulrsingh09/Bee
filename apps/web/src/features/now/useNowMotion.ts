@@ -1,22 +1,13 @@
 import React from 'react';
 
-/** One data story per browser session. Later visits show final values at once. */
-export const NOW_MOTION_SESSION_KEY = 'rm-now-motion-seen';
-
-function prefersReducedMotion() {
+export function prefersReducedMotion() {
   return typeof window !== 'undefined' && Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
 }
 
-/** True only on the first Now view of the session and when the owner allows motion. */
-export function useFirstViewMotion() {
-  const [animate] = React.useState(() => {
-    if (prefersReducedMotion()) return false;
-    try { return window.sessionStorage.getItem(NOW_MOTION_SESSION_KEY) !== '1'; } catch { return false; }
-  });
-  React.useEffect(() => {
-    try { window.sessionStorage.setItem(NOW_MOTION_SESSION_KEY, '1'); } catch { /* storage can be unavailable */ }
-  }, []);
-  return animate;
+/** True when the owner allows motion. Read once per mount, so a view does not change style mid-animation. */
+export function useMotionAllowed() {
+  const [allowed] = React.useState(() => !prefersReducedMotion());
+  return allowed;
 }
 
 /** Counts from 0 to the first known value when `animate` is true; afterwards it follows the value directly. */
@@ -40,28 +31,14 @@ export function useCountUp(value: number | null, animate: boolean, duration = 90
   return shown;
 }
 
-/** Becomes true once, on the next frame after mount (the trigger for CSS transitions to their final state). */
+/** Becomes true once, two frames after mount (the trigger for CSS transitions to their final state). */
 export function useArrived(animate: boolean) {
   const [arrived, setArrived] = React.useState(!animate);
   React.useEffect(() => {
     if (arrived) return;
-    const frame = requestAnimationFrame(() => requestAnimationFrame(() => setArrived(true)));
-    return () => cancelAnimationFrame(frame);
+    let second = 0;
+    const first = requestAnimationFrame(() => { second = requestAnimationFrame(() => setArrived(true)); });
+    return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); };
   }, [arrived]);
   return arrived;
-}
-
-/** Becomes true once the element is visible. Without IntersectionObserver it is true at once. */
-export function useSeenOnce<T extends Element>(enabled: boolean) {
-  const ref = React.useRef<T>(null);
-  const [seen, setSeen] = React.useState(!enabled || typeof IntersectionObserver === 'undefined');
-  React.useEffect(() => {
-    if (seen || !ref.current) return;
-    const observer = new IntersectionObserver(entries => {
-      if (entries.some(entry => entry.isIntersecting)) { setSeen(true); observer.disconnect(); }
-    }, { threshold: 0.4 });
-    observer.observe(ref.current);
-    return () => observer.disconnect();
-  }, [seen]);
-  return [ref, seen] as const;
 }

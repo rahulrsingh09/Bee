@@ -1,16 +1,13 @@
 import { isVehicleCharging } from '@riviamigo/types';
-import type {
-  ChargeSession, Insight, PhantomDrainPeriod, Place, TrackPoint, Trip, Vehicle, VehicleStatus,
-} from '@riviamigo/types';
-import { isVehiclePluggedIn } from '@riviamigo/dashboards';
+import type { ChargeSession, PhantomDrainPeriod, Place, TrackPoint, Trip, Vehicle, VehicleStatus } from '@riviamigo/types';
 import {
-  formatCurrency, formatDuration, formatEfficiencyValue, formatMiles, formatNumber, getEfficiencyUnitLabel,
-} from '@riviamigo/ui/lib/utils';
-import {
-  endOfAppDay, formatAppDate, formatAppDateTime, formatAppTime, getAppDateParts, shiftAppCalendarDays, startOfAppDay,
+  formatAppDate, formatAppDateTime, formatAppTime, getAppDateParts, shiftAppCalendarDays, startOfAppDay,
 } from '@riviamigo/ui/lib/dateTime';
+import { chargeKind } from '../charging/detail/chargeDetailModel';
+import { measuredEfficiencyWhMi, SHORT_TRIP_MILES } from '../r-experience/efficiencyUnit';
+import { vehicleLockReading } from '../r-experience/vehicleLockReading';
 
-/** What the vehicle does now. Stale data keeps the last known state; the top bar and "Needs a look" show the age. */
+/** What the vehicle does now. Stale data keeps the last known state; the header shows the age. */
 export type NowActivity = 'waiting' | 'charging' | 'driving' | 'parked';
 
 export function nowActivity(status: VehicleStatus | null | undefined): NowActivity {
@@ -42,7 +39,7 @@ export function placeAt(lat: number | null | undefined, lng: number | null | und
 
 /**
  * Where the vehicle is: a saved place at the current position, else the end place of the latest
- * finished drive when that drive ended near the current position (or no position is known).
+ * finished trip when that trip ended near the current position (or no position is known).
  */
 export function nowPlace(status: VehicleStatus | null | undefined, places: readonly Place[] | undefined, latestTrip: Trip | undefined) {
   const saved = placeAt(status?.latitude, status?.longitude, places);
@@ -56,11 +53,22 @@ export function nowPlace(status: VehicleStatus | null | undefined, places: reado
   return metersBetween({ lat: status.latitude, lng: status.longitude }, { lat: latestTrip.end_lat, lng: latestTrip.end_lng }) <= 250 ? name : null;
 }
 
-export function nowTitle(activity: NowActivity, place: string | null) {
-  if (activity === 'waiting') return 'Waiting for vehicle data';
-  if (activity === 'driving') return 'Driving';
-  if (activity === 'charging') return place ? `Charging at ${place}` : 'Charging';
-  return place ? `Parked at ${place}` : 'Parked';
+export function lockWord(status: VehicleStatus | null | undefined) {
+  const locked = vehicleLockReading(status ?? null);
+  return locked === null ? null : locked ? 'Locked' : 'Unlocked';
+}
+
+/** "Parked · Home · Locked". Parts that are not known are left out. */
+export function parkedChip(status: VehicleStatus | null | undefined, place: string | null) {
+  if (!status) return 'Waiting for the car';
+  return ['Parked', place ? shortPlace(place) : null, lockWord(status)].filter(Boolean).join(' · ');
+}
+
+/** "Updated 7:42 PM" today, else "Updated Nov 6, 7:42 PM". Null without a reading. */
+export function updatedLabel(status: VehicleStatus | null | undefined, now: number) {
+  const at = status?.last_updated;
+  if (!at || Number.isNaN(Date.parse(at))) return null;
+  return `Updated ${dayKey(at) === dayKey(now) ? formatAppTime(at) : formatAppDateTime(at, { year: undefined })}`;
 }
 
 /** Model, trim and color from the vehicle record. Missing parts are left out. */
@@ -77,187 +85,221 @@ export function spinLabel(vehicle: Pick<Vehicle, 'model' | 'color'>) {
   return color ? `Your ${model}, ${color}. Use arrow keys to turn.` : `Your ${model}. Use arrow keys to turn.`;
 }
 
-export type PlugState = 'charging' | 'plugged' | 'unplugged' | null;
-
-export function plugState(status: VehicleStatus | null | undefined): PlugState {
-  if (!status) return null;
-  if (isVehicleCharging(status)) return 'charging';
-  if (isVehiclePluggedIn(status)) return 'plugged';
-  const known = status.charger_state?.toLowerCase() === 'disconnected' || status.charger_status === 'chrgr_sts_not_connected';
-  return known ? 'unplugged' : null;
+export function vehicleName(vehicle: Pick<Vehicle, 'display_name' | 'model'>) {
+  return vehicle.display_name?.trim() || vehicle.model?.trim() || 'Your Rivian';
 }
 
-export const plugLabel: Record<Exclude<PlugState, null>, string> = {
-  charging: 'Charging', plugged: 'Plugged in', unplugged: 'Unplugged',
-};
-
-/** "11 PM", "6:30 AM" from minutes after midnight. */
-export function clockLabel(minutes: number) {
-  const total = ((Math.round(minutes) % 1440) + 1440) % 1440;
-  const hour = Math.floor(total / 60);
-  const minute = total % 60;
-  const suffix = hour < 12 ? 'AM' : 'PM';
-  const h12 = hour % 12 || 12;
-  return minute ? `${h12}:${String(minute).padStart(2, '0')} ${suffix}` : `${h12} ${suffix}`;
+/** Lowest and highest tire pressure in psi; null without a reading. */
+export function tireRange(status: VehicleStatus | null | undefined) {
+  const values = [status?.tire_fl_psi, status?.tire_fr_psi, status?.tire_rl_psi, status?.tire_rr_psi]
+    .filter((value): value is number => value != null && Number.isFinite(value) && value > 0);
+  if (!values.length) return status?.tire_min_psi != null ? { min: status.tire_min_psi, max: status.tire_min_psi } : null;
+  return { min: Math.min(...values), max: Math.max(...values) };
 }
 
-export function scheduleLabel(schedule: { enabled: boolean; start_time_minutes: number | null } | null | undefined, plug: PlugState) {
-  if (!schedule?.enabled || schedule.start_time_minutes == null || plug === 'charging') return null;
-  return `Charges ${clockLabel(schedule.start_time_minutes)}`;
+export function tireText(range: { min: number; max: number } | null) {
+  if (!range) return null;
+  const low = Math.round(range.min);
+  const high = Math.round(range.max);
+  return low === high ? `${low}` : `${low}–${high}`;
 }
 
-function insightOf<K extends Insight['kind']>(insights: readonly Insight[] | undefined, kind: K) {
-  return insights?.find((insight): insight is Extract<Insight, { kind: K }> => insight.kind === kind);
-}
+// --- dates --------------------------------------------------------------------
 
-/** "enough for about 3 days of your usual driving", from the days_of_range rule. Null when the rule did not fire. */
-export function daysOfRangeSentence(insights: readonly Insight[] | undefined) {
-  const days = insightOf(insights, 'days_of_range')?.values.days;
-  if (days == null || !Number.isFinite(days) || days < 0) return null;
-  if (days < 1) return 'enough for less than 1 day of your usual driving';
-  const rounded = Math.round(days);
-  return `enough for about ${rounded} ${rounded === 1 ? 'day' : 'days'} of your usual driving`;
-}
-
-export interface AttentionItem {
-  id: string;
-  title: string;
-  detail: string;
-  to: '/battery/phantom-drain' | '/vehicle-health' | '/settings';
-  search?: { section: string };
-}
-
-function hoursLabel(hours: number) {
-  const whole = Math.max(1, Math.floor(hours));
-  return whole < 48 ? `${whole} h` : `${Math.floor(whole / 24)} days`;
-}
-
-/** "Needs a look" rows: stale data, high parked loss and charges without a price. Other kinds are not shown here. */
-export function attentionItems(insights: readonly Insight[] | undefined): AttentionItem[] {
-  const items: AttentionItem[] = [];
-  const stale = insightOf(insights, 'stale_data');
-  if (stale?.severity === 'attention') items.push({
-    id: stale.id, title: `No data for ${hoursLabel(stale.values.hours)}`,
-    detail: `Last data ${formatAppDateTime(stale.values.last_seen_at)}. Check the connection.`, to: '/vehicle-health',
-  });
-  const parked = insightOf(insights, 'high_parked_loss');
-  if (parked?.severity === 'attention') {
-    const loss = `${formatNumber(parked.values.loss_pct, 1)}% in ${formatDuration(parked.values.duration_hours * 60)}`;
-    const ratio = parked.values.ratio != null ? ` · ${formatNumber(parked.values.ratio, 1)}× your usual drain rate` : '';
-    items.push({ id: parked.id, title: 'Parked loss was high', detail: `${loss}${ratio}`, to: '/battery/phantom-drain' });
-  }
-  const price = insightOf(insights, 'missing_price');
-  if (price && price.values.count > 0) items.push({
-    id: price.id,
-    title: `${price.values.count} ${price.values.count === 1 ? 'charge has' : 'charges have'} no price`,
-    detail: `Last ${price.values.window_days} days. Add a home price to see the cost.`,
-    to: '/settings', search: { section: 'places' },
-  });
-  return items;
-}
-
-export interface WeekDay { key: string; label: string; miles: number; today: boolean }
-export interface WeekSummary {
-  days: WeekDay[];
-  miles: number;
-  drives: number;
-  /** Wh/mi over drives with an energy reading; null without one. */
-  efficiencyWhMi: number | null;
-  /** Sum of known charge costs; null when no charge in the window has a cost. */
-  cost: number | null;
-}
-
-function dayKey(value: Date | string | number) {
+/** App-calendar day key, "2026-11-07". */
+export function dayKey(value: Date | string | number) {
   const parts = getAppDateParts(value);
   return parts ? `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}` : '';
 }
 
-/** Seven app-calendar days that end today. */
-export function weekWindow(now: number) {
-  const first = startOfAppDay(shiftAppCalendarDays(now, -6));
-  return { from: first.toISOString(), to: endOfAppDay(now).toISOString(), first };
+/** Start of the app-calendar Monday on or before `value`. */
+export function mondayOf(value: Date | string | number) {
+  const start = startOfAppDay(value);
+  const parts = getAppDateParts(start);
+  if (!parts) return start;
+  const weekday = new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay();
+  return startOfAppDay(shiftAppCalendarDays(start, -((weekday + 6) % 7)));
 }
 
-export function weekSummary(trips: readonly Trip[] | undefined, charges: readonly ChargeSession[] | undefined, now: number): WeekSummary {
-  const { first } = weekWindow(now);
+/** The Now windows: 30 app-calendar days that end today, and the week that starts on Monday. */
+export function nowWindows(now: number) {
+  const monthFrom = startOfAppDay(shiftAppCalendarDays(now, -29));
+  const weekFrom = mondayOf(now);
+  const from = weekFrom < monthFrom ? weekFrom : monthFrom;
+  return { from: from.toISOString(), to: new Date(now).toISOString(), monthFrom, weekFrom };
+}
+
+/** "Sat, Nov 7". */
+export function shortDay(value: Date | string | number) {
+  return formatAppDate(value, { year: undefined, weekday: 'short' });
+}
+
+// --- trips and charges -------------------------------------------------------
+
+export const shortPlace = (name: string) => name.replace(/^Near /, '');
+
+/** "Kirkland → Home", or "Round trip · Home" when it starts and ends at one place. */
+export function tripTitle(trip: Pick<Trip, 'start_place' | 'start_address' | 'end_place' | 'end_address'>) {
+  const from = shortPlace(trip.start_place || trip.start_address || 'Start');
+  const to = shortPlace(trip.end_place || trip.end_address || 'Destination');
+  return from === to ? `Round trip · ${from}` : `${from} → ${to}`;
+}
+
+export function isShortTrip(trip: Pick<Trip, 'distance_mi'>) {
+  return !(trip.distance_mi >= SHORT_TRIP_MILES);
+}
+
+export function isDcCharge(charge: ChargeSession) {
+  return chargeKind(charge) === 'dc';
+}
+
+/** "DC fast · Ridgefield", else the place name. */
+export function chargeTitle(charge: ChargeSession) {
+  const place = shortPlace(charge.location_name || 'Charge');
+  return isDcCharge(charge) ? `DC fast · ${place}` : place;
+}
+
+export type ChargeCategory = 'home' | 'office' | 'other';
+export const CATEGORY_LABEL: Record<ChargeCategory, string> = { home: 'Home', office: 'Office', other: 'Other' };
+export const CATEGORY_ORDER: readonly ChargeCategory[] = ['home', 'office', 'other'];
+
+/** Home and Office come from the saved place of the charge (home or work flag, else its name). Every other charge is Other. */
+export function chargeCategory(charge: Pick<ChargeSession, 'location_name'>, places: readonly Place[] | undefined): ChargeCategory {
+  const name = charge.location_name?.trim().toLowerCase();
+  if (!name) return 'other';
+  const place = places?.find(item => item.name.trim().toLowerCase() === name);
+  if (place?.is_home) return 'home';
+  if (place?.is_work) return 'office';
+  if (name === 'home') return 'home';
+  if (name === 'office' || name === 'work') return 'office';
+  return 'other';
+}
+
+export const hasCost = (charge: Pick<ChargeSession, 'cost_usd'>) => charge.cost_usd != null && Number.isFinite(charge.cost_usd);
+
+export const usd = (value: number) => `$${value.toFixed(2)}`;
+
+/** "Add cost", "Free" or "$8.66". */
+export function costText(charge: Pick<ChargeSession, 'cost_usd'>) {
+  if (!hasCost(charge)) return 'Add cost';
+  return charge.cost_usd === 0 ? 'Free' : usd(charge.cost_usd!);
+}
+
+export const sumBy = <T>(items: readonly T[], value: (item: T) => number | null | undefined) =>
+  items.reduce((total, item) => total + (value(item) ?? 0), 0);
+
+export interface WeekDay { key: string; label: string; title: string; miles: number; today: boolean }
+export interface WeekSummary {
+  from: Date;
+  days: WeekDay[];
+  miles: number;
+  trips: number;
+  efficiencyWhMi: number | null;
+  chargedKwh: number;
+  cost: number;
+  unpriced: number;
+}
+
+/** Monday to Sunday of the current week: trip miles per day, efficiency, energy charged and known cost. */
+export function weekSummary(trips: readonly Trip[], charges: readonly ChargeSession[], now: number): WeekSummary {
+  const from = mondayOf(now);
   const today = dayKey(now);
   const days: WeekDay[] = Array.from({ length: 7 }, (_, index) => {
-    const date = shiftAppCalendarDays(first, index);
-    return {
-      key: dayKey(date), miles: 0, today: dayKey(date) === today,
-      label: formatAppDate(date, { year: undefined, month: undefined, day: undefined, weekday: 'short' }),
-    };
+    const date = shiftAppCalendarDays(from, index);
+    const key = dayKey(date);
+    return { key, miles: 0, today: key === today, title: shortDay(date),
+      label: formatAppDate(date, { year: undefined, month: undefined, day: undefined, weekday: 'narrow' }) };
   });
-  const byKey = new Map(days.map(day => [day.key, day]));
-  let miles = 0; let drives = 0; let energyMiles = 0; let energyKwh = 0;
-  for (const trip of trips ?? []) {
-    const day = byKey.get(dayKey(trip.started_at));
-    if (!day || !Number.isFinite(trip.distance_mi)) continue;
-    day.miles += trip.distance_mi;
-    miles += trip.distance_mi;
-    drives += 1;
-    if (trip.energy_used_kwh != null && trip.energy_used_kwh > 0 && trip.distance_mi > 0) {
-      energyMiles += trip.distance_mi;
-      energyKwh += trip.energy_used_kwh;
-    }
-  }
-  const priced = (charges ?? []).filter(charge => byKey.has(dayKey(charge.started_at)) && charge.cost_usd != null && Number.isFinite(charge.cost_usd));
+  const keys = new Set(days.map(day => day.key));
+  const weekTrips = trips.filter(trip => keys.has(dayKey(trip.started_at)) && Number.isFinite(trip.distance_mi));
+  for (const trip of weekTrips) days.find(day => day.key === dayKey(trip.started_at))!.miles += trip.distance_mi;
+  const weekCharges = charges.filter(charge => keys.has(dayKey(charge.started_at)) && charge.ended_at != null);
   return {
-    days, miles, drives,
-    efficiencyWhMi: energyMiles > 0 ? energyKwh * 1000 / energyMiles : null,
-    cost: priced.length ? priced.reduce((sum, charge) => sum + charge.cost_usd!, 0) : null,
+    from, days, trips: weekTrips.length,
+    miles: sumBy(weekTrips, trip => trip.distance_mi),
+    efficiencyWhMi: measuredEfficiencyWhMi(weekTrips),
+    chargedKwh: sumBy(weekCharges, charge => charge.energy_added_kwh),
+    cost: sumBy(weekCharges, charge => (hasCost(charge) ? charge.cost_usd : 0)),
+    unpriced: weekCharges.filter(charge => !hasCost(charge)).length,
   };
 }
 
-/** "This week: 407 mi · 11 drives · 3.1 mi/kWh · $35.10 energy cost". */
-export function weekLine(summary: WeekSummary) {
-  const parts = summary.drives > 0
-    ? [formatMiles(summary.miles), `${summary.drives} ${summary.drives === 1 ? 'drive' : 'drives'}`]
-    : ['No drives'];
-  if (summary.efficiencyWhMi != null) parts.push(`${formatEfficiencyValue(summary.efficiencyWhMi)} ${getEfficiencyUnitLabel()}`);
-  if (summary.cost != null) parts.push(`${formatCurrency(summary.cost)} energy cost`);
-  return `This week: ${parts.join(' · ')}`;
+export interface CategorySpend { key: ChargeCategory; label: string; kwh: number; cost: number; unpriced: number }
+export interface MonthSummary {
+  cost: number;
+  byCategory: CategorySpend[];
+  efficiencyWhMi: number | null;
+  weeks: Array<{ from: Date; whMi: number }>;
+  drainDays: Array<{ key: string; title: string; lossPct: number; hours: number }>;
+  /** Battery % lost per day parked, over the parked hours in the window; null without parked periods. */
+  drainPerDay: number | null;
 }
 
-export function isToday(value: string | null | undefined, now: number) {
-  return Boolean(value) && dayKey(value!) === dayKey(now);
+/** The last 30 days: charging cost by place, efficiency per week and loss while parked per day. */
+export function monthSummary(
+  trips: readonly Trip[], charges: readonly ChargeSession[], parks: readonly PhantomDrainPeriod[],
+  places: readonly Place[] | undefined, now: number,
+): MonthSummary {
+  const from = startOfAppDay(shiftAppCalendarDays(now, -29));
+  const inMonth = (value: string | null | undefined) => Boolean(value) && Date.parse(value!) >= from.getTime() && Date.parse(value!) <= now;
+  const monthTrips = trips.filter(trip => inMonth(trip.started_at));
+  const monthCharges = charges.filter(charge => inMonth(charge.started_at) && charge.ended_at != null);
+  const byCategory = CATEGORY_ORDER.map(key => {
+    const items = monthCharges.filter(charge => chargeCategory(charge, places) === key);
+    return { key, label: CATEGORY_LABEL[key], kwh: sumBy(items, charge => charge.energy_added_kwh),
+      cost: sumBy(items, charge => (hasCost(charge) ? charge.cost_usd : 0)), unpriced: items.filter(charge => !hasCost(charge)).length };
+  });
+  const weeks: MonthSummary['weeks'] = [];
+  for (let week = mondayOf(from); week.getTime() <= now; week = startOfAppDay(shiftAppCalendarDays(week, 7))) {
+    const end = startOfAppDay(shiftAppCalendarDays(week, 7)).getTime();
+    const whMi = measuredEfficiencyWhMi(monthTrips.filter(trip => Date.parse(trip.started_at) >= week.getTime() && Date.parse(trip.started_at) < end));
+    if (whMi != null) weeks.push({ from: week, whMi });
+  }
+  const validParks = parks.filter(park => park.period_start && inMonth(park.period_start) && park.validation_status === 'validated');
+  const drainDays = Array.from({ length: 30 }, (_, index) => {
+    const date = shiftAppCalendarDays(from, index);
+    const key = dayKey(date);
+    const dayParks = validParks.filter(park => dayKey(park.period_start!) === key);
+    return { key, title: shortDay(date), lossPct: sumBy(dayParks, park => Math.max(0, park.soc_lost_pct ?? 0)), hours: sumBy(dayParks, park => park.duration_hours) };
+  });
+  const parkedHours = sumBy(validParks, park => park.duration_hours);
+  return {
+    cost: sumBy(byCategory, item => item.cost),
+    byCategory,
+    efficiencyWhMi: measuredEfficiencyWhMi(monthTrips),
+    weeks,
+    drainDays,
+    drainPerDay: parkedHours > 0 ? sumBy(validParks, park => Math.max(0, park.soc_lost_pct ?? 0)) / (parkedHours / 24) : null,
+  };
 }
 
-/** "6:12 PM" today, "Yesterday 6:12 PM", else "Nov 3, 6:12 PM". */
-export function eventTime(value: string, now: number) {
-  if (isToday(value, now)) return formatAppTime(value);
-  if (dayKey(value) === dayKey(shiftAppCalendarDays(now, -1))) return `Yesterday ${formatAppTime(value)}`;
-  return formatAppDateTime(value, { year: undefined });
+// --- numbers ------------------------------------------------------------------
+
+export const n0 = (value: number) => Math.round(value).toLocaleString('en-US');
+export const n1 = (value: number) => value.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+export const n2 = (value: number) => value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** "17 min", "1 h 5 min". */
+export function durationText(minutes: number) {
+  if (!Number.isFinite(minutes) || minutes < 0) return '–';
+  return minutes >= 60 ? `${Math.floor(minutes / 60)} h ${Math.round(minutes % 60)} min` : `${Math.max(0, Math.round(minutes))} min`;
 }
 
-/** "Today" when the latest event happened today, else "Latest". */
-export function railTitle(times: ReadonlyArray<string | null | undefined>, now: number) {
-  const latest = times.filter((time): time is string => Boolean(time)).sort().at(-1);
-  return latest && isToday(latest, now) ? 'Today' : 'Latest';
-}
-
-/** The newest validated parked period with a battery reading. */
-export function latestPark(periods: readonly PhantomDrainPeriod[] | undefined) {
-  return periods?.find(period => period.validation_status === 'validated' && period.period_start && period.soc_lost_pct != null);
-}
-
-/** Splits "12,486 mi" into the number and the unit. */
-export function splitUnit(text: string) {
-  const index = text.lastIndexOf(' ');
-  return index > 0 ? { value: text.slice(0, index), unit: text.slice(index + 1) } : { value: text, unit: '' };
-}
-
-/** SVG path for a drive route in a w × h box, keeping the map aspect. */
-export function routePath(points: readonly Pick<TrackPoint, 'lat' | 'lng'>[] | undefined, width: number, height: number, pad = 10) {
+/** SVG path for a trip route in a w × h box, keeping the map aspect. */
+export function routePoints(points: readonly Pick<TrackPoint, 'lat' | 'lng'>[] | undefined, width: number, height: number, pad = 8) {
   const valid = (points ?? []).filter(point => Number.isFinite(point.lat) && Number.isFinite(point.lng));
   if (valid.length < 2) return null;
-  const meanLat = valid.reduce((sum, point) => sum + point.lat, 0) / valid.length;
-  const xs = valid.map(point => point.lng * Math.cos(meanLat * Math.PI / 180));
+  const k = Math.cos(valid[0]!.lat * Math.PI / 180);
+  const xs = valid.map(point => point.lng * k);
   const ys = valid.map(point => point.lat);
   const [minX, maxX, minY, maxY] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
-  const span = Math.max(maxX - minX, maxY - minY, 1e-9);
-  const scale = Math.min((width - pad * 2) / Math.max(maxX - minX, span * 1e-3), (height - pad * 2) / Math.max(maxY - minY, span * 1e-3));
+  const scale = Math.min((width - pad * 2) / ((maxX - minX) || 1e-6), (height - pad * 2) / ((maxY - minY) || 1e-6));
   const offsetX = (width - (maxX - minX) * scale) / 2;
   const offsetY = (height - (maxY - minY) * scale) / 2;
-  return xs.map((x, index) => `${index ? 'L' : 'M'}${(offsetX + (x - minX) * scale).toFixed(1)},${(height - offsetY - (ys[index]! - minY) * scale).toFixed(1)}`).join(' ');
+  return xs.map((x, index) => [offsetX + (x - minX) * scale, height - (offsetY + (ys[index]! - minY) * scale)] as const);
+}
+
+export function routePath(points: readonly Pick<TrackPoint, 'lat' | 'lng'>[] | undefined, width: number, height: number, pad = 8) {
+  const projected = routePoints(points, width, height, pad);
+  return projected ? projected.map(([x, y], index) => `${index ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join('') : null;
 }

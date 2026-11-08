@@ -11,7 +11,8 @@ for (const width of [393, 1280]) for (const mode of ['dark', 'light'] as const) 
     const icon = page.locator('.r-vehicle-lock');
     await expect(icon).toHaveAccessibleName('Vehicle locked');
     await expect(icon).toHaveCount(1);
-    await icon.click();
+    // The lock sits in the Doors tile, a link to the Car page; it opens no dialog.
+    await expect(page.getByRole('link', { name: /Doors/ }).locator('.r-vehicle-lock')).toHaveCount(1);
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect.poll(fixture.liveConnections).toBe(1);
     fixture.publishStatus({ doors_locked: false, door_front_left_closed: false, closure_frunk_closed: false });
@@ -20,9 +21,8 @@ for (const width of [393, 1280]) for (const mode of ['dark', 'light'] as const) 
     await expect.poll(() => shackle.evaluate(e => getComputedStyle(e).transform)).not.toBe('none');
     expect(await shackle.evaluate(e => getComputedStyle(e).transitionDuration)).toBe('0.36s');
     await expect(page.locator('.r-door-status, .r-door-sheet, .r-orbit-openings')).toHaveCount(0);
-    // The fixture R2 has no owner images: it shows its packaged R2 artwork, never the bundled orbit frames.
-    await expect(page.getByRole('img', { name: 'Your R2, Catalina Cove', exact: true })).toBeVisible();
-    await expect(page.locator('.now-car canvas, .r-orbit-poster')).toHaveCount(0);
+    // The fixture R2 has no owner images: it turns with the bundled frames.
+    await expect(page.locator('.now-car canvas')).toHaveCount(1);
     await page.screenshot({ path: testInfo.outputPath('vehicle-unlocked.png') });
     await page.emulateMedia({ reducedMotion: 'reduce' });
     expect(await shackle.evaluate(e => parseFloat(getComputedStyle(e).transitionDuration))).toBeLessThanOrEqual(0.001);
@@ -48,7 +48,6 @@ test('unavailable overall lock status is not inferred from individual locks', as
   fixture.publishStatus({ doors_locked: true, field_availability: { doors_locked: unavailable } });
   await expect(icon).toHaveAccessibleName('Vehicle lock status unavailable');
   await expect(icon.locator('.r-lock-shackle')).toHaveCount(0);
-  await icon.click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   expect(fixture.writes).toEqual([]);
 });

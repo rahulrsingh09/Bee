@@ -96,45 +96,47 @@ async function carOverlaps(page: Page) {
 }
 
 for (const width of [320, 390, 901, 1280, 1920]) for (const mode of ['dark', 'light'] as const) {
-  test(`Now puts status, car, battery, odometer, needs-a-look and the story rail in order at ${width}px in ${mode}`, async ({ page }, testInfo) => {
+  test(`Now shows header, car, battery, tiles, Latest, This week and Last 30 days in order at ${width}px in ${mode}`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 900 });
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const fixture = await installRFixture(page, { mode });
     await installNowData(page);
     await page.goto('/');
     // A longer first wait: other work in the same checkout can make the dev server reload once.
-    await expect(page.getByRole('heading', { level: 1, name: 'Parked at Home' })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText('Your Rivian · R2 Performance · Catalina Cove')).toBeVisible();
-    const chips = page.getByRole('list', { name: 'Vehicle status' }).getByRole('listitem');
-    await expect(chips).toHaveText(['Locked', 'Unplugged', 'Charges 11 PM']);
-    await expect(page.getByText('Limit 80% · enough for about 3 days of your usual driving')).toBeVisible();
-    await expect(page.getByText(/^This week: 91 mi · 3 drives · 3\.1 mi\/kWh · \$2\.40 energy cost$/)).toBeVisible();
-    const attention = page.getByRole('region', { name: 'Needs a look' });
-    await expect(attention.getByRole('link', { name: /Parked loss was high/ })).toHaveAttribute('href', '/battery/phantom-drain');
-    const stories = page.getByRole('region', { name: 'Today' });
-    await expect(stories.getByRole('link', { name: /Last drive/ })).toHaveAttribute('href', '/trips/trip-1');
-    await expect(stories.locator('.now-route path')).toHaveAttribute('d', /^M[\d.]+,[\d.]+( L[\d.]+,[\d.]+)+$/);
-    await expect(stories.getByRole('link', { name: /Last charge/ })).toHaveAttribute('href', '/charging/charge-1');
-    await expect(stories.getByRole('link', { name: /Last park/ })).toContainText('3.1× your usual drain rate');
-    expect(await page.getByRole('heading', { level: 2 }).allTextContents()).toEqual(['Odometer', 'Needs a look', 'Today']);
+    await expect(page.getByRole('heading', { level: 1, name: 'Your Rivian' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('.now-chip')).toHaveText('Parked · Home · Locked');
+    await expect(page.locator('.now-sub-text')).toHaveText(/^Updated \d{1,2}:\d{2}\s(AM|PM)$/);
+    await expect(page.getByRole('img', { name: 'Battery 68 percent, charge limit 80 percent' })).toBeVisible();
+    await expect(page.getByText('Limit 80%')).toBeVisible();
+    await expect(page.getByRole('link', { name: /Doors/ })).toContainText('Locked');
+    await expect(page.getByRole('link', { name: /Tires/ })).toContainText('44–45 psi');
+    await expect(page.getByRole('link', { name: /Cabin/ })).toContainText('20°C');
+    await expect(page.getByRole('link', { name: /Office → Home/ })).toHaveAttribute('href', '/trips/trip-1');
+    await expect(page.locator('.now-lrow .now-route path')).toHaveAttribute('d', /^M[\d.]+,[\d.]+(L[\d.]+,[\d.]+)+$/);
+    await expect(page.getByRole('link', { name: /\+20\.0 kWh/ })).toHaveAttribute('href', '/charging/charge-1');
+    await expect(page.getByRole('region', { name: 'This week' })).toContainText('Trip');
+    await expect(page.getByRole('link', { name: /Charging cost/ })).toHaveAttribute('href', '/insights?tab=cost');
+    await expect(page.getByRole('link', { name: /^Efficiency/ })).toHaveAttribute('href', '/insights?tab=efficiency');
+    await expect(page.getByRole('link', { name: /Loss while parked/ })).toHaveAttribute('href', '/insights?tab=battery');
+    expect(await page.getByRole('heading', { level: 2 }).allTextContents()).toEqual(['Latest', 'This week', 'Last 30 days']);
 
-    const box = async (selector: string) => (await page.locator(selector).boundingBox())!;
-    const [header, car, energy, odometer, look, rail] = await Promise.all(
-      ['.now-header', '.now-car', '.now-energy', '.now-odometer', '.now-attention', '.now-stories'].map(box));
-    const chipBoxes = await chips.evaluateAll(elements => elements.map(element => element.getBoundingClientRect().toJSON() as DOMRect));
-    expect(new Set(chipBoxes.map(chip => Math.round(chip.y))).size).toBe(1);
-    expect(Math.max(...chipBoxes.map(chip => chip.bottom))).toBeLessThanOrEqual(car.y);
-    expect(car.y).toBeGreaterThanOrEqual(header.y + header.height);
-    expect(energy.y).toBeGreaterThanOrEqual(car.y + car.height);
-    if (width < 1024) {
-      expect(Math.round(car.height)).toBe(230);
-      expect(odometer.y).toBeGreaterThan(energy.y + energy.height);
+    const box = async (selector: string) => (await page.locator(selector).first().boundingBox())!;
+    const [header, stage, battery, tiles, latest, week, month] = await Promise.all(
+      ['.now-top', '.now-stage', '.now-batt', '.now-tiles', '.now-latest', '.now-sum', '.now-more3'].map(box));
+    expect(stage.y).toBeGreaterThanOrEqual(header.y + header.height - 1);
+    expect(battery.y).toBeGreaterThanOrEqual(stage.y + stage.height);
+    expect(tiles.y).toBeGreaterThanOrEqual(battery.y + battery.height);
+    if (width < 960) {
+      expect(latest.y).toBeGreaterThan(tiles.y + tiles.height);
     } else {
-      expect(odometer.x).toBeGreaterThan(car.x + car.width);
-      expect(odometer.y).toBeLessThan(car.y);
+      // Two columns: the right column starts level with the car stage; the 30-day row spans both.
+      const latestTitle = await box('.now-side > .now-h2');
+      expect(latest.x).toBeGreaterThan(stage.x + stage.width);
+      expect(Math.abs(latestTitle.y - stage.y)).toBeLessThanOrEqual(2);
+      expect(month.width).toBeGreaterThan(stage.width + latest.width);
     }
-    expect(look.y).toBeGreaterThan(odometer.y + odometer.height);
-    expect(rail.y).toBeGreaterThan(look.y + look.height);
+    expect(week.y).toBeGreaterThan(latest.y + latest.height);
+    expect(month.y).toBeGreaterThan(Math.max(tiles.y + tiles.height, week.y + week.height));
 
     const overlap = await carOverlaps(page);
     expect(overlap.cars).toBeGreaterThan(0);
@@ -143,10 +145,8 @@ for (const width of [320, 390, 901, 1280, 1920]) for (const mode of ['dark', 'li
       .map(element => ({ name: element.textContent?.trim().slice(0, 30) || element.getAttribute('aria-label'), ...element.getBoundingClientRect().toJSON() }))
       .filter(target => target.height < 44 || target.width < 44));
     expect(small).toEqual([]);
-    await expect(page.getByText(/Drag to turn/i)).toHaveCount(0);
+    await expect(page.getByText(/Drag to turn|Preview|Trial/i)).toHaveCount(0);
     await expect(page.locator('[data-dashboard-grid], [data-chart-id], [data-testid="sensor-chip"]')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: /date range|Chart|Dashboard tools/i })).toHaveCount(0);
-    await expect(page.getByPlaceholder(/Search charts/i)).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     await page.screenshot({ path: testInfo.outputPath('now-full.png'), fullPage: true });
     expect(fixture.unsupportedRequests).toEqual([]);
@@ -154,44 +154,77 @@ for (const width of [320, 390, 901, 1280, 1920]) for (const mode of ['dark', 'li
   });
 }
 
-test('the data story runs on the first view of a session only, and never with reduced motion', async ({ page }) => {
+test('the battery counts up and fills on view, and shows final values at once with reduced motion', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await installRFixture(page, { mode: 'dark' });
   await installNowData(page);
   await page.goto('/');
-  await expect(page.locator('.now-roll[data-animate]')).toHaveCount(1);
-  await expect(page.locator('.now-week-bar > span[data-animate]')).toHaveCount(7);
-  const roll = page.locator('.now-roll-column').first();
-  await expect.poll(() => roll.evaluate(element => getComputedStyle(element).transitionProperty)).toBe('transform');
-  await page.reload();
-  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-  await expect(page.locator('.now-odometer-value')).toContainText('12,486');
-  await expect(page.locator('[data-animate]')).toHaveCount(0);
-  await page.evaluate(() => sessionStorage.clear());
+  await expect(page.locator('.now-bar-fill[data-animate]')).toHaveCount(1);
+  await expect.poll(() => page.locator('.now-bar-fill').evaluate(element => getComputedStyle(element).transitionProperty)).toBe('width');
+  await expect(page.locator('.now-batt .now-big')).toHaveText('68%');
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.reload();
-  await expect(page.locator('.now-odometer-value')).toContainText('12,486');
-  await expect(page.locator('[data-animate], .now-viz-wipe')).toHaveCount(0);
+  await expect(page.locator('.now-batt .now-big')).toHaveText('68%');
+  await expect(page.locator('[data-animate]')).toHaveCount(0);
 });
 
-test('the R2 turns through the owner images only: drag changes the angle and Home returns to the side', async ({ page }) => {
+test('without owner images the bundled turn glides 20 degrees on first view and turns by drag, trackpad and keys', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await installRFixture(page, { mode: 'dark' });
+  await installNowData(page);
+  await page.goto('/');
+  const spin = page.getByRole('slider', { name: 'Turn the car. Drag it, or use the left and right arrow keys.' });
+  await expect(spin).toBeVisible();
+  // The glide starts 20 degrees before the rest view (frame 56, 280 degrees) and settles on it.
+  await expect(spin).toHaveAttribute('aria-valuenow', '280', { timeout: 5_000 });
+  await expect(page.locator('.now-car canvas')).toHaveCount(1);
+  await expect(page.getByRole('button', { name: /Front|Side|Replay|Reset/ })).toHaveCount(0);
+  await expect(page.locator('.r-orbit-controls')).toHaveCount(0);
+  const area = (await spin.boundingBox())!;
+  await page.mouse.move(area.x + area.width / 2, area.y + area.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(area.x + area.width / 2 - 120, area.y + area.height / 2, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(async () => Number(await spin.getAttribute('aria-valuenow'))).not.toBe(280);
+  await page.mouse.move(area.x + area.width / 2, area.y + area.height / 2);
+  const before = Number(await spin.getAttribute('aria-valuenow'));
+  await page.mouse.wheel(140, 0);
+  await expect.poll(async () => Number(await spin.getAttribute('aria-valuenow'))).not.toBe(before);
+  await spin.focus();
+  await page.keyboard.press('End');
+  await expect(spin).toHaveAttribute('aria-valuenow', '280');
+  await page.keyboard.press('Home');
+  await expect(spin).toHaveAttribute('aria-valuenow', '325');
+  await page.keyboard.press('ArrowLeft');
+  await expect(spin).toHaveAttribute('aria-valuenow', '315');
+  const overlap = await carOverlaps(page);
+  expect(overlap.hits).toEqual([]);
+});
+
+test('with reduced motion the bundled turn rests on its view with no glide', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  const packs: string[] = [];
-  page.on('request', request => {
-    // Dev-server module imports (`?import`) are not frame or poster loads.
-    const url = new URL(request.url());
-    if (/\/r2-(orbit|hero)/.test(url.pathname) && !url.searchParams.has('import')) packs.push(request.url());
-  });
+  await installRFixture(page, { mode: 'light' });
+  await installNowData(page);
+  await page.goto('/');
+  const spin = page.getByRole('slider', { name: 'Turn the car. Drag it, or use the left and right arrow keys.' });
+  await expect(spin).toHaveAttribute('aria-valuenow', '280');
+  await page.waitForTimeout(600);
+  await expect(spin).toHaveAttribute('aria-valuenow', '280');
+  await spin.press('ArrowRight');
+  await expect(spin).toHaveAttribute('aria-valuenow', '290');
+});
+
+test('the owner images from the server turn with a cross-fade instead of the bundled frames', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await installRFixture(page, { mode: 'dark' });
   await installNowData(page, { ownerArtwork: true });
   await page.goto('/');
   const car = page.locator('.now-car');
-  await expect(car).toHaveAttribute('data-mode', 'turn');
-  const spin = page.getByRole('slider', { name: 'Your R2, Catalina Cove. Use arrow keys to turn.' });
+  const spin = car.getByRole('slider');
   await expect(spin).toHaveAttribute('aria-valuetext', 'Side');
   await expect(car.locator('img.r-orbit-angle')).toHaveCount(4);
-  await expect(car.locator('img.r-orbit-angle[data-active]')).toHaveAttribute('data-angle', 'side');
   await expect(car.locator('img.r-orbit-angle[data-active]')).toHaveAttribute('src', /^blob:/);
   const area = (await spin.boundingBox())!;
   await page.mouse.move(area.x + area.width / 2, area.y + area.height / 2);
@@ -199,19 +232,90 @@ test('the R2 turns through the owner images only: drag changes the angle and Hom
   await page.mouse.move(area.x + area.width / 2 + 110, area.y + area.height / 2, { steps: 6 });
   await page.mouse.up();
   await expect(spin).toHaveAttribute('aria-valuetext', 'Rear');
-  await expect(car.locator('img.r-orbit-angle[data-active]')).toHaveAttribute('data-angle', 'rear');
   await spin.press('Home');
   await expect(spin).toHaveAttribute('aria-valuetext', 'Side');
-  await spin.press('ArrowLeft');
-  await expect(spin).toHaveAttribute('aria-valuetext', 'Front three-quarter');
-  await spin.dblclick();
-  await expect(spin).toHaveAttribute('aria-valuetext', 'Side');
-  // No bundled R1S frames, poster or canvas for an R2.
   await expect(page.locator('.now-car canvas, .r-orbit-poster')).toHaveCount(0);
-  expect(packs).toEqual([]);
-  const overlap = await carOverlaps(page);
-  expect(overlap.cars).toBe(1);
-  expect(overlap.hits).toEqual([]);
+});
+
+test('a charging car shows the live charge from real readings', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const fixture = await installRFixture(page, { mode: 'dark', statusOverrides: { power_state: 'charging', charger_state: 'charging', charger_status: 'chrgr_sts_connected_charging' } });
+  await installNowData(page);
+  const started = new Date(Date.now() - 20 * 60_000).toISOString();
+  await page.route(/\/v1\/charging(\?|$)/, route => route.fulfill({ json: { items: [{
+    id: 'live-1', vehicle_id: 'owner-vehicle', location_name: 'Ridgefield', started_at: started, ended_at: null, charger_type: 'dc',
+    energy_added_kwh: null, duration_min: null, soc_start: 22, soc_end: null, peak_power_kw: 190, cost_usd: null,
+  }], total: 1, page: 1, per_page: 1 } }));
+  await page.route(/\/v1\/vehicles\/[^/]+\/live-session$/, route => route.fulfill({ json: {
+    soc_pct: 36, power_kw: 187.4, energy_kwh: 7.3, range_added_km: 33.8, time_remaining_min: 13, charger_type: 'DCFC', ts: new Date().toISOString(), started_at: started,
+  } }));
+  await page.route(/\/v1\/charging\/sessions\/live-1\/curve(\?|$)/, route => route.fulfill({ json: [
+    { soc_pct: 22, power_kw: 120, minutes_elapsed: 0 }, { soc_pct: 30, power_kw: 182, minutes_elapsed: 6 }, { soc_pct: 36, power_kw: 187, minutes_elapsed: 12 },
+  ] }));
+  await page.goto('/');
+  await expect(page.locator('.now-chip')).toHaveText('Charging · DC fast', { timeout: 15_000 });
+  const card = page.getByRole('region', { name: 'Charging now' });
+  await expect(card).toContainText('36%');
+  await expect(card).toContainText('187 kW');
+  await expect(card).toContainText('+7.3 kWh');
+  await expect(card).toContainText('13 min');
+  await expect(card).toContainText('+21 mi');
+  await expect(card.locator('.now-bar[data-charging] .now-bar-fill')).toHaveCount(1);
+  await expect(page.getByRole('img', { name: 'Power by battery level so far' })).toBeVisible();
+  await expect(page.getByText(/Trial|Preview/)).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('now-charging.png'), fullPage: true });
+  expect(fixture.unsupportedRequests).toEqual([]);
+});
+
+test('a driving car shows the live map, the trip so far, battery and range', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const fixture = await installRFixture(page, { mode: 'light', odometer: 12507.5, statusOverrides: {
+    power_state: 'drive', gear_status: 'drive', speed_mph: 52, latitude: 47.62, longitude: -122.33, battery_level: 74, range_miles: 245,
+  } });
+  await installNowData(page);
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/');
+  await expect(page.locator('.now-chip'), errors.join('\n')).toHaveText('Driving · 52 mph', { timeout: 15_000 });
+  const card = page.getByRole('region', { name: 'This trip', exact: true });
+  await expect(card).toContainText('74%');
+  await expect(card).toContainText('245 mi');
+  await expect(page.locator('.now-live-map')).toBeVisible();
+  await expect.poll(fixture.liveConnections).toBe(1);
+  fixture.publishStatus({ latitude: 47.63, longitude: -122.32, speed_mph: 40, battery_level: 73 });
+  await expect(page.locator('.now-chip')).toHaveText('Driving · 40 mph');
+  await expect(card).toContainText('73%');
+  await page.screenshot({ path: testInfo.outputPath('now-driving.png'), fullPage: true });
+  expect(fixture.unsupportedRequests).toEqual([]);
+});
+
+test('a new car with no trips or charges shows Day one with the setup checklist', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await installRFixture(page, { mode: 'dark' });
+  await page.route(/\/v1\/trips(\?|$)/, route => route.fulfill({ json: { items: [], total: 0, page: 1, per_page: 1 } }));
+  await page.route(/\/v1\/charging(\?|$)/, route => route.fulfill({ json: { items: [], total: 0, page: 1, per_page: 1 } }));
+  await page.goto('/');
+  await expect(page.getByText('Your first drive shows up here')).toBeVisible();
+  const checklist = page.getByRole('region', { name: 'Getting set up' });
+  await expect(checklist).toContainText('Car found: Your Rivian');
+  await expect(checklist.getByRole('link', { name: 'Check your Home and Office rates' })).toHaveAttribute('href', '/settings');
+  await expect(page.getByRole('heading', { name: 'Last 30 days' })).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('now-day-one.png'), fullPage: true });
+});
+
+test('Now shows the loading skeleton until the first reads arrive', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await installRFixture(page, { mode: 'dark' });
+  let release = () => {};
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  await page.route(/\/v1\/trips(\?|$)/, async route => { await gate; await route.fallback(); });
+  await page.goto('/');
+  await expect(page.getByLabel('Loading', { exact: true })).toHaveAttribute('aria-busy', 'true');
+  release();
+  await expect(page.getByRole('heading', { name: 'Latest' })).toBeVisible();
 });
 
 test('the old Overview dashboard URL opens Insights, since R has no custom dashboards', async ({ page }) => {

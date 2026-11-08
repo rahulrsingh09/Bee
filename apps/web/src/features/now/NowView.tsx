@@ -1,103 +1,105 @@
 import React from 'react';
-import { Clock, Plug, PlugZap, Unplug } from 'lucide-react';
-import type { Vehicle, VehicleStatus } from '@riviamigo/types';
+import type { Vehicle } from '@riviamigo/types';
 import {
-  useChargeSessions, useChargingSchedule, useCurrentVehicleStatus, useInsights, usePhantomDrainPeriods,
-  useSavedPlaces, useTrips,
+  useChargeSessions, useCurrentVehicleStatus, usePhantomDrainPeriods, useSavedPlaces, useTrips, useTripTrack,
 } from '@riviamigo/hooks';
-import { shiftAppCalendarDays } from '@riviamigo/ui/lib/dateTime';
 import { vehicleReading } from '../r-experience/readings';
-import { vehicleLockReading } from '../r-experience/vehicleLockReading';
-import { RVehicleLockStatus } from '../r-experience/RVehicleLockStatus';
+import { EmptyCard, NowSetupChecklist, NowSkeleton } from './NowEmpty';
+import { NowLiveCharging, NowLiveDriving } from './NowLive';
+import { BatteryCard, NowHeader, NowLatest, NowMonth, NowStage, NowTiles, NowWeek, type ChipState } from './NowParts';
 import {
-  attentionItems, daysOfRangeSentence, latestPark, nowActivity, nowPlace, nowTitle, plugLabel, plugState,
-  scheduleLabel, vehicleConfiguration, weekSummary, weekWindow,
+  monthSummary, nowActivity, nowPlace, nowWindows, parkedChip, updatedLabel, vehicleName, weekSummary,
 } from './nowModel';
-import { NowAttention } from './NowAttention';
-import { NowCar } from './NowCar';
-import { NowEnergy } from './NowEnergy';
-import { NowOdometer } from './NowOdometer';
-import { NowStoryRail } from './NowStoryRail';
-import { useFirstViewMotion } from './useNowMotion';
+import { useMotionAllowed } from './useNowMotion';
 import './now.css';
 
-const lockText = (status: VehicleStatus | null) => {
-  const locked = vehicleLockReading(status);
-  return locked === null ? 'Lock unknown' : locked ? 'Locked' : 'Unlocked';
-};
-
-/** Fixed time windows for one page visit, so query keys stay stable while the page is open. */
+/** Fixed windows for one page visit, so query keys stay stable while the page is open. */
 function useVisitWindows() {
   const [now] = React.useState(() => Date.now());
-  return React.useMemo(() => ({
-    now, week: weekWindow(now),
-    parksFrom: shiftAppCalendarDays(now, -14).toISOString(),
-  }), [now]);
+  return React.useMemo(() => ({ now, ...nowWindows(now) }), [now]);
 }
 
 /**
- * The Now page body for one vehicle: status, car, battery and range, odometer and this week,
- * "Needs a look" and the latest drive, charge and park. No charts and no period picker.
+ * The Now page for one vehicle. Parked: car, battery, tiles, Latest, This week and Last 30 days.
+ * Charging or driving (from the live vehicle status): the live view. A car with no trips and no
+ * charges yet: Day one. Before the first reads arrive: the skeleton.
  */
 export function NowView({ vehicle, vehicleControl }: { vehicle: Vehicle; vehicleControl?: React.ReactNode }) {
-  const animate = useFirstViewMotion();
-  const { now, week: thisWeek, parksFrom } = useVisitWindows();
+  const animate = useMotionAllowed();
+  const { now, from, to } = useVisitWindows();
   const snapshot = useCurrentVehicleStatus(vehicle.id);
-  const status = !snapshot.isPlaceholderData && snapshot.data?.vehicle_id === vehicle.id ? snapshot.data : null;
+  const status = snapshot.data?.vehicle_id === vehicle.id ? snapshot.data : null;
   const places = useSavedPlaces();
-  const schedule = useChargingSchedule(vehicle.id);
-  const insightsQuery = useInsights(vehicle.id, 'now');
-  const insights = insightsQuery.isPlaceholderData ? undefined : insightsQuery.data?.insights;
-  const weekTrips = useTrips(vehicle.id, thisWeek.from, thisWeek.to, 1, 200);
-  const weekCharges = useChargeSessions(vehicle.id, thisWeek.from, thisWeek.to, 1, 200);
   const latestTrips = useTrips(vehicle.id, null, null, 1, 1);
   const latestCharges = useChargeSessions(vehicle.id, null, null, 1, 1);
-  const parks = usePhantomDrainPeriods(vehicle.id, parksFrom, thisWeek.to, 5, 1);
-
+  const trips = useTrips(vehicle.id, from, to, 1, 200);
+  const charges = useChargeSessions(vehicle.id, from, to, 1, 200);
+  const parks = usePhantomDrainPeriods(vehicle.id, from, to);
   const latestTrip = latestTrips.data?.items?.[0];
   const latestCharge = latestCharges.isPlaceholderData ? undefined : latestCharges.data?.items?.[0];
-  const park = parks.isPlaceholderData ? undefined : latestPark(parks.data?.periods);
-  const activity = nowActivity(status);
-  const plug = plugState(status);
-  const scheduled = scheduleLabel(schedule.data, plug);
-  const PlugIcon = plug === 'charging' ? PlugZap : plug === 'plugged' ? Plug : Unplug;
-  const weekReady = Boolean(weekTrips.data) && !weekCharges.isLoading;
-  const week = weekReady ? weekSummary(weekTrips.data?.items, weekCharges.data?.items, now) : null;
+  const track = useTripTrack(latestTrip?.id ?? null, vehicle.id);
 
-  return <div className="now" data-activity={activity}>
-    <div className="now-primary">
-      <header className="now-header">
-        <div className="now-vehicle-row">
-          <p className="now-vehicle">{[vehicle.display_name, vehicleConfiguration(vehicle)].filter(Boolean).join(' · ')}</p>
-          {vehicleControl}
+  const name = vehicleName(vehicle);
+  const activity = nowActivity(status);
+  const place = nowPlace(status, places.data, latestTrip);
+
+  if ((snapshot.isLoading && !snapshot.data) || latestTrips.isLoading || latestCharges.isLoading) return <NowSkeleton name={name} />;
+
+  if (activity === 'charging') {
+    const open = latestCharge && latestCharge.ended_at == null ? latestCharge : undefined;
+    return <NowLiveCharging vehicle={vehicle} status={status} session={open} place={place} places={places.data} control={vehicleControl} />;
+  }
+  if (activity === 'driving') return <NowLiveDriving vehicle={vehicle} status={status} lastTrip={latestTrip} control={vehicleControl} />;
+
+  const stale = Boolean(status?.telemetry_stale);
+  const chipState: ChipState = !status ? 'waiting' : stale ? 'stale' : 'live';
+  const chip = stale ? parkedChip(status, place).replace(/^Parked/, 'Not updating') : parkedChip(status, place);
+  const dayOne = !latestTrip && !latestCharge && !latestTrips.isError && !latestCharges.isError;
+  const header = <NowHeader name={name} chip={chip} chipState={chipState} control={vehicleControl}
+    sub={updatedLabel(status, now) ?? (dayOne ? 'Connected' : undefined)} />;
+  const battery = <BatteryCard battery={vehicleReading(status, 'battery_level')} limit={vehicleReading(status, 'battery_limit')}
+    rangeMi={vehicleReading(status, 'range_miles')} animate={animate} />;
+
+  if (dayOne) {
+    return <div className="now" data-activity="parked" data-state="day-one">
+      {header}
+      <div className="now-grid">
+        <div className="now-main"><NowStage vehicle={vehicle} />{battery}<NowTiles status={status} /></div>
+        <div className="now-side">
+          <h2 className="now-h2">Latest</h2>
+          <EmptyCard title="Your first drive shows up here" text="R records every drive and charge from now on. A trip appears a few minutes after you park." />
+          <NowSetupChecklist vehicle={vehicle} status={status} name={name} />
         </div>
-        {vehicle.is_demo && <p className="now-vehicle">Demo vehicle · Illustrative data</p>}
-        <h1 className="now-title">{nowTitle(activity, nowPlace(status, places.data, latestTrip))}</h1>
-        <ul className="now-chips" aria-label="Vehicle status">
-          <li className="now-chip" data-attention={vehicleLockReading(status) === false || undefined}>
-            <RVehicleLockStatus status={status} /><span aria-hidden="true">{lockText(status)}</span>
-          </li>
-          {plug && <li className="now-chip" data-state={plug}><PlugIcon aria-hidden="true" />{plugLabel[plug]}</li>}
-          {scheduled && <li className="now-chip"><Clock aria-hidden="true" />{scheduled}</li>}
-        </ul>
-      </header>
-      <NowCar vehicle={vehicle} />
-      <NowEnergy battery={vehicleReading(status, 'battery_level')} limit={vehicleReading(status, 'battery_limit')}
-        rangeMi={vehicleReading(status, 'range_miles')} daysSentence={daysOfRangeSentence(insights)} animate={animate} />
-      {snapshot.isError && <p className="now-context" role="alert">Vehicle readings could not be refreshed.{' '}
-        <button type="button" className="now-retry" onClick={() => void snapshot.refetch()}>Retry</button></p>}
+      </div>
+    </div>;
+  }
+
+  const tripItems = trips.data?.items ?? [];
+  const chargeItems = charges.data?.items ?? [];
+  const week = trips.data && charges.data ? weekSummary(tripItems, chargeItems, now) : null;
+  const month = trips.data && charges.data ? monthSummary(tripItems, chargeItems, parks.data?.periods ?? [], places.data, now) : null;
+  const retry = () => { void trips.refetch(); void charges.refetch(); void parks.refetch(); };
+  const failed = trips.isError || charges.isError;
+  return <div className="now" data-activity="parked">
+    {header}
+    {snapshot.isError && <p className="now-alert" role="alert">The car readings could not be refreshed.{' '}
+      <button type="button" className="now-retry" onClick={() => void snapshot.refetch()}>Retry</button></p>}
+    <div className="now-grid">
+      <div className="now-main">
+        <NowStage vehicle={vehicle} />
+        {battery}
+        <NowTiles status={status} />
+      </div>
+      <div className="now-side">
+        <h2 className="now-h2">Latest</h2>
+        <NowLatest trip={latestTrip} track={track.isPlaceholderData ? undefined : track.data} charge={latestCharge} places={places.data} />
+        <h2 className="now-h2">This week</h2>
+        {week ? <NowWeek week={week} animate={animate} />
+          : failed ? <p className="now-alert" role="alert">This week could not be loaded.{' '}
+            <button type="button" className="now-retry" onClick={retry}>Retry</button></p>
+          : <div className="now-skel" style={{ height: 220, borderRadius: 18 }} aria-busy="true" aria-label="Loading this week" />}
+      </div>
     </div>
-    <div className="now-secondary">
-      <NowOdometer odometerMi={vehicleReading(status, 'odometer_miles')} week={week} animate={animate}
-        weekState={weekTrips.isError || weekCharges.isError ? 'error' : week ? 'ready' : 'loading'}
-        onRetry={() => { void weekTrips.refetch(); void weekCharges.refetch(); }} />
-      <NowAttention items={attentionItems(insights)} />
-      <NowStoryRail vehicleId={vehicle.id} trip={latestTrip} charge={latestCharge} park={park} insights={insights}
-        now={now} animate={animate}
-        loading={latestTrips.isLoading || latestCharges.isLoading || parks.isLoading}
-        failed={latestTrips.isError && latestCharges.isError}
-        onRetry={() => { void latestTrips.refetch(); void latestCharges.refetch(); void parks.refetch(); }} />
-    </div>
+    {month && <NowMonth month={month} />}
   </div>;
 }
-

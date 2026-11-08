@@ -43,7 +43,7 @@ vi.mock('../components/layout/NoVehicleState', () => ({
 }));
 vi.mock('../components/feedback/toast', () => ({ emitToast: vi.fn() }));
 vi.mock('../features/r-experience/RVehicleOrbit', () => ({
-  RVehicleOrbit: ({ label }: { label: string }) => <div role="slider" aria-label={label} aria-valuenow={260} />,
+  RVehicleTurn: ({ label }: { label: string }) => <div role="slider" aria-label={label} aria-valuenow={260} />,
 }));
 vi.mock('@riviamigo/hooks', () => ({
   useResolvedVehicleSelection: () => ({

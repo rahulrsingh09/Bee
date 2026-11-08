@@ -43,7 +43,10 @@ export function getVehicleArtworkFallback(
   usage: VehicleArtworkUsage,
 ): string | null {
   const normalizedModel = normalizeVehicleArtworkModel(model);
-  return normalizedModel ? VEHICLE_ARTWORK_FALLBACKS[normalizedModel][usage] : null;
+  // The packaged "r2s" pictures show an R1S body. An R2 shows only the owner's own
+  // images, or a neutral placeholder, never another model.
+  if (!normalizedModel || normalizedModel === 'r2') return null;
+  return VEHICLE_ARTWORK_FALLBACKS[normalizedModel][usage];
 }
 
 export interface ResolvedVehicleArtwork {

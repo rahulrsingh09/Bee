@@ -1,9 +1,9 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import type { Vehicle } from '@riviamigo/types';
+import type { Vehicle, VehicleImages } from '@riviamigo/types';
 import {
-  api, AuthenticatedVehicleArtwork, queryKeys, resolveVehicleArtwork, useAuthReady, useVehicleArtwork,
-  type ResolvedVehicleArtwork,
+  api, AuthenticatedVehicleArtwork, normalizeVehicleArtworkModel, queryKeys, readStoredVehicleImages,
+  resolveVehicleArtwork, storeVehicleImages, useAuthReady, useVehicleArtwork, type ResolvedVehicleArtwork,
 } from '@riviamigo/hooks';
 import { useDocumentTheme } from '@riviamigo/ui/hooks';
 import {
@@ -394,35 +394,72 @@ export function RVehicleOrbit({ vehicleId, label = ORBIT_LABEL, glide = true, on
 export function useOwnerAngles(vehicle: Pick<Vehicle, 'id' | 'model' | 'images'>) {
   const authReady = useAuthReady();
   const dark = useDocumentTheme();
+  // The image list kept from an earlier visit shows the owner's car at once; the server list replaces it.
+  const stored = React.useMemo(() => readStoredVehicleImages<VehicleImages>(vehicle.id), [vehicle.id]);
   const images = useQuery({
     queryKey: queryKeys.vehicle.images(vehicle.id),
     queryFn: () => api.vehicleImages(vehicle.id),
     enabled: authReady,
+    initialData: stored ?? undefined,
+    initialDataUpdatedAt: 0,
     staleTime: 10 * 60 * 1000,
     retry: 1,
     refetchOnWindowFocus: false,
+    // A mirror that is still filling (the server answers 202) is asked again until it is ready.
+    refetchInterval: query => {
+      const status = query.state.data?.cache?.status;
+      return status && status !== 'ready' ? 5_000 : false;
+    },
   });
+  const cache = images.data?.cache?.status;
+  React.useEffect(() => {
+    if (images.data && images.dataUpdatedAt > 0 && (!cache || cache === 'ready')) storeVehicleImages(vehicle.id, images.data);
+  }, [cache, images.data, images.dataUpdatedAt, vehicle.id]);
   // The mirrored images from the server first; the images on the vehicle record when the server has fewer than two angles.
   const pick = (source: Vehicle['images'] | undefined) => {
     const artwork = resolveVehicleArtwork(source, vehicle.model, 'vehicle-card');
     return { angles: (dark ? artwork.angles?.dark : artwork.angles?.light) ?? [], fallback: artwork.fallback };
   };
-  const cache = images.data?.cache?.status;
-  // A mirror that is still filling or failed (the server answers 202) uses the bundled turn.
-  if (images.data && cache && cache !== 'ready') return { angles: [], fallback: pick(null).fallback };
+  // No image list yet: the first request of the first visit is still out (or waits for sign-in).
+  const pending = images.isPending;
+  if (images.data && cache && cache !== 'ready') return { ...pick(null), pending: true };
   const served = pick(images.data);
-  return served.angles.length >= 2 ? served : pick(vehicle.images);
+  return { ...(served.angles.length >= 2 ? served : pick(vehicle.images)), pending };
+}
+
+/**
+ * A neutral stand-in of the turn's size, used while the owner's images load or when they
+ * are not available. It never shows another model.
+ */
+export function RVehiclePlaceholder({ unavailable = false }: { unavailable?: boolean }) {
+  return (
+    <div className="r-orbit r-orbit-turn" data-mode={unavailable ? 'unavailable' : 'loading'}>
+      <div className="r-orbit-stage r-orbit-placeholder" role="img"
+        aria-label={unavailable ? 'Your car image is not available yet' : 'Loading your car'}>
+        <span className="r-orbit-floor" aria-hidden="true" />
+        <span className="r-orbit-shape" aria-hidden="true" />
+      </div>
+    </div>
+  );
 }
 
 /**
  * The car turn for one vehicle. With at least two of the owner's own Rivian angle images
- * (served from the server's mirror), the turn cross-fades between them; else it uses the
- * bundled 72-frame turn.
+ * (served from the server's mirror, or kept in this browser from an earlier visit), the turn
+ * cross-fades between them.
+ * - An R2 never uses the bundled 72-frame turn, which shows an R1S body: while its images
+ *   load it shows a neutral placeholder, and with one image it shows that image alone.
+ * - Other models keep the bundled turn when they have no owner images.
  */
 export function RVehicleTurn({ vehicle, label = ORBIT_LABEL, glide = true }: {
   vehicle: Pick<Vehicle, 'id' | 'model' | 'images'>; label?: string; glide?: boolean;
 }) {
-  const { angles, fallback } = useOwnerAngles(vehicle);
+  const { angles, fallback, pending } = useOwnerAngles(vehicle);
   if (angles.length >= 2) return <RVehicleAngles key={vehicle.id} label={label} angles={angles} fallbackSource={fallback} />;
-  return <RVehicleOrbit key={vehicle.id} vehicleId={vehicle.id} label={label} glide={glide} />;
+  if (normalizeVehicleArtworkModel(vehicle.model) !== 'r2') {
+    return <RVehicleOrbit key={vehicle.id} vehicleId={vehicle.id} label={label} glide={glide} />;
+  }
+  if (pending) return <RVehiclePlaceholder />;
+  if (angles.length === 1) return <RVehicleAngles key={vehicle.id} label={label} angles={angles} fallbackSource={null} />;
+  return <RVehiclePlaceholder unavailable />;
 }

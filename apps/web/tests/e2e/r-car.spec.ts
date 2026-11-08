@@ -11,7 +11,9 @@ for (const width of [390, 1280]) {
     await page.goto('/vehicle-health');
     await expect(page.getByRole('heading', { level: 1, name: 'Car' })).toBeVisible();
     await expect(page.getByText('R2 Performance · Catalina Cove · 21" Tungsten wheels')).toBeVisible();
-    await expect(page.getByRole('slider', { name: /Turn the car/ })).toBeVisible();
+    // The fixture R2 has no owner images: a neutral placeholder, never the bundled R1S turn.
+    await expect(page.getByRole('img', { name: 'Your car image is not available yet' })).toBeVisible();
+    await expect(page.locator('.r-car canvas, .r-car .r-orbit-poster')).toHaveCount(0);
     for (const name of ['Tires', 'Closures', 'Vehicle health', 'Data health', 'Software history']) {
       await expect(page.getByRole('heading', { level: 2, name, exact: true })).toBeVisible();
     }

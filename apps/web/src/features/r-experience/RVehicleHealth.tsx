@@ -38,7 +38,7 @@ import { emitToast } from '../../components/feedback/toast';
 import { RAppLayout, RPageActions } from './RAppLayout';
 import { RMissedDrives } from './RMissedDrives';
 import { RSettingsEntry } from './RSettingsNavigation';
-import { RVehicleOrbit } from './RVehicleOrbit';
+import { RVehicleTurn } from './RVehicleOrbit';
 import { vehicleReading } from './readings';
 import { vehicleLockReading } from './vehicleLockReading';
 import './r-health.css';
@@ -126,7 +126,7 @@ function CarContent({ vehicle, health }: { vehicle: Vehicle; health: VehicleHeal
       <div className="r-car-grid">
         <div className="r-car-column">
           <div className="r-car-turn">
-            <RVehicleOrbit vehicleId={vehicle.id} label="Turn the car. Drag it, or use the left and right arrow keys." />
+            <RVehicleTurn vehicle={vehicle} label="Turn the car. Drag it, or use the left and right arrow keys." />
           </div>
           <dl className="r-car-spec">
             <div><dt>Odometer</dt><dd>{odometer === null ? 'Not reported' : formatMiles(odometer)}</dd></div>

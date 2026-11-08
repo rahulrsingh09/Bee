@@ -74,3 +74,6 @@ export {
   useRevokeOtherAuthSessions,
   useTriggerChargeBackfill,
 } from './useRAccount';
+export {
+  clearStoredArtwork, isImmutableArtwork, readStoredVehicleImages, storeVehicleImages,
+} from './ownerArtworkStore';

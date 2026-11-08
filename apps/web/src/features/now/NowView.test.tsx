@@ -191,17 +191,12 @@ describe('Now page, parked', () => {
 });
 
 describe('Now car turn', () => {
-  it('uses the bundled turn without owner images: one slider, no buttons, keys turn the car', () => {
-    renderNow();
-    const slider = screen.getByRole('slider', { name: ORBIT_LABEL });
+  it('never shows the bundled R1S turn for an R2 without owner images: a neutral placeholder instead', async () => {
+    const { container } = renderNow();
+    expect(await screen.findByRole('img', { name: 'Your car image is not available yet' })).toBeInTheDocument();
+    expect(screen.queryByRole('slider')).toBeNull();
+    expect(container.querySelector('.r-orbit-poster, canvas')).toBeNull();
     expect(screen.queryByRole('button', { name: /Front|Side|Replay|Reset/ })).toBeNull();
-    expect(slider).toHaveAttribute('aria-valuenow', '280');
-    fireEvent.keyDown(slider, { key: 'ArrowRight' });
-    expect(slider).toHaveAttribute('aria-valuenow', '290');
-    fireEvent.keyDown(slider, { key: 'Home' });
-    expect(slider).toHaveAttribute('aria-valuenow', '325');
-    fireEvent.keyDown(slider, { key: 'End' });
-    expect(slider).toHaveAttribute('aria-valuenow', '280');
   });
 
   it('turns through the owner angle images when the server has them', async () => {
@@ -213,12 +208,22 @@ describe('Now car turn', () => {
     fireEvent.keyDown(slider, { key: 'ArrowRight' });
     expect(slider).not.toHaveAttribute('aria-valuetext', 'Side');
   });
-  it('keeps the bundled turn while the server image mirror is still filling', async () => {
+  it('shows the loading placeholder, not the bundled turn, while the server image mirror is still filling', async () => {
     mocks.images = { ...ownerImages, cache: { status: 'repairing' } };
     const { container } = renderNow();
     await act(async () => {});
-    expect(screen.getByRole('slider', { name: ORBIT_LABEL })).toBeInTheDocument();
-    expect(container.querySelectorAll('img.r-orbit-angle')).toHaveLength(0);
+    expect(screen.getByRole('img', { name: 'Loading your car' })).toBeInTheDocument();
+    expect(screen.queryByRole('slider', { name: ORBIT_LABEL })).toBeNull();
+    expect(container.querySelectorAll('img.r-orbit-angle, .r-orbit-poster')).toHaveLength(0);
+  });
+
+  it('shows the owner images kept from an earlier visit at once, before the server answers', async () => {
+    localStorage.setItem('r-owner-images:v1:owner-vehicle', JSON.stringify(ownerImages));
+    mocks.images = new Promise(() => {});
+    const { container } = renderNow();
+    await waitFor(() => expect(container.querySelectorAll('img.r-orbit-angle, .r-orbit-stage').length).toBeGreaterThan(0));
+    expect(screen.queryByRole('img', { name: 'Loading your car' })).toBeNull();
+    expect(container.querySelector('.r-orbit-poster, canvas')).toBeNull();
   });
 });
 

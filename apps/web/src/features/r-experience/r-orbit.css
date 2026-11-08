@@ -13,3 +13,12 @@
 .r-orbit-stage > img.r-orbit-angle { opacity: 0; transition: opacity 180ms ease; }
 .r-orbit-stage > img.r-orbit-angle[data-active] { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .r-orbit-stage > img.r-orbit-angle { transition: none; } }
+
+/* Placeholder while the owner's images load, or when they are not available: a soft car-sized shape, never another model. */
+.r-orbit-turn .r-orbit-placeholder { cursor: default; }
+.r-orbit-shape { position: absolute; left: 13%; right: 13%; top: 36%; bottom: 17%; border-radius: 42% 46% 14% 14% / 60% 60% 18% 18%;
+  background: linear-gradient(100deg, color-mix(in srgb, var(--rm-text-primary) 5%, transparent) 30%, color-mix(in srgb, var(--rm-text-primary) 11%, transparent) 50%, color-mix(in srgb, var(--rm-text-primary) 5%, transparent) 70%);
+  background-size: 300% 100%; animation: r-orbit-shimmer 1.4s linear infinite; }
+.r-orbit-turn[data-mode="unavailable"] .r-orbit-shape { animation: none; }
+@keyframes r-orbit-shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .r-orbit-shape { animation: none; } }

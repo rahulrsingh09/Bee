@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { api } from './api';
 import { isLocalArtworkSource } from './outboundPolicy';
+import { readStoredArtwork, storeArtwork } from './ownerArtworkStore';
 
 type ArtworkAsset = {
   blob: Blob;
@@ -41,11 +42,14 @@ export function useVehicleArtwork(source: string | null | undefined) {
     retry: false,
     refetchInterval: (query) => (query.state.data?.restoring ? 3_000 : false),
     queryFn: async (): Promise<ArtworkAsset> => {
+      // A kept copy of a checksum-revisioned owner image shows at once on a later visit.
+      const stored = await readStoredArtwork(source!);
+      if (stored) return { blob: stored, restoring: false };
       const response = await api.authenticatedAsset(source!);
-      return {
-        blob: await response.blob(),
-        restoring: response.status === 202,
-      };
+      const blob = await response.blob();
+      const restoring = response.status === 202;
+      if (!restoring && response.ok) void storeArtwork(source!, blob);
+      return { blob, restoring };
     },
   });
 
@@ -90,8 +94,10 @@ export function AuthenticatedVehicleArtwork({
     setPrimaryFailed(false);
   }, [source]);
 
+  // While the owner image loads, show nothing rather than the packaged model
+  // artwork: a packaged picture can show a different body for a moment.
   const primaryUnavailable =
-    primaryArtwork.isError || !primaryArtwork.src;
+    primaryArtwork.isError || (!primaryArtwork.src && !primaryArtwork.isLoading);
   const usingFallback =
     Boolean(fallbackArtwork.src) &&
     (primaryFailed || primaryArtwork.restoring || primaryUnavailable);

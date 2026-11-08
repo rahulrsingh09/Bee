@@ -131,16 +131,19 @@ test('changing vehicle clears old readings until the selected vehicle snapshot a
   await expect(page.locator('.now-batt')).toContainText('20%');
 });
 
-test('an R2 without owner images shows its packaged R2 artwork, never the bundled orbit frames', async ({ page }) => {
+test('an R2 without owner images shows a neutral placeholder, never the bundled orbit frames or a packaged picture', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await installRFixture(page);
   const packs: string[] = [];
-  page.on('request', request => { if (bundledOrbitAsset(request)) packs.push(request.url()); });
+  page.on('request', request => {
+    if (bundledOrbitAsset(request) || /\/vehicle-images\/fallbacks\//.test(new URL(request.url()).pathname)) packs.push(request.url());
+  });
   await page.goto('/');
-  await expect(page.getByRole('slider', { name: 'Turn the car. Drag it, or use the left and right arrow keys.' })).toBeVisible();
-  await expect(page.locator('.now-car canvas')).toHaveCount(1);
-  await expect.poll(() => packs.some(url => /r2-orbit/.test(url))).toBe(true);
-  await expect(page.locator('.r-orbit-angle')).toHaveCount(0);
+  await expect(page.locator('.now-batt')).toContainText('68%');
+  await expect(page.getByRole('img', { name: 'Your car image is not available yet' })).toBeVisible();
+  await expect(page.getByRole('slider', { name: 'Turn the car. Drag it, or use the left and right arrow keys.' })).toHaveCount(0);
+  await expect(page.locator('.now-car canvas, .r-orbit-poster, .r-orbit-angle')).toHaveCount(0);
+  expect(packs).toEqual([]);
 });
 
 test('cached vehicle readings retain visible browser reconnection status', async ({ page }) => {

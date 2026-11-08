@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { api } from './api';
+import { clearStoredArtwork } from './ownerArtworkStore';
 
 const EXPLICIT_LOGOUT_INTENT_KEY = 'rm-explicit-logout-intent';
 let fallbackExplicitLogoutIntent = false;
@@ -161,6 +162,7 @@ export const useAuth = create<AuthState>()(
       logout: async () => {
         recordExplicitLogoutIntent();
         get().clearSession();
+        void clearStoredArtwork();
         try { await api.logout(); } catch { /* session state is already cleared */ }
       },
 

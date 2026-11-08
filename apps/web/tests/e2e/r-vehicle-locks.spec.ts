@@ -21,8 +21,9 @@ for (const width of [393, 1280]) for (const mode of ['dark', 'light'] as const) 
     await expect.poll(() => shackle.evaluate(e => getComputedStyle(e).transform)).not.toBe('none');
     expect(await shackle.evaluate(e => getComputedStyle(e).transitionDuration)).toBe('0.36s');
     await expect(page.locator('.r-door-status, .r-door-sheet, .r-orbit-openings')).toHaveCount(0);
-    // The fixture R2 has no owner images: it turns with the bundled frames.
-    await expect(page.locator('.now-car canvas')).toHaveCount(1);
+    // The fixture R2 has no owner images: a neutral placeholder, never the bundled R1S frames.
+    await expect(page.locator('.now-car canvas')).toHaveCount(0);
+    await expect(page.getByRole('img', { name: 'Your car image is not available yet' })).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath('vehicle-unlocked.png') });
     await page.emulateMedia({ reducedMotion: 'reduce' });
     expect(await shackle.evaluate(e => parseFloat(getComputedStyle(e).transitionDuration))).toBeLessThanOrEqual(0.001);

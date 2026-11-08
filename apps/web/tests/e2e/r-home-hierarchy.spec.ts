@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { installRFixture } from './r-experience.fixture';
 
 /** Now-page reads that the shared fixture does not answer. Times are relative to the test run. */
-async function installNowData(page: Page, options: { ownerArtwork?: boolean } = {}) {
+async function installNowData(page: Page, options: { ownerArtwork?: boolean | 'revisioned'; model?: string } = {}) {
   const now = Date.now();
   const hoursAgo = (hours: number) => new Date(now - hours * 3_600_000).toISOString();
   const trips = [
@@ -33,11 +33,12 @@ async function installNowData(page: Page, options: { ownerArtwork?: boolean } = 
     range_lost_per_hour_mi: 1.4, energy_drained_kwh: 3.5, avg_power_w: 400, has_reduced_range: false, validation_status: 'validated',
     validation_reason: null, sample_count: 40, start_sample_at: null, end_sample_at: null, movement_detected: false,
   }] } }));
-  if (options.ownerArtwork) await page.route(/\/v1\/vehicles(\?|$)/, route => route.fulfill({ json: { vehicles: [{
+  const images = options.ownerArtwork === 'revisioned' ? REVISIONED_OWNER_IMAGES : options.ownerArtwork ? OWNER_IMAGES : null;
+  if (images || options.model) await page.route(/\/v1\/vehicles(\?|$)/, route => route.fulfill({ json: { vehicles: [{
     id: 'owner-vehicle', user_id: '33333333-3333-4333-8333-333333333333', rivian_vehicle_id: 'fixture-r2', vin: null,
-    model: 'R2', year: null, trim: 'Performance', color: 'Catalina Cove', wheel_option: null, interior_color: null,
+    model: options.model ?? 'R2', year: null, trim: 'Performance', color: 'Catalina Cove', wheel_option: null, interior_color: null,
     battery_capacity_kwh: 88, is_demo: false, display_name: 'Your Rivian', created_at: '2026-01-01T00:00:00Z', membership_role: 'owner',
-    images: OWNER_IMAGES,
+    images,
   }] } }));
   if (options.ownerArtwork) await page.route(/\/v1\/vehicle-image-cache\//, route => route.fulfill({ contentType: 'image/png', body: OWNER_PNG }));
 }
@@ -50,6 +51,12 @@ const ownerImage = (placement: string, design: string) => ({ placement, design, 
 const OWNER_IMAGES = {
   all: ['overhead', 'side-charging', 'rear', 'side', 'front', 'front-three-quarter'].flatMap(placement => ['light', 'dark'].map(design => ownerImage(placement, design))),
   side: { light: ownerImage('side', 'light').url, dark: ownerImage('side', 'dark').url },
+};
+/** The same images with checksum-revisioned mirror names, as production serves them: the browser keeps these. */
+const revisioned = (image: ReturnType<typeof ownerImage>) => ({ ...image, url: image.url.replace(/\.png$/, '-0123456789abcdef.png') });
+const REVISIONED_OWNER_IMAGES = {
+  all: OWNER_IMAGES.all.map(revisioned),
+  side: { light: revisioned(ownerImage('side', 'light')).url, dark: revisioned(ownerImage('side', 'dark')).url },
 };
 
 /** Boxes of every visible text, chip and dock element that overlap the visible car image. */
@@ -100,7 +107,7 @@ for (const width of [320, 390, 901, 1280, 1920]) for (const mode of ['dark', 'li
     await page.setViewportSize({ width, height: 900 });
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const fixture = await installRFixture(page, { mode });
-    await installNowData(page);
+    await installNowData(page, { ownerArtwork: true });
     await page.goto('/');
     // A longer first wait: other work in the same checkout can make the dev server reload once.
     await expect(page.getByRole('heading', { level: 1, name: 'Your Rivian' })).toBeVisible({ timeout: 15_000 });
@@ -170,10 +177,10 @@ test('the battery counts up and fills on view, and shows final values at once wi
   await expect(page.locator('[data-animate]')).toHaveCount(0);
 });
 
-test('without owner images the bundled turn glides 20 degrees on first view and turns by drag, trackpad and keys', async ({ page }) => {
+test('an R1S without owner images uses the bundled turn: it glides 20 degrees on first view and turns by drag, trackpad and keys', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await installRFixture(page, { mode: 'dark' });
-  await installNowData(page);
+  await installNowData(page, { model: 'R1S' });
   await page.goto('/');
   const spin = page.getByRole('slider', { name: 'Turn the car. Drag it, or use the left and right arrow keys.' });
   await expect(spin).toBeVisible();
@@ -203,11 +210,11 @@ test('without owner images the bundled turn glides 20 degrees on first view and 
   expect(overlap.hits).toEqual([]);
 });
 
-test('with reduced motion the bundled turn rests on its view with no glide', async ({ page }) => {
+test('with reduced motion the bundled turn of an R1S rests on its view with no glide', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await installRFixture(page, { mode: 'light' });
-  await installNowData(page);
+  await installNowData(page, { model: 'R1S' });
   await page.goto('/');
   const spin = page.getByRole('slider', { name: 'Turn the car. Drag it, or use the left and right arrow keys.' });
   await expect(spin).toHaveAttribute('aria-valuenow', '280');
@@ -237,6 +244,31 @@ test('the owner images from the server turn with a cross-fade instead of the bun
   await spin.press('Home');
   await expect(spin).toHaveAttribute('aria-valuetext', 'Side');
   await expect(page.locator('.now-car canvas, .r-orbit-poster')).toHaveCount(0);
+});
+
+test('the next visit shows the owner images kept in the browser at once, never the bundled frames', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await installRFixture(page, { mode: 'dark' });
+  await installNowData(page, { ownerArtwork: 'revisioned' });
+  const bundled: string[] = [];
+  page.on('request', request => {
+    const url = new URL(request.url());
+    // Dev-server module requests (`?import`) load code, not pictures.
+    if (/\/r2-(orbit|hero)|\/vehicle-images\/fallbacks\//.test(url.pathname) && !url.searchParams.has('import')) bundled.push(request.url());
+  });
+  await page.goto('/');
+  const car = page.locator('.now-car');
+  await expect(car.locator('img.r-orbit-angle')).toHaveCount(4);
+  await expect(car.locator('img.r-orbit-angle[data-active]')).toHaveAttribute('src', /^blob:/);
+  // The next visit: the server is slow to answer the image list and the image files.
+  await page.route(/\/v1\/vehicles\/[^/]+\/images$/, () => {});
+  await page.route(/\/v1\/vehicle-image-cache\//, () => {});
+  await page.reload();
+  await expect(car.locator('img.r-orbit-angle[data-active]')).toHaveAttribute('src', /^blob:/, { timeout: 10_000 });
+  await expect(car.getByRole('img', { name: 'Loading your car' })).toHaveCount(0);
+  await expect(page.locator('.now-car canvas, .r-orbit-poster')).toHaveCount(0);
+  expect(bundled).toEqual([]);
 });
 
 test('a charging car shows the live charge from real readings', async ({ page }, testInfo) => {

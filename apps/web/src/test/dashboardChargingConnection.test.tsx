@@ -637,8 +637,7 @@ describe('charging connection custom widget', () => {
 
   it.each([
     ['R1T', '/vehicle-images/fallbacks/r1t/charging.webp'],
-    ['R2', '/vehicle-images/fallbacks/r2s/charging.webp'],
-    ['R2S', '/vehicle-images/fallbacks/r2s/charging.webp'],
+    // R2 and R2S get no packaged fallback: the packaged r2s pictures show an R1S body.
   ] as const)('anchors the enlarged dedicated charging fallback for demo %s', (model, fallback) => {
     chargingMocks.forcePluggedState = 'Connected';
     chargingMocks.model = model;

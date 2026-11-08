@@ -34,6 +34,12 @@ export async function installRFixture(page: Page, options: {
   parallaxQuiet?: boolean;
   /** Insights for `/v1/vehicles/{id}/insights`; a function receives the `scope` query. Default: none. */
   insights?: Insight[] | ((scope: string) => Insight[]);
+  /** Shell node: Home and Office places with cost profiles (prod shape: Home per_kwh 0.189119, Office free). */
+  ratePlaces?: boolean;
+  /** Shell node: signed-in sessions of the account; `revoke-others` signs out all but one. */
+  activeSessions?: number;
+  /** Shell node: the account keeps metric units (Settings no longer has a Units section). */
+  metricUnits?: boolean;
 } = {}) {
   const writes: string[] = [];
   const metricRequests: Record<string, unknown>[] = [];
@@ -81,6 +87,10 @@ export async function installRFixture(page: Page, options: {
   const unitPreferences = {
     mode: 'imperial', distance_unit: 'miles', speed_unit: 'mph', temperature_unit: 'fahrenheit',
     pressure_unit: 'psi', altitude_unit: 'feet', place_radius_unit: 'feet', efficiency_display: 'distance_per_energy',
+    ...(options.metricUnits ? {
+      mode: 'metric', distance_unit: 'kilometers', speed_unit: 'kmh', temperature_unit: 'celsius',
+      pressure_unit: 'kpa', altitude_unit: 'meters', place_radius_unit: 'meters',
+    } : {}),
   };
   const trip = (offset = 0) => ({
     id: `trip-${offset + 1}`, vehicle_id: vehicle.id, started_at: '2026-10-08T17:00:00Z',
@@ -93,6 +103,13 @@ export async function installRFixture(page: Page, options: {
     ended_at: '2026-10-08T06:00:00Z', energy_added_kwh: 20, duration_min: 120, cost_usd: null,
     charger_type: 'ac', soc_start: 40, soc_end: 65, peak_power_kw: 11,
   };
+  let activeSessions = options.activeSessions ?? 2;
+  const ratePlace = (id: string, name: string, home: boolean, rate: number, billing: string) => ({
+    id, name, latitude: 47.61, longitude: -122.2, radius_m: 150, is_home: home, is_work: !home,
+    address: { display_name: `${name} address`, osm_id: null, latitude: 47.61, longitude: -122.2, road: null, city: 'Bellevue', state: 'WA', postcode: null, country: 'US', raw: null },
+    charging: { id: `cp-${id}`, name: `${name} charging`, billing_type: billing, rate, session_fee: 0, currency: 'USD', timezone: null, tou_periods: [] as unknown[] },
+  });
+  const ratePlaces = [ratePlace('place-home', 'Home', true, 0.189119, 'per_kwh'), ratePlace('place-office', 'Office', false, 0, 'free')];
   const tags = [{ id: 'tag-1', name: 'Daily commute', color: 'series-02' }, { id: 'tag-2', name: 'Weekend', color: 'series-03' }];
   const assignedTags = new Map<string, string[]>();
   const trips = Array.from({ length: options.tripCount ?? (options.populatedAnalytics ? 3 : 1) }, (_, index) => ({
@@ -390,7 +407,19 @@ export async function installRFixture(page: Page, options: {
     if (path === '/v1/chart-sources') return json([]);
     if (path === '/v1/metrics/catalog') return json({ metrics: [] });
     if (path === '/v1/metrics/series' || path.startsWith('/v1/battery/') || path.startsWith('/v1/efficiency/')) return json([]);
-    if (path === '/v1/places') return json({ places: [] });
+    if (path === '/v1/places') return json({ places: options.ratePlaces ? ratePlaces : [] });
+    if (/^\/v1\/places\/[^/]+$/.test(path) && request.method() === 'PUT') {
+      const index = ratePlaces.findIndex(item => item.id === path.split('/').pop());
+      if (index < 0) return json({ error: { message: 'not found' } }, 404);
+      const body = request.postDataJSON();
+      ratePlaces[index] = { ...ratePlaces[index]!, charging: { ...ratePlaces[index]!.charging, ...body.charging, id: ratePlaces[index]!.charging.id, tou_periods: [] } };
+      return json(ratePlaces[index]);
+    }
+    if (path === '/v1/auth/sessions/revoke-others' && request.method() === 'POST') {
+      const revoked = Math.max(0, activeSessions - 1);
+      activeSessions = 1;
+      return json({ revoked });
+    }
     if (path === '/v1/settings/basemap') return json({ provider: 'none', tile_url: null });
     unsupportedRequests.push(`${request.method()} ${path}`);
     return json({ error: { message: 'This endpoint is unavailable in the local preview.' } }, 404);

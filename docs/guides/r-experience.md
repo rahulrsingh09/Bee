@@ -1,21 +1,35 @@
 ---
 title: Using the R tabs
-description: Find your way through Now, Activity, Insights and Car, enter a charge cost, and open custom dashboards.
+description: Find your way through Now, Activity, Insights and Car, enter a charge cost, and use Settings.
 ---
 
 # Using the R tabs
 
 R is the interface for this fork. It has four tabs: **Now**, **Activity**,
 **Insights** and **Car**. On a phone the tabs are in a dock at the bottom of the
-screen. On a wider screen they are in the top bar.
+screen. On a wider screen they are in a rail on the left.
 
-The top bar also shows the R mark and the data freshness, for example
-"Updated 2 min ago". When the car sends no data for some time, an amber dot and
-"No data for 3 h" show. Select the R mark to go back to Now.
+Settings is at the bottom of the left rail on a wide screen. On a phone, select
+the gear button at the top of a page. Select the sun or moon button to switch
+between light and dark. R saves the choice to your account.
 
-R uses the mode that is saved on your account. To change it, open Car →
-Settings → Units & time → Appearance and select System, Light or Dark. System
-follows your device.
+When your phone or computer is offline, a banner says so and R shows the last
+data it loaded. When R loses the Rivian connection, a red banner says "Rivian
+connection lost." Select **Reconnect** and sign in to Rivian again. After you
+reconnect, R recovers the missed charges from Rivian.
+
+### Settings
+
+Settings has five parts:
+
+- **Account**: change your password, sign out other devices, or sign out.
+- **Sign-in methods**: password and single sign-on (SSO). One method always stays
+  on. Turn off password sign-in only after SSO is set up, tested and linked to
+  your account.
+- **Rivian account**: the connection state, **Reconnect**, and **Recover now**
+  for missed charges.
+- **Charging rates**: the Home and Office price in $ per kWh. Office 0 means free.
+- **Backups**: the last backup. Open it to see the schedule and restore.
 
 ## Now
 
@@ -95,7 +109,7 @@ When Rivian sends no price for a charge, the charge page asks for it.
      the place are priced again with this rate. Before the save, a confirm step
      says this. Select **Save and change** *place* to continue, or **Cancel**.
    - The cost box does not change the Home place or a place with time-of-use
-     rates. Change those prices in **Settings → Places**.
+     rates. Change the Home price in **Settings → Charging rates**.
 5. Select **Save cost**.
 
 You can enter a decimal with a period or one comma ("14.30" or "14,30"). Do
@@ -110,12 +124,11 @@ To change a saved price, select **Edit** on the charge page. Edit also has
 Each price names its method: Billed by Rivian, Your home rate, Place rate,
 Your price, Free, No price or Price pending.
 
-### Set a place rate or a home price
+### Set the Home and Office price
 
-1. Open **Settings → Places**.
-2. Edit the place, for example your home.
-3. In **Charging Rates**, enter the rate in $/kWh, or a schedule of rates.
-4. Save the place.
+1. Open **Settings → Charging rates**.
+2. Enter the Home and Office price in $ per kWh. Enter 0 when charging is free.
+3. Select **Save rates**.
 
 Charges at that place then use its rate. A public DC charge never uses your
 home rate.

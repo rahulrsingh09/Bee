@@ -1,18 +1,10 @@
 import { expect, test } from '@playwright/test';
-import { installRFixture, OVERVIEW_DASHBOARD_PATH } from './r-experience.fixture';
+import { installRFixture } from './r-experience.fixture';
 
 test.use({ viewport: { width: 393, height: 659 }, isMobile: true, hasTouch: true });
 
-test('efficiency changes update actual overview and chart readings immediately', async ({ page }) => {
+test('efficiency changes update chart readings immediately', async ({ page }) => {
   await installRFixture(page, { populatedAdmin: true, populatedAnalytics: true });
-  await page.goto(OVERVIEW_DASHBOARD_PATH);
-  const efficiency = page.locator('.r-efficiency-card');
-  await expect(efficiency.locator('strong')).toHaveText('3.1');
-  await page.getByRole('button', { name: /Toggle efficiency units/ }).click();
-  await expect(efficiency.locator('strong')).toHaveText('320');
-  await expect(efficiency).toContainText('Wh/mi');
-  await page.getByRole('button', { name: /Toggle efficiency units/ }).click();
-  await expect(efficiency.locator('strong')).toHaveText('3.1');
   await page.goto('/efficiency');
   await expect(page.locator('[data-testid="sensor-chip"]').filter({ hasText: 'Efficiency (net)' }).first()).toContainText('3.1 mi/kWh');
   await page.getByRole('button', { name: /Toggle efficiency units/ }).click();
@@ -55,7 +47,7 @@ test('owner-configured R2 rests on the owner side image and turns by touch throu
   await expect(page.locator('.now-car canvas, .r-orbit-poster')).toHaveCount(0);
 });
 
-test('phone Now and Overview keep the odometer and trip totals inside the frame above the dock', async ({ page }, testInfo) => {
+test('phone Now keeps the odometer inside the frame above the bottom bar', async ({ page }, testInfo) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await installRFixture(page, { unknownConfiguration: true, secondVehicle: true, odometer: 123456 });
   await page.goto('/');
@@ -63,25 +55,12 @@ test('phone Now and Overview keep the odometer and trip totals inside the frame 
   await expect(page.getByRole('combobox', { name: 'Select vehicle' }).or(page.getByRole('button', { name: 'Select vehicle' }))).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('iphone-now.png'), fullPage: true });
-  await page.goto(OVERVIEW_DASHBOARD_PATH);
-  await expect(page.locator('.r-trip-instrument').first()).toContainText('Trip distance');
-  await expect(page.locator('.r-snapshot-foot')).toContainText('Odometer 123,456');
-  // An R2 without owner images shows its packaged R2 side artwork, not the bundled orbit frames.
-  await expect(page.locator('.r-static-car img')).toBeVisible();
-  await expect(page.locator('.r-orbit-poster, .r-orbit canvas')).toHaveCount(0);
-  const bounds = await page.locator('.r-trip-instrument').first().evaluate(element => {
-    const parent = element.getBoundingClientRect();
-    const value = element.querySelector('strong')!.getBoundingClientRect();
-    return { fits: value.right <= parent.right + 1, overflow: element.scrollWidth > element.clientWidth + 1 };
-  });
-  expect(bounds).toEqual({ fits: true, overflow: false });
   // The orbit buttons are gone (turning is drag or arrow keys). The dock must still not cover the page end.
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   const dock = (await page.getByRole('navigation', { name: 'Primary navigation' }).boundingBox())!;
   const pageEnd = await page.locator('#r-content > .r-page').evaluate(element => element.getBoundingClientRect().bottom);
   expect(pageEnd).toBeLessThanOrEqual(dock.y + 1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: testInfo.outputPath('iphone-overview.png'), fullPage: true });
 });
 
 for (const mode of ['dark', 'light'] as const) {
@@ -162,93 +141,3 @@ test('selected-trip tagging has room for input and complete action labels', asyn
   await expect(page.getByText('Daily commute').first()).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('iphone-trip-tags.png'), fullPage: true });
 });
-
-test('settings pickers stay inside the phone viewport and restore focus', async ({ page }) => {
-  await installRFixture(page, { populatedAdmin: true, role: 'super_user' });
-  await page.goto('/settings?section=units');
-  await page.getByRole('button', { name: /^Custom/ }).click();
-  const trigger = page.getByRole('button', { name: 'Application time zone', exact: true });
-  await page.getByRole('button', { name: 'Efficiency display', exact: true }).click();
-  await page.keyboard.press('Tab');
-  await expect(trigger).toBeFocused();
-  await trigger.evaluate(element => window.scrollTo(0, scrollY + element.getBoundingClientRect().top - 500));
-  await trigger.click();
-  const menu = page.getByRole('listbox', { name: 'Application time zone' });
-  const bounds = (await menu.boundingBox())!;
-  expect(bounds.x).toBeGreaterThanOrEqual(11);
-  expect(bounds.x + bounds.width).toBeLessThanOrEqual(382);
-  expect(bounds.y).toBeGreaterThanOrEqual(11);
-  expect(bounds.y + bounds.height).toBeLessThanOrEqual(648);
-  await page.keyboard.press('Escape');
-  await expect(trigger).toBeFocused();
-  await expect(menu).toHaveCount(0);
-  await trigger.press('ArrowDown');
-  await expect(menu.getByRole('option', { selected: true })).toBeFocused();
-  const enabled = menu.locator('[role="option"]:not(:disabled)');
-  const currentIndex = await enabled.evaluateAll(elements => elements.findIndex(element => element.getAttribute('aria-selected') === 'true'));
-  const nextOption = enabled.nth((currentIndex + 1) % await enabled.count());
-  const nextLabel = await nextOption.textContent();
-  await page.keyboard.press('ArrowDown');
-  await expect(nextOption).toBeFocused();
-  await page.keyboard.press('Enter');
-  await expect(menu).toHaveCount(0);
-  await expect(trigger).toContainText(nextLabel!.trim());
-  await page.getByRole('button', { name: 'Settings section', exact: true }).click();
-  const section = (await page.getByRole('listbox', { name: 'Settings section' }).boundingBox())!;
-  expect(section.x + section.width).toBeLessThanOrEqual(382);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-});
-
-test('vehicle settings keep Catalina Cove artwork and capture controls fit long names', async ({ page }) => {
-  const name = 'Catalina Cove R2 Performance Family Adventure';
-  await installRFixture(page, { populatedAdmin: true, unknownConfiguration: true, vehicleName: name, role: 'super_user' });
-  await page.goto('/settings?section=vehicles');
-  await expect(page.getByRole('img', { name: 'Catalina Cove R2 Performance with 21-inch wheels' })).toBeVisible();
-  await page.goto('/settings?section=raw');
-  await page.getByRole('button', { name: `Start capture for ${name}` }).click();
-  const stop = page.getByRole('button', { name: `Stop capture for ${name}` });
-  const bounds = (await stop.boundingBox())!;
-  expect(bounds.x + bounds.width).toBeLessThanOrEqual(393);
-  await stop.click();
-  const restart = page.getByRole('button', { name: `Start capture for ${name}` });
-  await expect(restart).toBeVisible();
-  await restart.click();
-  const confirmation = page.getByRole('dialog', { name: 'Replace the previous capture?' });
-  await expect(confirmation).toBeVisible();
-  await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await expect(confirmation).toHaveCount(0);
-  await expect(restart).toBeFocused();
-  await expect(stop).toHaveCount(0);
-  await restart.click();
-  await confirmation.getByRole('button', { name: 'Start new capture', exact: true }).click();
-  await expect(confirmation).toHaveCount(0);
-  await expect(stop).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-});
-
-for (const width of [320, 402]) {
-  test(`connection names and job actions remain visible at ${width}px`, async ({ page }, testInfo) => {
-    await page.setViewportSize({ width, height: 874 });
-    await installRFixture(page, { populatedAdmin: true, role: 'super_user' });
-    await page.goto('/settings?section=external');
-    const connections = page.getByRole('navigation', { name: 'External connections' });
-    for (const button of await connections.getByRole('button').all()) {
-      await button.click();
-      await expect(button).toHaveAttribute('aria-pressed', 'true');
-      expect(await button.evaluate(e => {
-        const box = e.getBoundingClientRect();
-        return box.left >= 0 && box.right <= innerWidth && e.scrollWidth <= e.clientWidth;
-      })).toBe(true);
-    }
-    await connections.screenshot({ path: testInfo.outputPath('connection-options.png') });
-    await page.goto('/settings?section=jobs');
-    const run = page.getByRole('button', { name: 'Run', exact: true });
-    await run.scrollIntoViewIfNeeded();
-    await expect(run).toBeVisible();
-    expect(await run.evaluate(e => {
-      const box = e.getBoundingClientRect();
-      return box.left >= 0 && box.right <= innerWidth && e.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
-    })).toBe(true);
-    await page.screenshot({ path: testInfo.outputPath('jobs-mobile.png') });
-  });
-}

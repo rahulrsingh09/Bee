@@ -162,9 +162,7 @@ test.describe('touch trip inspection', () => {
 });
 
 test('trip readings use the selected metric units', async ({ page }) => {
-  await installRFixture(page, { populatedTrip: true, populatedAdmin: true });
-  await page.goto('/settings?section=units');
-  await page.getByRole('button', { name: /^Metric/ }).click();
+  await installRFixture(page, { populatedTrip: true, populatedAdmin: true, metricUnits: true });
   await page.goto('/trips/trip-1');
   await expect(page.getByTestId('trip-distance')).toContainText('32.2km');
   await expect(page.locator('[data-trip-tile="Efficiency"]')).toContainText('5.0km/kWh');
@@ -188,9 +186,7 @@ test('trip readings use the selected metric units', async ({ page }) => {
 for (const width of [393, 1440]) {
   test(`all efficiency variants render populated metric readings at ${width}px`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 900 });
-    await installRFixture(page, { populatedAnalytics: true, populatedAdmin: true, mode: 'dark' });
-    await page.goto('/settings?section=units');
-    await page.getByRole('button', { name: /^Metric/ }).click();
+    await installRFixture(page, { populatedAnalytics: true, populatedAdmin: true, mode: 'dark', metricUnits: true });
     await page.goto('/efficiency');
     const widget = page.locator('[data-widget-id="d3000003-0000-0000-0000-000000000005"]');
     await widget.scrollIntoViewIfNeeded();

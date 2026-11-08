@@ -1,9 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { installGraphFixture } from './r-default-graphs.fixture';
-import { OVERVIEW_DASHBOARD_PATH } from './r-experience.fixture';
-
-const pathFor = (slug: string) => slug === 'dashboard' ? OVERVIEW_DASHBOARD_PATH : `/${slug}`;
 
 for (const width of [393, 1280]) {
   test(`chart favorites start selected and persist independently of pinned graphs ${width}`, async ({ page }) => {
@@ -20,8 +17,8 @@ for (const width of [393, 1280]) {
       await card.scrollIntoViewIfNeeded();
       await expect(card.getByRole('button', { name: 'Chart options' })).toHaveCount(1);
     };
-    for (const slug of ['dashboard', 'battery', 'charging', 'efficiency']) {
-      await page.goto(pathFor(slug));
+    for (const slug of ['battery', 'charging', 'efficiency']) {
+      await page.goto(`/${slug}`);
       await showCatalog(slug);
       const picker = page.getByRole('button', { name: 'Chart', exact: true });
       await picker.scrollIntoViewIfNeeded();
@@ -33,8 +30,8 @@ for (const width of [393, 1280]) {
       await page.keyboard.press('Escape');
     }
     expect(fixture.writes).toEqual([]);
-    await page.goto(OVERVIEW_DASHBOARD_PATH);
-    await showCatalog('dashboard');
+    await page.goto('/battery');
+    await showCatalog('battery');
     const picker = page.getByRole('button', { name: 'Chart', exact: true });
     await picker.scrollIntoViewIfNeeded();
     await picker.click();
@@ -44,12 +41,12 @@ for (const width of [393, 1280]) {
     await expect(page.getByRole('button', { name: `${title} is the default chart` })).toHaveAttribute('aria-pressed', 'true');
     await expect.poll(() => fixture.writes.filter(w => w === 'PUT /v1/auth/preferences/chart-favorites').length).toBe(1);
     await page.reload();
-    await showCatalog('dashboard');
+    await showCatalog('battery');
     await expect(picker).toContainText(title);
     await picker.click();
     await expect(page.getByRole('button', { name: `${title} is the default chart` })).toHaveAttribute('aria-pressed', 'true');
     await page.keyboard.press('Escape');
-    const dashboard = JSON.parse(readFileSync(new URL('../../../../packages/dashboards/src/defaults/dashboard.json', import.meta.url), 'utf8'));
+    const dashboard = JSON.parse(readFileSync(new URL('../../../../packages/dashboards/src/defaults/battery.json', import.meta.url), 'utf8'));
     for (const widget of dashboard.widgets.filter((w: { options?: { showPicker?: boolean } }) => w.options?.showPicker === false)) {
       await page.locator(`[data-widget-id="${widget.id}"]`).scrollIntoViewIfNeeded();
       await expect(page.locator(`[data-widget-id="${widget.id}"] [data-chart-id="${widget.options.chartId}"]`)).toHaveCount(1);

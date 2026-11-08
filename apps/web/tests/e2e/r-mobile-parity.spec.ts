@@ -13,7 +13,7 @@ test('efficiency changes update actual overview and chart readings immediately',
   await expect(efficiency).toContainText('Wh/mi');
   await page.getByRole('button', { name: /Toggle efficiency units/ }).click();
   await expect(efficiency.locator('strong')).toHaveText('3.1');
-  await page.goto('/efficiency');
+  await page.goto('/d/efficiency');
   await expect(page.locator('[data-testid="sensor-chip"]').filter({ hasText: 'Efficiency (net)' }).first()).toContainText('3.1 mi/kWh');
   await page.getByRole('button', { name: /Toggle efficiency units/ }).click();
   await expect(page.locator('[data-testid="sensor-chip"]').filter({ hasText: 'Efficiency (net)' }).first()).toContainText('320 Wh/mi');

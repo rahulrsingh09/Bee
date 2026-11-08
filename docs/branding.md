@@ -120,7 +120,7 @@ There is no appearance gallery, Theme Studio entry or interface selector.
   within the card; wrapping legends reserve their measured height.
 - Custom dashboards (`/d/<slug>`) keep their saved geometry and
   constrained-widget scrolling. The dashboard library is in Settings →
-  Dashboards; Insights → Custom dashboards opens it. Editing keeps add and
+  Dashboards; Insights does not link to it. Editing keeps add and
   remove, sizes and options. Dashboard tools keep duplication, export and
   import. An imported dashboard opens as a personal copy after confirmation.
 - Multi-trip maps assign colors before filtering selection so a route keeps its
@@ -139,8 +139,8 @@ There is no appearance gallery, Theme Studio entry or interface selector.
 - A detail page keeps the tab of the list that opens it:
   - Activity: `/trips`, a trip (`/trips/<id>`) and a charge
     (`/charging/<id>`).
-  - Insights: `/insights`, `/charging`, `/battery` and its sections,
-    `/efficiency`, custom dashboards (`/d/<slug>`) and `/settings/charts`.
+  - Insights: `/insights` and its tabs, `/charging`, the `/battery` and
+    `/efficiency` redirects, custom dashboards (`/d/<slug>`) and `/settings/charts`.
   - Car: `/vehicle-health` and the other Settings pages.
 - Up to 900 px wide, the tabs are a dock at the bottom of the screen. The dock
   is 66 px tall, at most 410 px wide, and sits above the safe area. Each tab is
@@ -150,9 +150,11 @@ There is no appearance gallery, Theme Studio entry or interface selector.
 - The top bar shows only the R mark (a link to Now) and the data freshness:
   "Updated 2 min ago", or an amber dot and "No data for 3 h" when telemetry is
   stale. The top bar has no theme, Settings or Sign out icons.
-- The Insights hub is one list of rows (title and one line): Cost, Battery,
-  Parked loss, Efficiency and Custom dashboards. Lifetime is added when its
-  page exists.
+- Insights has five tabs in a one-line segmented control: Cost, Charging,
+  Battery, Efficiency and Lifetime (`/insights/<tab>`; `/insights` opens Cost).
+  `/battery`, `/battery/phantom-drain` and `/efficiency` redirect to their tab.
+  Insights has no custom-dashboard or chart-editor entry. See
+  [Insights charts](#insights-charts).
 - Settings is a labelled row at the bottom of the Car tab. Sign out is in
   Settings → Account.
 - `/explore` redirects to `/insights`. There is no Explore tab.
@@ -541,12 +543,24 @@ for the map and for tag edits. Numbers use tabular figures in the app font, not
 monospace. The Mode chip and column show only for a mode that is not the
 default (All-Purpose). Phones show no Rows select; the paging buttons stay.
 
-### Battery section navigation and default analytics
+### Insights charts
 
-Battery overview and Parked loss use a restrained, underlined section
-navigation with 44px minimum targets. Section links use exact route matching,
-so only one is active. Both pages select the Insights tab; see
-[R navigation](#r-navigation).
+Insights cards use one chart kit (`apps/web/src/features/insights/chartKit.tsx`)
+and styles scoped with `ri-` (`insights.css`).
+
+- Every chart shows a tooltip on hover or tap. A chart with a table has
+  "Show as table". "Expand" opens the chart full screen with its table;
+  Escape or Close returns focus to the button.
+- Place colors are the dataviz palette: Home blue, Office orange, Other aqua,
+  each with a light and a dark step. Battery-level charts use the accent.
+- Values in the efficiency unit follow the unit switch (Wh/mi, mi/kWh,
+  kWh/100 mi). Trips under 3 mi are left out of efficiency.
+- The Places card tags a place Home, Office or Other. The tag applies to every
+  charge at the place: it sets the place flags and copies the Home or Office
+  rate, then links each charge to the place so the server prices it again.
+- The parked-battery card is titled "Parked loss".
+
+### Default analytics
 
 Default analytics use individual, editable chart cards instead of hiding the
 entire set behind a picker. Battery, Charging and Efficiency show their

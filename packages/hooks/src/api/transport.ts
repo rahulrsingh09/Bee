@@ -2124,6 +2124,18 @@ export class AuthenticatedTransport {
       }
     }
   }
+
+  /**
+   * Tags the charge and every charge at the same place Home, Office or Other.
+   * The server links Home and Office to the saved Home or Office place and prices the charges again.
+   */
+  async applyChargePlaceTag(
+    vehicleId: string,
+    sessionId: string,
+    tag: 'home' | 'office' | 'other',
+  ): Promise<{ tag: string; place_id: string | null; updated: number; session_ids: string[] }> {
+    return this.request('POST', `/v1/vehicles/${vehicleId}/charging-sessions/${sessionId}/place-tag`, { tag });
+  }
 }
 
 export const transport = new AuthenticatedTransport();

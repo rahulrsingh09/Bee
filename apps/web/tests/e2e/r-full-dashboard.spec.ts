@@ -2,8 +2,8 @@ import { expect, test } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { installRFixture, OVERVIEW_DASHBOARD_PATH } from './r-experience.fixture';
 
-// "/" is the Now page. The former Home grid is the bundled Overview dashboard. The owner opens it
-// from Insights → Custom dashboards, and it renders on /d/dashboard like any custom dashboard.
+// "/" is the Now page. The former Home grid is the bundled Overview dashboard. It renders on
+// /d/dashboard like any custom dashboard; Insights does not link to custom dashboards.
 
 for (const width of [393, 1280]) {
   for (const mode of ['dark', 'light'] as const) {
@@ -53,22 +53,6 @@ for (const width of [393, 1280]) {
     });
   }
 }
-
-test('the Overview dashboard opens from Insights → Custom dashboards', async ({ page }) => {
-  const fixture = await installRFixture(page, { populatedAdmin: true, populatedAnalytics: true });
-  await page.goto('/insights');
-  await page.getByRole('navigation', { name: 'Insights' }).getByRole('link', { name: /^Custom dashboards/ }).click();
-  await expect(page).toHaveURL(/\/settings\?section=dashboards$/);
-  const overview = page.getByText(/^dashboard · \d+ widgets$/).locator('xpath=../..');
-  await overview.getByRole('button', { name: 'Open default', exact: true }).click();
-  await expect(page).toHaveURL(/\/d\/dashboard\?dashboardId=00000000-0000-0000-0000-000000000001$/);
-  await expect(page.getByRole('heading', { name: 'Overview', level: 1 })).toBeVisible();
-  await expect(page.locator('.r-dashboard-surface [data-dashboard-grid]')).toBeVisible();
-  await expect(page.getByText('Something went wrong!')).toHaveCount(0);
-  await expect(page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('link', { name: 'Insights', exact: true }))
-    .toHaveAttribute('aria-current', 'page');
-  expect(fixture.writes).toEqual([]);
-});
 
 test('the Overview dashboard exports its YAML', async ({ page }) => {
   const fixture = await installRFixture(page, { populatedAdmin: true, populatedAnalytics: true });

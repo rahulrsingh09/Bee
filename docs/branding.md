@@ -566,3 +566,35 @@ On the dashboard vehicle widget, while charging, a restrained highlight
 travels across the Battery bar three times when the charging state appears. The percentage, remaining range, charge limit
 and estimated completion remain readable throughout. Reduced motion disables
 the highlight. A connected cable alone must not trigger the charging animation.
+
+### Activity timeline and detail (release 2)
+
+Activity (`/trips`) is one list of trips, charges, parked time and odometer
+gaps. The filters are one line: an All · Trips · Charges segmented control and
+a period select (7 days, 30 days, All time). The URL keeps the filters
+(`f`, `p`); `place` opens the charges at one place, with a removable chip.
+
+- The summary card shows Trip miles (or Charged kWh for Charges), a per-day
+  strip and three metrics. Trips under 3 mi show "Short trip" and stay out of
+  efficiency averages.
+- Rows group by day. A trip row shows its route glyph, "From → To", time,
+  duration, miles and efficiency. A charge row shows the place color (Home,
+  Office, Other), the battery change, kWh and the cost, Free, or "Add cost".
+  Parked rows show 10 h or more with the battery loss. "Odometer moved X mi
+  with no trip recorded" shows an odometer move of 1 mi or more between trips.
+- Names that come from the nearest town are marked: the detail says the town
+  is the nearest town, not an address.
+- Desktop (960 px and wider) is a split view. The header and filters stay
+  fixed; the list column and the detail column scroll on their own
+  (`overscroll-behavior: contain`); the page does not scroll. The newest item
+  opens by default, and a selection keeps the list scroll position.
+- Phone shows the list page, then a full detail page with a back button.
+- The detail header has newer and older buttons and "Trip · N of M".
+- Trip maps use MapLibre with OpenFreeMap Liberty through the API proxy
+  (dark mode recolors Liberty with `darkLiberty`), cooperative gestures and
+  their own attribution line. The replay has play/pause, a scrubber and
+  30× · 60× · 240×; its readout shows time, distance, battery and speed
+  (distance over 5 minutes), and the battery chart cursor follows it.
+- Charge power that comes from battery-level changes is labeled as an estimate.
+
+`/charging` opens Activity with the Charges filter.

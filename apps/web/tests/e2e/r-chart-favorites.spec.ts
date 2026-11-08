@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import { installGraphFixture } from './r-default-graphs.fixture';
 import { OVERVIEW_DASHBOARD_PATH } from './r-experience.fixture';
 
-const pathFor = (slug: string) => slug === 'dashboard' ? OVERVIEW_DASHBOARD_PATH : `/${slug}`;
+// The charging dashboard moved to /d/charging; /charging opens Activity.
+const pathFor = (slug: string) => slug === 'dashboard' ? OVERVIEW_DASHBOARD_PATH : slug === 'charging' ? '/d/charging' : `/${slug}`;
 
 for (const width of [393, 1280]) {
   test(`chart favorites start selected and persist independently of pinned graphs ${width}`, async ({ page }) => {

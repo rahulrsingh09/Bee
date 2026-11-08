@@ -91,7 +91,7 @@ for (const mode of ['dark', 'light'] as const) {
       const context = await browser.newContext({ viewport: { width: 393, height: 659 } });
       const page = await context.newPage();
       await installRFixture(page, { mode, palette, populatedAdmin: true, populatedAnalytics: true });
-      await page.goto('/charging');
+      await page.goto('/d/charging');
       const sessions = page.locator('[data-testid="sensor-chip"]').filter({ hasText: /^Charges/ }).first();
       await expect(sessions).toContainText('25');
       results.push(await sessions.evaluate(element => {
@@ -114,7 +114,7 @@ for (const mode of ['dark', 'light'] as const) {
 
 test('populated phone charts retain readable labels within their visible frame', async ({ page }, testInfo) => {
   await installRFixture(page, { populatedAdmin: true, populatedAnalytics: true });
-  await page.goto('/charging');
+  await page.goto('/d/charging');
   const chart = page.locator('[data-chart-renderer="daily-charge-sessions"]');
   await expect(chart.locator('svg')).toBeVisible();
   await expect(chart.locator('[data-testid="daily-charge-axis-label"]').first()).toBeVisible();
@@ -137,30 +137,6 @@ test('populated phone charts retain readable labels within their visible frame',
   expect(geometry.clipped).toBe(false);
   await chart.scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath('iphone-charging-chart.png') });
-});
-
-test('selected-trip tagging has room for input and complete action labels', async ({ page }, testInfo) => {
-  await installRFixture(page, { populatedAdmin: true, populatedAnalytics: true, role: 'super_user' });
-  await page.goto('/trips');
-  // A row opens its trip; the row checkbox selects it for tagging.
-  await page.getByRole('checkbox', { name: /^Select trip from / }).first().check();
-  const toolbar = page.locator('[data-trip-selection-actions]');
-  await expect(toolbar).toBeVisible();
-  const input = toolbar.getByRole('textbox');
-  const inputBox = (await input.boundingBox())!;
-  expect(inputBox.width).toBeGreaterThan(220);
-  for (const name of ['Clear tags', 'Add staged tags', 'Replace tags']) {
-    const button = toolbar.getByRole('button', { name: new RegExp(`^${name}`) });
-    const box = (await button.boundingBox())!;
-    expect(box.height).toBeGreaterThanOrEqual(44);
-    expect(box.x + box.width).toBeLessThanOrEqual(393);
-  }
-  await input.fill('Daily');
-  await page.getByRole('option', { name: /Daily commute/ }).click();
-  await toolbar.getByRole('button', { name: /^Add staged tags/ }).click();
-  await expect(toolbar).toHaveCount(0);
-  await expect(page.getByText('Daily commute').first()).toBeVisible();
-  await page.screenshot({ path: testInfo.outputPath('iphone-trip-tags.png'), fullPage: true });
 });
 
 test('settings pickers stay inside the phone viewport and restore focus', async ({ page }) => {

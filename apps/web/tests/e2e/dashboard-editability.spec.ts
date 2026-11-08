@@ -52,9 +52,9 @@ const dashboards = new Map<string, DashboardConfig>([
 const routeCases = [
   { path: '/d/overview-fixture', slug: 'dashboard', widgetId: 'd1000001-0000-0000-0000-000000000002' },
   { path: '/battery', slug: 'battery', widgetId: 'd2000002-0000-0000-0000-000000000001' },
-  { path: '/charging', slug: 'charging', widgetId: 'd4000004-0000-0000-0000-000000000001' },
+  { path: '/d/charging', slug: 'charging', widgetId: 'd4000004-0000-0000-0000-000000000001' },
   { path: '/efficiency', slug: 'efficiency', widgetId: 'd3000003-0000-0000-0000-000000000001' },
-  { path: '/trips', slug: 'trips', widgetId: 'd5000005-0000-0000-0000-000000000005' },
+  { path: '/d/trips', slug: 'trips', widgetId: 'd5000005-0000-0000-0000-000000000005' },
   { path: '/d/custom-dashboard', slug: 'custom-dashboard', widgetId: '33333333-3333-3333-3333-333333333333' },
 ] as const;
 
@@ -163,7 +163,7 @@ test.describe('dashboard editability in a browser', () => {
 
   test('fixed-size widgets keep edit and move controls but never expose a resize handle', async ({ page }) => {
     await installApiMocks(page);
-    await page.goto('/charging');
+    await page.goto('/d/charging');
     await page.getByRole('button', { name: 'Edit dashboard' }).click();
     await page.getByRole('button', { name: 'Plugged in' }).click();
 

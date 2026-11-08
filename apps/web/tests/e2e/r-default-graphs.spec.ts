@@ -15,7 +15,8 @@ for (const width of [393, 1280]) for (const mode of ['dark', 'light'] as const) 
     await expect(page.locator('.now h1')).toBeVisible();
     await expect(page.locator('[data-dashboard-grid]')).toHaveCount(0);
     for (const slug of ['dashboard', 'battery', 'charging', 'efficiency']) {
-      await page.goto(slug === 'dashboard' ? OVERVIEW_DASHBOARD_PATH : `/${slug}`);
+      // The charging dashboard moved to /d/charging; /charging opens Activity.
+      await page.goto(slug === 'dashboard' ? OVERVIEW_DASHBOARD_PATH : slug === 'charging' ? '/d/charging' : `/${slug}`);
       const config = JSON.parse(readFileSync(new URL(`../../../../packages/dashboards/src/defaults/${slug}.json`, import.meta.url), 'utf8'));
       const graphs = config.widgets.filter((w: { options?: { showPicker?: boolean } }) => w.options?.showPicker === false);
       for (const widget of graphs) {

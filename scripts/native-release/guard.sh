@@ -23,7 +23,7 @@ exec 2>"$tmp/error"
 url=$(printf '%s' "$DATABASE_URL" | sed 's/options=-c+/options=-c%20/g')
 dir="$root/$sha"
 origin=https://http--telemetry-app--xgzbc28s27dk.code.run
-access=https://riviamigo-private.rahulrsingh09.workers.dev
+access=https://bee-private.rahulrsingh09.workers.dev
 
 sql() {
   psql "$url" -X -qAt -v ON_ERROR_STOP=1 "$@"

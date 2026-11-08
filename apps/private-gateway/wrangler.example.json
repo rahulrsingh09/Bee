@@ -1,5 +1,5 @@
 {
-  "name": "riviamigo-private",
+  "name": "bee-private",
   "main": "dist/worker.mjs",
   "compatibility_date": "2026-10-06",
   "workers_dev": true,
@@ -8,7 +8,7 @@
     "enabled": false
   },
   "vars": {
-    "PUBLIC_ORIGIN": "https://riviamigo-private.YOUR-SUBDOMAIN.workers.dev",
+    "PUBLIC_ORIGIN": "https://bee-private.YOUR-SUBDOMAIN.workers.dev",
     "UPSTREAM_ORIGIN": "https://YOUR-PRIVATE-ORIGIN.code.run",
     "ACCESS_ISSUER": "https://YOUR-TEAM.cloudflareaccess.com",
     "ACCESS_AUDIENCE": "YOUR_ACCESS_APPLICATION_AUDIENCE",

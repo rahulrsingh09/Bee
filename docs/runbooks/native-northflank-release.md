@@ -39,7 +39,7 @@ The former 15-minute deployment trigger must remain disabled.
 - Northflank: **riviamigo-private → Workflows → riviamigo-verified-release**.
   This is the authoritative final release result.
 - Northflank: **Jobs → verified-release-controller** for the deployment step.
-- Cloudflare: the existing `riviamigo-private` Worker and private-access policy.
+- Cloudflare: the existing `bee-private` Worker and private-access policy.
 
 The GitHub release job reports **queued**, not **deployed**. Northflank continues
 after that job exits and records each stage's success or failure. The combined

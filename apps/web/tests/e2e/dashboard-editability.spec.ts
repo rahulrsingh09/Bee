@@ -52,7 +52,7 @@ const dashboards = new Map<string, DashboardConfig>([
 const routeCases = [
   { path: '/battery', slug: 'battery', widgetId: 'd2000002-0000-0000-0000-000000000001' },
   { path: '/charging', slug: 'charging', widgetId: 'd4000004-0000-0000-0000-000000000001' },
-  { path: '/efficiency', slug: 'efficiency', widgetId: 'd3000003-0000-0000-0000-000000000001' },
+  { path: '/d/efficiency', slug: 'efficiency', widgetId: 'd3000003-0000-0000-0000-000000000001' },
   { path: '/trips', slug: 'trips', widgetId: 'd5000005-0000-0000-0000-000000000005' },
 ] as const;
 
@@ -125,7 +125,7 @@ test.describe('dashboard editability in a browser', () => {
 
   test('resizing a non-Overview widget changes the draft and saves a user-owned copy', async ({ page }) => {
     const apiState = await installApiMocks(page);
-    await page.goto('/battery');
+    await page.goto('/d/battery');
     await page.getByRole('button', { name: 'Edit dashboard' }).click();
 
     const widgetId = 'd2000002-0000-0000-0000-000000000001';
@@ -171,7 +171,7 @@ test.describe('dashboard editability on coarse pointers', () => {
 
   test('keeps component controls fully visible and actionable', async ({ page }) => {
     await installApiMocks(page);
-    await page.goto('/battery');
+    await page.goto('/d/battery');
     await page.getByRole('button', { name: 'Edit dashboard' }).click();
 
     const frame = page.locator('[data-widget-id="d2000002-0000-0000-0000-000000000001"]');
@@ -215,9 +215,9 @@ test.describe('mobile app navigation', () => {
     expect((await page.locator('.r-gearbtn').boundingBox())!.height).toBeGreaterThanOrEqual(44);
 
     await insights!.click();
-    await expect(page).toHaveURL(/\/insights$/);
-    await page.getByRole('main').getByRole('link', { name: /^Battery/ }).click();
-    await expect(page).toHaveURL(/\/battery$/);
+    await expect(page).toHaveURL(/\/insights\/cost$/);
+    await page.getByRole('navigation', { name: 'Insights sections' }).getByRole('link', { name: 'Battery', exact: true }).click();
+    await expect(page).toHaveURL(/\/insights\/battery$/);
     await expect(navigation).toBeVisible();
     await expect(insights!).toHaveAttribute('aria-current', 'page');
 
@@ -267,7 +267,7 @@ test.describe('mobile dashboard chart viewer', () => {
       return json(route, []);
     });
 
-    await page.goto('/efficiency');
+    await page.goto('/d/efficiency');
     const chartCatalog = page.locator('[data-widget-id="d3000003-0000-0000-0000-000000000005"]');
     await chartCatalog.scrollIntoViewIfNeeded();
     await chartCatalog.getByRole('button', { name: 'Chart options' }).click();

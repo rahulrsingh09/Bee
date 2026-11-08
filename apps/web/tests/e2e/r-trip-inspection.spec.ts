@@ -254,7 +254,7 @@ test.describe('high-density phone chart labels', () => {
       };
     });
     await installRFixture(page, { populatedAnalytics: true, populatedAdmin: true, mode: 'dark' });
-    await page.goto('/efficiency');
+    await page.goto('/d/efficiency');
     const widget = page.locator('[data-widget-id="d3000003-0000-0000-0000-000000000005"]');
     await widget.scrollIntoViewIfNeeded();
     await widget.locator('button[aria-haspopup="listbox"]').click();

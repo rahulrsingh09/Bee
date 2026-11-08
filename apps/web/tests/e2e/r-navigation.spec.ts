@@ -13,11 +13,10 @@ const activeTab: Array<[string, typeof tabs[number][0]]> = [
   ['/', 'Now'],
   ['/trips', 'Activity'],
   ['/trips/trip-1', 'Activity'],
-  ['/insights', 'Insights'],
+  ['/insights/cost', 'Insights'],
+  ['/insights/battery', 'Insights'],
+  ['/insights/lifetime', 'Insights'],
   ['/charging', 'Insights'],
-  ['/battery', 'Insights'],
-  ['/battery/phantom-drain', 'Insights'],
-  ['/efficiency', 'Insights'],
   ['/vehicle-health', 'Car'],
 ];
 
@@ -93,7 +92,8 @@ for (const width of [390, 1280]) for (const mode of ['dark', 'light'] as const) 
 
     for (const [label, href] of tabs) {
       await nav.getByRole('link', { name: label, exact: true }).click();
-      await expect(page).toHaveURL(new RegExp(`${href === '/' ? '' : href}/?$`));
+      // Insights opens its Cost tab.
+      await expect(page).toHaveURL(href === '/insights' ? /\/insights\/cost$/ : new RegExp(`${href === '/' ? '' : href}/?$`));
       await expect(nav.getByRole('link', { name: label, exact: true })).toHaveAttribute('aria-current', 'page');
       await expect(nav.locator('[aria-current="page"]')).toHaveCount(1);
     }
@@ -113,6 +113,13 @@ for (const width of [390, 1280]) for (const mode of ['dark', 'light'] as const) 
       await page.goto(path);
       await expect(page, path).toHaveURL(target, { timeout: 15_000 });
     }
+    await page.goto('/explore');
+    await expect(page).toHaveURL(/\/insights\/cost$/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Insights' })).toBeVisible();
+    const sections = page.getByRole('navigation', { name: 'Insights sections' });
+    await expect(sections.getByRole('link')).toHaveText(['Cost', 'Charging', 'Battery', 'Efficiency', 'Lifetime']);
+    await expect(page.getByRole('link', { name: /Custom dashboards/ })).toHaveCount(0);
+    await page.screenshot({ path: testInfo.outputPath('insights.png'), fullPage: true });
     const nav = page.getByRole('navigation', { name: 'Primary navigation' });
     for (const [path, label] of activeTab) {
       await visit(page, path);
@@ -170,24 +177,22 @@ test('going offline shows the offline banner, and it clears when back online', a
 });
 
 for (const width of [390, 1280]) {
-  test(`battery section selection is exclusive at ${width}px`, async ({ page }) => {
+  test(`Insights section selection is exclusive at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await installRFixture(page);
     await page.goto('/battery');
-    const sections = page.getByRole('navigation', { name: 'Battery sections' });
-    const overview = sections.getByRole('link', { name: 'Battery overview', exact: true });
-    const drain = sections.getByRole('link', { name: 'Parked loss', exact: true });
+    await expect(page).toHaveURL(/\/insights\/battery$/);
+    const sections = page.getByRole('navigation', { name: 'Insights sections' });
+    const battery = sections.getByRole('link', { name: 'Battery', exact: true });
+    const efficiency = sections.getByRole('link', { name: 'Efficiency', exact: true });
     await expect(sections.locator('[aria-current="page"]')).toHaveCount(1);
-    await expect(overview).toHaveAttribute('aria-current', 'page');
-    await drain.click();
-    await expect(page).toHaveURL(/\/battery\/phantom-drain$/);
+    await expect(battery).toHaveAttribute('aria-current', 'page');
+    await efficiency.click();
+    await expect(page).toHaveURL(/\/insights\/efficiency$/);
     await expect(sections.locator('[aria-current="page"]')).toHaveCount(1);
-    await expect(drain).toHaveAttribute('aria-current', 'page');
+    await expect(efficiency).toHaveAttribute('aria-current', 'page');
     await page.reload();
     await expect(sections.locator('[aria-current="page"]')).toHaveCount(1);
-    await expect(drain).toHaveAttribute('aria-current', 'page');
-    await overview.click();
-    await expect(sections.locator('[aria-current="page"]')).toHaveCount(1);
-    await expect(overview).toHaveAttribute('aria-current', 'page');
+    await expect(efficiency).toHaveAttribute('aria-current', 'page');
   });
 }

@@ -6,6 +6,7 @@ pub mod backup_catalog;
 pub mod backups;
 pub mod basemap_cache;
 pub mod charge_backfill;
+pub mod charge_gaps;
 pub mod charge_payload_identity;
 pub mod charge_session_repair;
 pub mod charge_sessions;

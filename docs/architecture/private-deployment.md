@@ -81,6 +81,22 @@ backup/deployment workflow. New database regressions use the existing
 `authorization_` CI test selection. Other optional backend providers remain denied;
 the separate free map proxy is unchanged.
 
+## Vehicle artwork exception
+
+The owner approved one optional Rivian exchange: the artwork manifest query
+(`getVehicleOrderMobileImages` and `getVehicleMobileImages`) over the existing
+Rivian account connection. `outbound.rs` holds the fixed query text
+(`vehicle_images_request`), and `vehicle_artwork_allowed()` is the only switch.
+`optional_traffic_allowed()` stays `false`, so every other optional provider
+stays denied. The server downloads the listed files and mirrors them in
+`VEHICLE_IMAGE_CACHE_DIR`; the browser loads them only from
+`/v1/vehicle-image-cache/...`. Downloads accept only `https://rivian.com` or
+`https://*.rivian.com` on the default port, without credentials or fragments.
+They use DNS-pinned public addresses, no proxy and no redirects, accept only
+WebP, PNG, JPEG or GIF, and stop at 5 MiB. Vehicle list, status and image
+reads queue a repair when the cache is not ready. Repairs back off from 15
+minutes, doubling per attempt to 6 hours. Unit tests never contact Rivian.
+
 ## Immutable migration ledger
 
 The deployed fork has upstream migrations 1–27 and private checkpoint migration 28.

@@ -107,6 +107,35 @@ live completions also take, and saves nothing when a completion is pending
 owner-driven repair. Do not run `rebuild_vehicle_history` against production:
 it clears all trips first.
 
+## Missed charges
+
+`GET /v1/vehicles/{id}/charge-gaps` lists probable missed charges in the last
+30 days. A parked period is time with no trip (widened by 10 minutes) and no
+charge session (widened by 15 minutes; an open session counts for at most 48
+hours). The last 15 minutes are not scanned. Battery levels from
+`timeseries.telemetry` are averaged in 5-minute buckets. Each parked period of
+30 minutes or more gives at most one gap: its largest rise, if that rise is more
+than 2 points. The response is
+`{ vehicle_id, lookback_days, parked_periods_checked, gaps: [{ start, end,
+battery_from, battery_to }], daily_samples: [{ day, samples }] }`. Gaps are
+newest first (at most 50). `daily_samples` counts telemetry rows per day in the
+app timezone. Members can read it; integration API keys cannot. The route uses
+the heavy-read rate limit. To recover a missed charge, run the charging-history
+backfill (`POST /v1/vehicles/{id}/charging-backfill`).
+
+## Charge place tags
+
+`POST /v1/vehicles/{vehicle_id}/charging-sessions/{id}/place-tag` with
+`{ "tag": "home" | "office" | "other" }` (owner or manager) applies the tag to
+the selected charge and to every charge of the vehicle at the same place: the
+same saved place, or a reported location within 150 m. Home and Office link the
+user's saved place flagged Home or Office (else a place named "Home" or
+"Office"), so that place's cost profile prices the charges. Without such a
+place the request returns `422`. Other removes the saved place and its rate, keeps the reported
+location, and stops automatic re-matching (`location_override_mode = 'none'`).
+Free and manual cost overrides keep precedence. Charges recorded later follow
+the saved place geofence, not this tag.
+
 ## Missing "Time at each speed" data
 
 Trip detail shows the speed distribution as "Time at each speed" (one bar per

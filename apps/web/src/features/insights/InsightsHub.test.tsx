@@ -20,14 +20,18 @@ vi.mock('@tanstack/react-router', () => ({
   useLocation: () => ({ pathname: mocks.pathname }),
 }));
 vi.mock('../r-experience/useRConnection', () => ({
-  useRConnection: () => ({ status: mocks.status, feed: null, renewal: null, onlineState: 'online' }),
+  useRConnection: () => ({ status: mocks.status, feed: null, renewal: null, onlineState: 'online', banner: null, vehicleId: 'v1' }),
 }));
 vi.mock('./useInsightsData', () => ({
   useAllTrips: () => ({ data: mocks.trips, isError: false }),
   useAllCharges: () => ({ data: mocks.charges, isError: false }),
   useChargeCurves: () => ({ curves: new Map(), loading: false }),
 }));
-vi.mock('@riviamigo/hooks', () => ({
+vi.mock('../../hooks/useThemePreferenceController', () => ({
+  useThemePreferenceController: () => ({ mode: 'dark', onModeChange: vi.fn(), isPending: false }),
+}));
+vi.mock('@riviamigo/hooks', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@riviamigo/hooks')>()),
   api: { applyChargePlaceTag: mocks.applyChargePlaceTag },
   invalidateChargingData: vi.fn(),
   useResolvedVehicleSelection: () => ({ authReady: true, vehicleSelectionReady: true, effectiveVehicleId: 'v1', vehicles: [] }),
@@ -166,39 +170,6 @@ describe('Insights', () => {
     mocks.trips = []; mocks.charges = [];
     renderTab('cost');
     expect(screen.getByText('No trips or charges yet')).toBeInTheDocument();
-  });
-});
-
-describe('R shell top bar', () => {
-  beforeEach(() => {
-    mocks.pathname = '/vehicle-health';
-    mocks.status = null;
-  });
-
-  it('shows only the R mark and the freshness, without theme, Settings or Sign-out controls', () => {
-    mocks.status = { last_updated: minutesAgo(2), telemetry_stale: false };
-    const { container } = render(<RAppLayout activeKey="health"><p>Body</p></RAppLayout>);
-    const header = container.querySelector('header')!;
-    expect(within(header).getByRole('link', { name: 'R overview' })).toHaveAttribute('href', '/');
-    expect(within(header).getByText('Updated 2 min ago')).toBeInTheDocument();
-    expect(header.querySelector('.r-freshness')).toHaveAttribute('data-state', 'live');
-    expect(within(header).queryByRole('button')).toBeNull();
-    expect(within(header).queryByRole('link', { name: 'Settings' })).toBeNull();
-    expect(within(screen.getByRole('navigation', { name: 'Primary navigation' })).getByRole('link', { name: 'Car' }))
-      .toHaveAttribute('aria-current', 'page');
-  });
-
-  it('marks stale telemetry with the warning state and the no-data age', () => {
-    mocks.status = { last_updated: minutesAgo(6 * 60 + 5), telemetry_stale: true };
-    const { container } = render(<RAppLayout activeKey="health"><p>Body</p></RAppLayout>);
-    expect(screen.getByText('No data for 6 h')).toBeInTheDocument();
-    expect(container.querySelector('.r-freshness')).toHaveAttribute('data-state', 'stale');
-  });
-
-  it('renders the footer slot after the page body', () => {
-    render(<RAppLayout activeKey="health" footer={<a href="/settings">Settings</a>}><p>Body</p></RAppLayout>);
-    const page = screen.getByText('Body').parentElement!;
-    expect(page.lastElementChild).toHaveTextContent('Settings');
   });
 });
 

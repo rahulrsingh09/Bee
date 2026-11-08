@@ -73,6 +73,9 @@ const insight = (kind: string, values: object, severity = 'attention') => ({ id:
 class NoopObserver { observe() {} disconnect() {} unobserve() {} }
 
 beforeEach(() => {
+  // The fixture events are dated 2026-11-07; pin the clock so 'Today' and the week stay stable on any run date.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-11-07T20:00:00Z'));
   setAppTimezone('UTC');
   vi.stubGlobal('IntersectionObserver', NoopObserver);
   vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false })));
@@ -87,7 +90,7 @@ beforeEach(() => {
   mocks.latestTrip = { id: 'trip-1', started_at: '2026-11-07T17:00:00Z', ended_at: '2026-11-07T17:30:00Z', distance_mi: 18.4, duration_min: 34, efficiency_wh_mi: 320, start_place: 'Office', end_place: 'Home' };
   mocks.schedule = null;
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 function reduceMotion(reduce: boolean) {
   vi.stubGlobal('matchMedia', (query: string) => ({

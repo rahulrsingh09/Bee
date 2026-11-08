@@ -202,3 +202,9 @@ a.r-act-item:hover { background: var(--r-act-s2); }
 .r-act-sheet { position: fixed; z-index: 80; inset: 0; background: var(--rm-bg-overlay); display: grid; place-items: center; padding: 16px; }
 .r-act-sheet-in { width: min(1100px, 100%); max-height: calc(100vh - 32px); overflow: auto; background: var(--r-act-s1); border: 1px solid var(--r-act-line); border-radius: 22px; padding: 16px 18px 22px; }
 .r-act-sheet-h { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 10px; font-size: 17px; }
+
+/* Place tag confirmation: a tag moves every charge at the place, so it saves only after the owner confirms. */
+.r-act-confirm { margin-top: 10px; padding: 12px 14px; border-radius: 14px; background: var(--r-act-s2); border: 1px solid var(--r-act-line); }
+.r-act-confirm p { margin: 0 0 10px; font-size: 13.5px; line-height: 1.45; color: var(--r-act-t2); }
+.r-act-confirm p b { color: var(--r-act-t1); }
+.r-act-confirm-actions { display: flex; flex-wrap: wrap; gap: 8px; }

@@ -220,16 +220,30 @@ describe('Charge detail', () => {
     expect(screen.getByText('= $19.20')).toBeInTheDocument();
   });
 
-  it('tags the place Home for every charge there through the place-tag API', async () => {
+  it('tags the place Home for every charge there through the place-tag API, after the owner confirms', async () => {
     renderPage({ selection: { kind: 'charge', id: 'c2' } });
     fireEvent.click(await screen.findByRole('button', { name: 'Home' }));
+    const confirm = await screen.findByRole('group', { name: /^Tag .+ as Home\?$/ });
+    expect(confirm).toHaveTextContent(/at .+ (moves|move) to Home/);
+    expect(mocks.api.apiFetch).not.toHaveBeenCalledWith('POST', expect.stringContaining('/place-tag'), expect.anything());
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Tag as Home' }));
     await waitFor(() => expect(mocks.api.apiFetch).toHaveBeenCalledWith('POST', '/v1/vehicles/v1/charging-sessions/c2/place-tag', { tag: 'home' }));
+  });
+
+  it('does not save a place tag when the owner cancels', async () => {
+    renderPage({ selection: { kind: 'charge', id: 'c2' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Office' }));
+    const confirm = await screen.findByRole('group', { name: /^Tag .+ as Office\?$/ });
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('group', { name: /^Tag .+ as Office\?$/ })).toBeNull();
+    expect(mocks.api.apiFetch).not.toHaveBeenCalledWith('POST', expect.stringContaining('/place-tag'), expect.anything());
   });
 
   it('asks for an Office place when none is saved and the tag fails', async () => {
     mocks.api.apiFetch.mockRejectedValueOnce(new Error('Save an Office place first'));
     renderPage({ selection: { kind: 'charge', id: 'c2' } });
     fireEvent.click(await screen.findByRole('button', { name: 'Office' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Tag as Office' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Set your Office rate in Settings first.');
   });
 });

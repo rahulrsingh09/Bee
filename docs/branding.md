@@ -455,6 +455,10 @@ Common usage:
 - "Full screen" opens the dashboard chart viewer on every screen size. The expanded viewer is an opaque, safe-area-aware fullscreen surface: its picker and close controls are anchored to opposite viewport edges so they do not consume chart height. They fade after the viewer first becomes available and return on a chart tap or Enter/Space, while the viewer uses a solid accent rotate prompt with large iconography before landscape exploration. The viewer must prevent page scroll, overscroll, and background interaction until it closes.
 - Time and numeric charts support horizontal range selection, touch-first pan and pinch exploration in the viewer, and a conditional top-right icon-only reset control that returns to the full range. Categorical charts keep full category/value detail and touch-safe selection rather than simulating a meaningless zoom level.
 
+### Place tags
+
+- A place tag (Home, Office, Other) moves every charge at the place at once. It saves only after a confirmation that names the place, the number of charges and the price ("Tag Ridgefield as Office? 1 charge at Ridgefield moves to Office and is priced free. A cost you entered on a charge stays."). Cancel saves nothing. Use `placeTagConfirm` (`apps/web/src/lib/placeTagCopy.ts`) for this copy on every surface.
+
 ### Vehicle artwork
 
 - Rivian API artwork remains the primary source. Local model artwork is the final fallback for missing image metadata, protected-image fetch failures, browser image errors, and demo/test vehicles. Packaged fallbacks support R1S and R1T only. The packaged `r2s/` pictures and the bundled orbit frames show an R1S body, so an R2 (and the legacy R2S model value) gets no packaged fallback. Unsupported models keep the neutral vehicle icon.

@@ -136,6 +136,14 @@ location, and stops automatic re-matching (`location_override_mode = 'none'`).
 Free and manual cost overrides keep precedence. Charges recorded later follow
 the saved place geofence, not this tag.
 
+The web app saves a tag only after the owner confirms it. Insights → Cost →
+Places and the charge detail page show "Tag {place} as {Home|Office|Other}?"
+with the number of charges at the place and the price the tag applies. Cancel
+saves nothing. The app has no undo: after a tag, the charges share the saved
+place, so a later tag on any one of them moves the whole group. To correct a
+wrong tag, tag the place again, or restore the rows from the snapshot in a
+guarded database change.
+
 ## Missing "Time at each speed" data
 
 Trip detail shows the speed distribution as "Time at each speed" (one bar per

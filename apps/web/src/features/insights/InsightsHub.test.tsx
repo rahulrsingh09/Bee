@@ -105,10 +105,19 @@ describe('Insights', () => {
     expect(within(rates).getByRole('link', { name: /Change rates in Settings/ })).toHaveAttribute('href', '/settings');
   });
 
-  it('Cost: tagging a place applies to every charge there', async () => {
+  it('Cost: tagging a place applies to every charge there, after the owner confirms the count and the price', async () => {
     renderTab('cost');
-    const group = within(screen.getByRole('region', { name: 'Places' })).getByRole('group', { name: 'Tag Mill Creek' });
+    const places = screen.getByRole('region', { name: 'Places' });
+    const group = within(places).getByRole('group', { name: 'Tag Mill Creek' });
     fireEvent.click(within(group).getByRole('button', { name: 'Home' }));
+    const confirm = within(places).getByRole('group', { name: 'Tag Mill Creek as Home?' });
+    expect(confirm).toHaveTextContent('1 charge at Mill Creek moves to Home and is priced at $0.1891 per kWh. A cost you entered on a charge stays.');
+    expect(mocks.applyChargePlaceTag).not.toHaveBeenCalled();
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Cancel' }));
+    expect(within(places).queryByRole('group', { name: 'Tag Mill Creek as Home?' })).toBeNull();
+    expect(mocks.applyChargePlaceTag).not.toHaveBeenCalled();
+    fireEvent.click(within(group).getByRole('button', { name: 'Home' }));
+    fireEvent.click(within(places).getByRole('button', { name: 'Tag as Home' }));
     await waitFor(() => expect(mocks.applyChargePlaceTag).toHaveBeenCalledWith('v1', 'c-mill-1', 'home'));
     expect(await screen.findByText('Mill Creek is now tagged Home. 1 charge was updated.')).toBeInTheDocument();
     fireEvent.click(within(group).getByRole('button', { name: 'Other' }));

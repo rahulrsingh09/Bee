@@ -167,3 +167,8 @@ table.ri-data td:last-child, table.ri-data th:last-child { text-align: right; }
   .ri-draw { stroke-dashoffset: 0; animation: none; }
   .ri-seg-ink { transition: none; }
 }
+/* Place tag confirmation: a tag moves every charge at the place, so it saves only after the owner confirms. */
+.ri-confirm { grid-column: 1 / -1; padding: 12px 14px; border-radius: 14px; background: var(--ri-s2); border: 1px solid var(--ri-line); }
+.ri-confirm p { margin: 0 0 10px; font-size: 13.5px; line-height: 1.45; color: var(--ri-t2); }
+.ri-confirm p b { color: var(--ri-t1); }
+.ri-confirm-actions { display: flex; flex-wrap: wrap; gap: 8px; }

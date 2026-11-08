@@ -118,6 +118,10 @@ test('Cost shows the total, the unpriced callout and tags a place for every char
   await expect(page.getByRole('link', { name: /1 charge has no cost yet/ })).toHaveAttribute('href', '/charging/charge-mill-1');
   const group = page.getByRole('group', { name: 'Tag Mill Creek' });
   await group.getByRole('button', { name: 'Office' }).click();
+  const confirm = page.getByRole('group', { name: 'Tag Mill Creek as Office?' });
+  await expect(confirm).toContainText('1 charge at Mill Creek moves to Office');
+  expect(fixture.insightWrites).toEqual([]);
+  await confirm.getByRole('button', { name: 'Tag as Office' }).click();
   await expect(page.getByText('Mill Creek is now tagged Office. 1 charge was updated.')).toBeVisible();
   expect(fixture.insightWrites).toEqual(['POST /v1/vehicles/owner-vehicle/charging-sessions/charge-mill-1/place-tag']);
   // The charge now counts at the Office place.

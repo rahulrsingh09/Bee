@@ -10,6 +10,7 @@ import { ExpandableChart, LineChart } from '../../trips/activity/ActivityCharts'
 import { Segmented } from '../../trips/activity/Segmented';
 import { costEntry, type CostEntryMode } from './chargeDetailModel';
 import { usePlaceTag } from './usePlaceTag';
+import { placeTagConfirm } from '../../../lib/placeTagCopy';
 
 export const CATEGORY_COLOR: Record<PlaceCategory, string> = {
   home: 'var(--r-act-home)', office: 'var(--r-act-office)', public: 'var(--r-act-public)',
@@ -184,7 +185,9 @@ function PlaceCard({ charge, here, places, vehicleId, canManage }: {
   const tag = usePlaceTag(vehicleId);
   const [pending, setPending] = React.useState<PlaceCategory | null>(null);
   const [tried, setTried] = React.useState<PlaceCategory | null>(null);
-  const shown = pending ?? charge.category;
+  // A tag moves every charge at the place at once: it saves only after the owner confirms.
+  const [confirm, setConfirm] = React.useState<PlaceCategory | null>(null);
+  const shown = pending ?? confirm ?? charge.category;
   const missing = (category: PlaceCategory) => category !== 'public'
     && !places.some((place) => (category === 'home' ? place.is_home : place.is_work) || place.name.trim().toLocaleLowerCase() === (category === 'home' ? 'home' : 'office'));
   return (
@@ -198,18 +201,33 @@ function PlaceCard({ charge, here, places, vehicleId, canManage }: {
         buttonProps={(option) => ({ 'data-tag': option.value })}
         onChange={(value) => {
           const category = value as PlaceCategory;
-          if (category === charge.category) return;
-          setPending(category);
-          setTried(category);
-          tag.mutate({ sessionId: charge.id, category }, { onSettled: () => setPending(null) });
+          setConfirm(category === charge.category ? null : category);
         }}
       />
+      {confirm ? (() => {
+        const text = placeTagConfirm(shortPlace(charge.place), here, confirm === 'public' ? 'other' : confirm, places);
+        return (
+          <div className="r-act-confirm" role="group" aria-label={text.title}>
+            <p><b>{text.title}</b> {text.body}</p>
+            <div className="r-act-confirm-actions">
+              <Button type="button" size="sm" className="min-h-11" onClick={() => {
+                const category = confirm;
+                setConfirm(null);
+                setPending(category);
+                setTried(category);
+                tag.mutate({ sessionId: charge.id, category }, { onSettled: () => setPending(null) });
+              }}>{text.action}</Button>
+              <Button type="button" size="sm" variant="secondary" className="min-h-11" onClick={() => setConfirm(null)}>Cancel</Button>
+            </div>
+          </div>
+        );
+      })() : null}
       {tag.isError ? (
         <p className="r-act-note r-act-error" role="alert">
           {tried && missing(tried) ? `Set your ${CATEGORY_LABEL[tried]} rate in Settings first.` : 'The tag did not save. Try again.'}
         </p>
       ) : null}
-      <p className="r-act-note">The tag applies to every charge at this place. Home and Office use your rates in Settings. Other needs the price you paid.</p>
+      <p className="r-act-note">Choose what kind of place this is. Home and Office use your rates in Settings. Other needs the price you paid. The tag applies to every charge at this place, after you confirm.</p>
       {charge.placeApproximate ? <p className="r-act-note">{shortPlace(charge.place)} is the nearest town, not an address.</p> : null}
     </section>
   );

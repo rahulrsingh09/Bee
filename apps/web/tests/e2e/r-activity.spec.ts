@@ -83,7 +83,7 @@ test.describe('Activity on a phone', () => {
     await expect(page.getByRole('heading', { name: 'DC fast · Ridgefield' })).toBeVisible();
     await expect(page.locator('[data-charge-cost]')).toHaveText('Not set');
     await expect(page.getByRole('group', { name: 'Tag this place' }).getByRole('button', { name: 'Other' })).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.getByText('The tag applies to every charge at this place.', { exact: false })).toBeVisible();
+    await expect(page.getByText('The tag applies to every charge at this place, after you confirm.', { exact: false })).toBeVisible();
     await expect(page.locator('[data-power-note]')).toContainText('Estimated from the battery-level change');
     await page.getByLabel('Total paid').fill('18.40');
     await page.getByRole('button', { name: 'Save' }).click();
@@ -96,6 +96,9 @@ test.describe('Activity on a phone', () => {
     await page.goto('/charging/charge-dc');
     const tags = page.getByRole('group', { name: 'Tag this place' });
     await tags.getByRole('button', { name: 'Home' }).click();
+    // Nothing saves until the owner confirms the count and the price.
+    expect(fixture.tagWrites).toEqual([]);
+    await page.getByRole('button', { name: 'Tag as Home' }).click();
     await expect(page.getByRole('heading', { name: 'DC fast · Home' })).toBeVisible();
     await expect(tags.getByRole('button', { name: 'Home' })).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('[data-charge-cost]')).toHaveText('$7.56');

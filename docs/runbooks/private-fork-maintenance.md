@@ -8,7 +8,7 @@ Cloudflare owns private access and the independent encrypted backup receiver.
 KiRoom can help investigate a stopped update; none of these workflows requires
 KiRoom to be running.
 
-The public fork is `rahulrsingh09/Riviamigo`; upstream is
+The public fork is `rahulrsingh09/Bee`; upstream is
 `bballdavis/Riviamigo`. Never put cloud credentials, Rivian tokens, vehicle
 locations, database exports or recovery keys in Git.
 

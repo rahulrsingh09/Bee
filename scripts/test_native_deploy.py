@@ -140,7 +140,7 @@ class NativeDeploymentTests(unittest.TestCase):
 
             def request(self, path, body=None, github=False):
                 if "/branches/" in path:
-                    if path != "/repos/rahulrsingh09/Riviamigo/branches/mainline":
+                    if path != "/repos/rahulrsingh09/Bee/branches/mainline":
                         raise Halt("wrong-branch-endpoint")
                     return {"commit": {"sha": SHA}, "protected": True}
                 return {"id": 101, "head_sha": SHA, "head_branch": self.branch,
@@ -227,7 +227,7 @@ class NativeDeploymentTests(unittest.TestCase):
 
         cases = [
             (module.APP, None, False, "northflank-read-http-403"),
-            ("/repos/rahulrsingh09/Riviamigo/branches/mainline", None, True,
+            ("/repos/rahulrsingh09/Bee/branches/mainline", None, True,
              "github-read-http-403"),
             (module.APP + "/deployment", {"internal": {
                 "buildId": "valid-build-1234"}},

@@ -17,7 +17,7 @@ function fixture(t) {
 test('SSH transport confines credentials to private files and pins the GitHub host', (t) => {
   const root = fixture(t);
   const configuration = sshPushConfiguration(root, REPOSITORIES.origin, key, gitEnvironment(root));
-  assert.equal(configuration.origin, 'ssh://git@ssh.github.com:443/rahulrsingh09/Riviamigo.git');
+  assert.equal(configuration.origin, 'ssh://git@ssh.github.com:443/rahulrsingh09/Bee.git');
   assert.equal(statSync(join(root, 'upstream-key')).mode & 0o777, 0o600);
   assert.equal(statSync(join(root, 'upstream-hosts')).mode & 0o777, 0o600);
   assert.equal(readFileSync(join(root, 'upstream-key'), 'utf8'), key);

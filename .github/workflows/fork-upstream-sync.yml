@@ -23,7 +23,7 @@ concurrency:
 jobs:
   propose:
     if: >-
-      github.repository == 'rahulrsingh09/Riviamigo' &&
+      github.repository == 'rahulrsingh09/Bee' &&
       github.event.repository.private == false &&
       github.ref == 'refs/heads/mainline'
     permissions:
@@ -105,7 +105,7 @@ jobs:
 
   readiness:
     needs: [propose, automate]
-    if: always() && github.repository == 'rahulrsingh09/Riviamigo' && github.event.repository.private == false
+    if: always() && github.repository == 'rahulrsingh09/Bee' && github.event.repository.private == false
     permissions: {}
     runs-on: ubuntu-24.04
     timeout-minutes: 2

@@ -23,7 +23,7 @@ from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_ope
 PROJECT = "/v1/projects/riviamigo-private"
 APP = PROJECT + "/services/telemetry-app"
 BRANCH = "mainline"
-REPOSITORY = "rahulrsingh09/Riviamigo"
+REPOSITORY = "rahulrsingh09/Bee"
 READINESS_HASH = "b9ad78dbf864f911166401bc1c84fc8995baf682dd30d6c81be3eabc9f3540a2"
 SHA = re.compile(r"[0-9a-f]{40}")
 CHECKSUM = re.compile(r"[0-9a-f]{96}")

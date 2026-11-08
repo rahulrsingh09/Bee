@@ -31,7 +31,7 @@ env:
 
 jobs:
   frontend:
-    if: github.repository == 'rahulrsingh09/Riviamigo' && github.event.repository.private == false
+    if: github.repository == 'rahulrsingh09/Bee' && github.event.repository.private == false
     name: Fork frontend and policy
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -94,7 +94,7 @@ jobs:
           node scripts/check-dependency-audits.mjs pnpm "$RUNNER_TEMP/npm-audit.json" "$status"
 
   backend:
-    if: github.repository == 'rahulrsingh09/Riviamigo' && github.event.repository.private == false
+    if: github.repository == 'rahulrsingh09/Bee' && github.event.repository.private == false
     name: Fork backend and security regressions
     runs-on: ubuntu-24.04
     timeout-minutes: 45

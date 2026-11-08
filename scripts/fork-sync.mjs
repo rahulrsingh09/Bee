@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { sshPushConfiguration } from './fork-push-transport.mjs';
 
-export const FORK_REPOSITORY = 'rahulrsingh09/Riviamigo';
+export const FORK_REPOSITORY = 'rahulrsingh09/Bee';
 export const HARDENED_BRANCH = 'mainline';
 export const REPOSITORIES = {
   origin: `https://github.com/${FORK_REPOSITORY}.git`,

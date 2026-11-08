@@ -29,7 +29,7 @@ class GuardTests(unittest.TestCase):
         guard = (ROOT / "scripts/native-release/guard.sh").read_text()
         (files / "guard.sh").write_text("EXPECTED_LEDGER='" + json.dumps(cls.catalog) + "'\n" + guard)
         (files / "catalog").write_text(json.dumps(cls.catalog))
-        repo = {"id": 1406366405, "full_name": "rahulrsingh09/Riviamigo"}
+        repo = {"id": 1406366405, "full_name": "rahulrsingh09/Bee"}
         cls.ci_run = {"id": 101, "workflow_id": 375880117, "path": ".github/workflows/fork-ci.yml",
                    "name": "Fork validation", "event": "push", "head_branch": "mainline",
                    "head_sha": SHA, "status": "completed", "conclusion": "success",

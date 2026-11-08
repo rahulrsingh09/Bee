@@ -1,7 +1,7 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const repository = 'rahulrsingh09/Riviamigo';
+const repository = 'rahulrsingh09/Bee';
 const hostKey =
   'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl';
 const quote = (value) => `'${value.replaceAll("'", "'\\''")}'`;

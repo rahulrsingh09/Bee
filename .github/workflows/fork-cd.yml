@@ -23,7 +23,7 @@ concurrency:
 jobs:
   release:
     if: >-
-      github.repository == 'rahulrsingh09/Riviamigo' &&
+      github.repository == 'rahulrsingh09/Bee' &&
       github.event.repository.id == 1406366405 &&
       (github.event_name == 'workflow_dispatch' ||
        (github.event.workflow_run.conclusion == 'success' &&

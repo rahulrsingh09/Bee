@@ -372,7 +372,7 @@ appendFileSync(${JSON.stringify(trace)}, JSON.stringify({
   keyFile: existsSync(process.cwd() + '/upstream-key')
 }) + '\\n');
 const mapped = args.map(v => v === ${JSON.stringify(REPOSITORIES.origin)} ||
-  v === 'ssh://git@ssh.github.com:443/rahulrsingh09/Riviamigo.git' ? ${JSON.stringify(f.origin)} :
+  v === 'ssh://git@ssh.github.com:443/rahulrsingh09/Bee.git' ? ${JSON.stringify(f.origin)} :
   v === ${JSON.stringify(REPOSITORIES.upstream)} ? ${JSON.stringify(f.upstream)} : v);
 const child = spawnSync(${JSON.stringify(realGit)}, mapped, { stdio: 'inherit' });
 process.exit(child.status ?? 1);
@@ -398,6 +398,6 @@ process.exit(child.status ?? 1);
   assert.equal(pushes.length, 1);
   assert.ok(pushes[0].args.includes('push'));
   assert.ok(pushes[0].ssh && pushes[0].keyFile);
-  assert.ok(pushes[0].args.includes('ssh://git@ssh.github.com:443/rahulrsingh09/Riviamigo.git'));
+  assert.ok(pushes[0].args.includes('ssh://git@ssh.github.com:443/rahulrsingh09/Bee.git'));
   assert.equal(existsSync(pushes[0].cwd), false);
 });

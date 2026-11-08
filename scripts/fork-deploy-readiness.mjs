@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
 
 export const POLICY = Object.freeze({
-  repository: 'rahulrsingh09/Riviamigo',
+  repository: 'rahulrsingh09/Bee',
   repositoryId: 1406366405,
   branch: 'mainline',
   workflowId: 375880117,

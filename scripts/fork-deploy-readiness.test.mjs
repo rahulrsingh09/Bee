@@ -311,11 +311,11 @@ test('authenticated transport rejects unsafe binaries, foreign destinations and 
   chmodSync(binary, 0o700);
   const fetchImpl = githubCliFetch(binary, { execute });
   for (const url of [
-    'https://evil.example/repos/rahulrsingh09/Riviamigo',
+    'https://evil.example/repos/rahulrsingh09/Bee',
     'https://api.github.com/repos/attacker/Riviamigo',
-    'https://api.github.com/repos/rahulrsingh09/Riviamigo-other',
-    'https://user:password@api.github.com/repos/rahulrsingh09/Riviamigo',
-    'https://api.github.com/repos/rahulrsingh09/Riviamigo#fragment',
+    'https://api.github.com/repos/rahulrsingh09/Bee-other',
+    'https://user:password@api.github.com/repos/rahulrsingh09/Bee',
+    'https://api.github.com/repos/rahulrsingh09/Bee#fragment',
   ]) await assert.rejects(fetchImpl(url, { method: 'GET', redirect: 'error' }));
   const url = `https://api.github.com/repos/${POLICY.repository}`;
   await assert.rejects(fetchImpl(url, { method: 'POST', redirect: 'error' }));

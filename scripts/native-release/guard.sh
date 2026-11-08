@@ -39,7 +39,7 @@ assert_sql() {
 }
 
 check_ci() {
-  api=https://api.github.com/repos/rahulrsingh09/Riviamigo
+  api=https://api.github.com/repos/rahulrsingh09/Bee
   fetch "$api/branches/mainline" "$tmp/branch"
   fetch "$api/actions/workflows/375880117/runs?branch=mainline&head_sha=$sha&per_page=100" "$tmp/runs"
   fetch "$api/actions/runs/$run_id" "$tmp/run"
@@ -67,9 +67,9 @@ SELECT coalesce(
   AND r->>'event' IN ('push', 'workflow_dispatch') AND r->>'head_branch' = 'mainline'
   AND r->>'head_sha' = :'sha' AND r->>'status' = 'completed' AND r->>'conclusion' = 'success'
   AND r#>>'{repository,id}' = '1406366405'
-  AND r#>>'{repository,full_name}' = 'rahulrsingh09/Riviamigo'
+  AND r#>>'{repository,full_name}' = 'rahulrsingh09/Bee'
   AND r#>>'{head_repository,id}' = '1406366405'
-  AND r#>>'{head_repository,full_name}' = 'rahulrsingh09/Riviamigo'
+  AND r#>>'{head_repository,full_name}' = 'rahulrsingh09/Bee'
   AND (rs->>'total_count')::int = jsonb_array_length(rs->'workflow_runs')
   AND (SELECT x->>'id' FROM jsonb_array_elements(rs->'workflow_runs') x
        ORDER BY (x->>'run_number')::bigint DESC LIMIT 1) = :'run_id'
@@ -155,7 +155,7 @@ SQL
 }
 
 check_catalog() {
-  fetch "https://raw.githubusercontent.com/rahulrsingh09/Riviamigo/$sha/config/native-release-catalog.json" "$tmp/catalog"
+  fetch "https://raw.githubusercontent.com/rahulrsingh09/Bee/$sha/config/native-release-catalog.json" "$tmp/catalog"
   assert_sql --set "catalog=$(cat "$tmp/catalog")" --set "expected=$EXPECTED_LEDGER" <<'SQL'
 SELECT :'catalog'::jsonb = :'expected'::jsonb;
 SQL

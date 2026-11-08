@@ -12,7 +12,7 @@ from northflank_deploy import free_policy, require, Halt
 
 PROJECT = "/v1/projects/riviamigo-private"
 APP = PROJECT + "/services/telemetry-app"
-REPOSITORY = "rahulrsingh09/Riviamigo"
+REPOSITORY = "rahulrsingh09/Bee"
 BRANCH = "mainline"
 
 

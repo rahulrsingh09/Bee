@@ -4,7 +4,7 @@ import {
   activityFeed, averageEfficiency, buildActivityData, chargeCost, detailOrder, groupByDay, odometerGaps, parkedPeriods,
   periodStartDay, shiftDay, summarize, toActivityCharge, toActivityTrip, tripPlace, tripTitle,
 } from './activityModel';
-import { nearestTown } from './nearestTown';
+import { nearestTown } from '../../../lib/placeNames';
 
 const home: Place = {
   id: 'home', name: 'Home', latitude: 47.6769, longitude: -122.206, radius_m: 100, is_home: true, is_work: false, address: null, charging: null,

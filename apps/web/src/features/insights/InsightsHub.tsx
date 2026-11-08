@@ -59,7 +59,7 @@ function InsightsBody({ tab, vehicleId, onFirstDay }: { tab: InsightTab; vehicle
     if (!tripsQuery.data || !chargesQuery.data) return null;
     const places = placesQuery.data ?? [];
     const today = dayKeyOf(now, timezone);
-    const trips = tripRows(tripsQuery.data, timezone);
+    const trips = tripRows(tripsQuery.data, timezone, places);
     const charges = chargeRows(chargesQuery.data, places, timezone);
     return {
       vehicleId, userId: me.data?.user_id ?? null, timezone, today, first: firstDay(trips, charges, today), trips, charges, places,

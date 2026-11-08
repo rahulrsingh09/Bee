@@ -118,10 +118,10 @@ async fn apply_place_tag(
                    OR (a.lat IS NOT NULL AND a.lng IS NOT NULL
                        AND COALESCE(cs.source_location_lat, cs.location_lat) IS NOT NULL
                        AND COALESCE(cs.source_location_lng, cs.location_lng) IS NOT NULL
-                       AND earth_distance(
-                             ll_to_earth(a.lat, a.lng),
-                             ll_to_earth(COALESCE(cs.source_location_lat, cs.location_lat),
-                                         COALESCE(cs.source_location_lng, cs.location_lng))
+                       AND riviamigo.earth_distance(
+                             riviamigo.ll_to_earth(a.lat, a.lng),
+                             riviamigo.ll_to_earth(COALESCE(cs.source_location_lat, cs.location_lat),
+                                                   COALESCE(cs.source_location_lng, cs.location_lng))
                            ) <= $3))
             ORDER BY cs.started_at
             FOR UPDATE OF cs"#,

@@ -32,6 +32,8 @@ export async function installRFixture(page: Page, options: {
   role?: 'user' | 'super_user';
   tripGaps?: boolean;
   parallaxQuiet?: boolean;
+  /** `/v1/vehicles/{id}/charge-gaps`: 'error' answers 500; a number lists that many possible missed charges. Default: none. */
+  chargeGaps?: 'error' | number;
   /** Insights for `/v1/vehicles/{id}/insights`; a function receives the `scope` query. Default: none. */
   insights?: Insight[] | ((scope: string) => Insight[]);
 } = {}) {
@@ -50,6 +52,7 @@ export async function installRFixture(page: Page, options: {
     soc_start: 70.2,
     soc_end: 51.9,
   }] : [];
+  let backfillState: string | null = null;
   let mode: 'light' | 'dark' | 'system' = options.mode ?? 'light';
   let timezone = options.timezone ?? 'UTC';
   const readJson = (path: string) => JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8'));
@@ -184,10 +187,36 @@ export async function installRFixture(page: Page, options: {
       lanes: Object.fromEntries(['battery', 'drive', 'location', 'climate', 'charging', 'health']
         .map((lane) => [lane, { numeric: {}, coverage: {}, source: 'preview' }])),
     });
-    if (/\/vehicles\/[^/]+\/backfill-status$/.test(path)) return json({
-      vehicle_id: vehicle.id, history_backfilled_at: null, status: null,
-      rivian_session_count: null, local_session_count: 0, missing_source_count: null,
-    });
+    if (/\/vehicles\/[^/]+\/backfill-status$/.test(path)) {
+      const state = backfillState;
+      // A started recovery reports "running" once, then "done".
+      if (backfillState === 'running') backfillState = 'done';
+      return json({
+        vehicle_id: vehicle.id, history_backfilled_at: state === 'done' ? new Date().toISOString() : null, status: state,
+        rivian_session_count: null, local_session_count: 0, missing_source_count: null,
+      });
+    }
+    if (/\/vehicles\/[^/]+\/backfill$/.test(path) && request.method() === 'POST') {
+      backfillState = 'running';
+      return json({ ok: true, status: 'running' });
+    }
+    if (/\/vehicles\/[^/]+\/charge-gaps$/.test(path)) {
+      if (options.chargeGaps === 'error') return json({ error: { message: 'Unavailable' } }, 500);
+      const today = new Date();
+      return json({
+        vehicle_id: vehicle.id, lookback_days: 30, parked_periods_checked: 69,
+        gaps: Array.from({ length: options.chargeGaps ?? 0 }, (_, index) => ({
+          id: `charge-gap-${index + 1}`,
+          started_at: new Date(today.getTime() - (index + 1) * 86_400_000).toISOString(),
+          ended_at: new Date(today.getTime() - (index + 1) * 86_400_000 + 3_600_000).toISOString(),
+          soc_start: 40, soc_end: 55, latitude: null, longitude: null,
+        })),
+        daily_samples: Array.from({ length: 30 }, (_, index) => ({
+          day: new Date(today.getTime() - (29 - index) * 86_400_000).toISOString().slice(0, 10),
+          samples: index === 12 ? 40 : 900 + (index % 5) * 120,
+        })),
+      });
+    }
     if (/\/vehicles\/[^/]+\/trip-gaps$/.test(path)) return json({
       vehicle_id: vehicle.id, lookback_days: 7, gaps: tripGaps,
       parallax_quiet: options.parallaxQuiet

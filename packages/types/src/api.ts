@@ -1734,3 +1734,30 @@ export interface TripGapsResponse {
 export interface RecoveredTrip {
   trip_id: string;
 }
+
+/** The battery rose while parked and no charge session covers that time. */
+export interface ChargeGap {
+  id: string;
+  started_at: string;
+  ended_at: string;
+  soc_start: number;
+  soc_end: number;
+  latitude?: number | null;
+  longitude?: number | null;
+}
+
+/** Telemetry rows stored on one local day. */
+export interface DailySampleCount {
+  day: string;
+  samples: number;
+}
+
+/** `GET /v1/vehicles/{id}/charge-gaps`: possible missed charges for the lookback. */
+export interface ChargeGapsResponse {
+  vehicle_id: string;
+  lookback_days: number;
+  parked_periods_checked?: number | null;
+  gaps: ChargeGap[];
+  /** Optional. The Car tab hides the samples-per-day bars when the server omits it. */
+  daily_samples?: DailySampleCount[] | null;
+}

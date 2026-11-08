@@ -40,9 +40,9 @@ Now uses actual existing vehicle status, trips, charges, parks and insight
 rules. Selected-vehicle identity and placeholder checks prevent displaying
 another vehicle's cached readings. Missing readings remain unknown, not zero.
 The order and the motion rules are in [`docs/branding.md`](../branding.md#now).
-Now has no charts, no period picker and no dashboard tools. A single vehicle
-lock icon (the first status chip) reflects the overall `doors_locked` reading,
-with an accessible label. Missing or unavailable readings show an unknown icon.
+Now has no period picker and no dashboard tools. A single vehicle lock icon
+(in the Doors tile) reflects the overall `doors_locked` reading, with an
+accessible label. Missing or unavailable readings show an unknown icon.
 It is not a button or a vehicle command; there is no door/frunk/gate modal,
 open count or individual indicator. Do not infer the overall lock state from
 individual closure fields.
@@ -146,8 +146,12 @@ Never show the wrong model as the owner's car (owner decision, 2026-11-07).
   vehicles use the existing authenticated artwork resolver and fallback.
   Artwork is presentation, not a live sensor reading.
 
-On Now, motion runs on the first view of a session only, with transform and
-opacity only, and not at all with reduced motion. There is no CDN, remote model
+On Now, the count-up, bar fill, card rise and the 20° car glide run on view,
+and not at all with reduced motion. The live charging view reads
+`GET /vehicles/{id}/live-session`, the open charge session and its curve. The
+live driving view reads the vehicle status (live stream and poll) and, when the
+server has it, `GET /vehicles/{id}/active-trip`; without it, the trip so far
+comes from the odometer since the last trip. There is no CDN, remote model
 request or new animation dependency. Assets use the existing app
 origin/security policy. Leaving the viewport, hiding the tab or unmounting
 stops motion.

@@ -79,8 +79,8 @@ test('the R2 turns through the owner images, has no hint text or toy buttons, an
   const packs: string[] = [];
   page.on('request', request => { if (bundledOrbitAsset(request)) packs.push(request.url()); });
   await page.goto('/');
-  await expect(page.getByRole('heading', { level: 1, name: 'Parked at Home' })).toBeVisible();
-  const orbit = page.getByRole('slider', { name: 'Your R2, Catalina Cove. Use arrow keys to turn.' });
+  await expect(page.getByRole('heading', { level: 1, name: 'Your Rivian' })).toBeVisible();
+  const orbit = page.getByRole('slider', { name: 'Turn the car. Drag it, or use the left and right arrow keys.' });
   await expect(orbit).toBeVisible();
   await expect(orbit).toHaveAttribute('aria-valuetext', 'Side');
   await expect(page.getByText(/Drag to turn|double-tap/i)).toHaveCount(0);
@@ -142,13 +142,12 @@ test('settings navigation, search, units and compatibility URLs have no interfac
 test('changing vehicle clears old readings until the selected vehicle snapshot arrives', async ({ page }) => {
   await installRFixture(page, { secondVehicle: true, statusDelay: 1500 });
   await page.goto('/');
-  await expect(page.locator('.now-energy')).toContainText('68%');
+  await expect(page.locator('.now-batt')).toContainText('68%');
   await page.getByLabel('Select vehicle', { exact: true }).click();
   await page.getByRole('option', { name: /Other vehicle/ }).click();
-  await expect(page.locator('.now-vehicle').first()).toContainText('Other vehicle');
-  await expect(page.locator('.now-energy')).not.toContainText('68%');
-  await expect(page.locator('.now-energy')).toContainText('20%');
-  await expect(page.getByRole('slider')).toHaveCount(0);
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Other vehicle');
+  await expect(page.locator('.now-batt')).not.toContainText('68%');
+  await expect(page.locator('.now-batt')).toContainText('20%');
 });
 
 for (const width of [390, 1280]) {
@@ -204,24 +203,23 @@ for (const width of [390, 1280]) {
   });
 }
 
-test('an R2 without owner images shows its packaged R2 artwork, never the bundled orbit frames', async ({ page }) => {
+test('an R2 without owner images turns with the bundled 72-frame pack', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await installRFixture(page);
   const packs: string[] = [];
   page.on('request', request => { if (bundledOrbitAsset(request)) packs.push(request.url()); });
   await page.goto('/');
-  await expect(page.locator('.now-car')).toHaveAttribute('data-mode', 'static');
-  await expect(page.getByRole('img', { name: 'Your R2, Catalina Cove' })).toHaveAttribute('src', '/vehicle-images/fallbacks/r2s/side.webp');
-  await expect(page.getByRole('slider', { name: /Use arrow keys to turn/ })).toHaveCount(0);
-  await expect(page.locator('.r-orbit canvas, .r-orbit-poster')).toHaveCount(0);
-  expect(packs).toEqual([]);
+  await expect(page.getByRole('slider', { name: 'Turn the car. Drag it, or use the left and right arrow keys.' })).toBeVisible();
+  await expect(page.locator('.now-car canvas')).toHaveCount(1);
+  await expect.poll(() => packs.some(url => /r2-orbit/.test(url))).toBe(true);
+  await expect(page.locator('.r-orbit-angle')).toHaveCount(0);
 });
 
 test('cached vehicle readings retain visible browser reconnection status', async ({ page }) => {
   await installRFixture(page);
   await page.routeWebSocket('**/v1/vehicles/live**', socket => socket.close());
   await page.goto('/');
-  await expect(page.locator('.now-energy')).toContainText('68%');
+  await expect(page.locator('.now-batt')).toContainText('68%');
   await expect(page.getByText('Reconnecting live updates · Showing last recorded readings.')).toBeVisible();
 });
 

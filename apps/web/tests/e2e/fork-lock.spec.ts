@@ -89,8 +89,11 @@ for (const width of [1280, 390]) {
       const name = locked === null ? 'Vehicle lock status unavailable' : locked ? 'Vehicle locked' : 'Vehicle unlocked';
       const indicator = page.getByRole('img', { name, exact: true });
       await expect(indicator).toBeVisible();
+      // On Now the lock sits in the Doors tile. The tile opens the Car page; the lock is never a command.
+      await expect(page.getByRole('link', { name: /Doors/ })).toContainText(locked === null ? 'Not reported' : locked ? 'Locked' : 'Unlocked');
       mutations.length = 0;
       await indicator.click();
+      await expect(page).toHaveURL(/\/vehicle-health$/);
       await expect(page.getByRole('dialog')).toHaveCount(0);
       await expect(
         page.getByRole('button', { name: /^(lock|unlock)( vehicle| doors)?$/i })
@@ -98,7 +101,6 @@ for (const width of [1280, 390]) {
       await page.evaluate(
         () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
       );
-      await expect(indicator).toHaveAccessibleName(name);
       expect(mutations).toEqual([]);
     });
   }

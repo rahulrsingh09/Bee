@@ -36,7 +36,7 @@ test('owner-configured R2 rests on the owner side image and turns by touch throu
     images: { all: ['side', 'front', 'rear_three_quarter', 'overhead'].flatMap(placement => ['light', 'dark'].map(design => image(placement, design))) },
   }] } }));
   await page.goto('/');
-  const orbit = page.locator('.now-car').getByRole('slider', { name: 'Your R2. Use arrow keys to turn.', exact: true });
+  const orbit = page.locator('.now-car').getByRole('slider', { name: 'Turn the car. Drag it, or use the left and right arrow keys.', exact: true });
   await expect(orbit).toBeVisible();
   await expect(orbit).toHaveAttribute('aria-valuetext', 'Side');
   // No turn on entry: the car stays on the owner side image.
@@ -55,11 +55,11 @@ test('owner-configured R2 rests on the owner side image and turns by touch throu
   await expect(page.locator('.now-car canvas, .r-orbit-poster')).toHaveCount(0);
 });
 
-test('phone Now and Overview keep the odometer and trip totals inside the frame above the dock', async ({ page }, testInfo) => {
+test('phone Now and Overview keep the battery and trip totals inside the frame above the dock', async ({ page }, testInfo) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await installRFixture(page, { unknownConfiguration: true, secondVehicle: true, odometer: 123456 });
   await page.goto('/');
-  await expect(page.locator('.now-odometer')).toContainText('123,456');
+  await expect(page.locator('.now-batt')).toContainText('68%');
   await expect(page.getByRole('combobox', { name: 'Select vehicle' }).or(page.getByRole('button', { name: 'Select vehicle' }))).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('iphone-now.png'), fullPage: true });

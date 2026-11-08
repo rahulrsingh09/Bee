@@ -67,18 +67,17 @@ There is no appearance gallery, Theme Studio entry or interface selector.
   remain neutral. Column headers, values, distance and speed metadata follow
   the selected units.
 - Vehicle artwork in R. Never show the wrong model as the owner's car.
-  - An R2 turns only through the owner's real Rivian account images
-    (`vehicle.images`), in this order: front, front three-quarter, side, rear
-    three-quarter, rear. Overhead and charging images are excluded. The car
-    rests on the side image. The images cross-fade from one angle to the next.
-    A double-tap or the Home key returns to the side image.
-  - With fewer than 2 owner images, the car is one still image with no turn
-    control. With no owner image, the R2 shows its packaged Catalina Cove,
-    21-inch-wheel artwork as that still image.
-  - The bundled 72-frame 360° pack shows an R1S body. It is a fallback for
-    other models only, and is never shown for an R2. In release 1 no surface
-    calls it; it is kept as a documented fallback. See
-    [Vehicle orbit tint](./frontend/vehicle-orbit-tint.md).
+  - The car turn is drag only: no buttons, no dial bar and no hint text.
+    When the server returns 2 or more of the owner's own Rivian angle images
+    (`GET /vehicles/{id}/images`, front, front three-quarter, side, rear
+    three-quarter, rear), the car rests on the side image and cross-fades from
+    one angle to the next. Otherwise it uses the bundled 72-frame turn
+    (`RVehicleTurn` picks one; `RVehicleOrbit` is the frame turn).
+  - The frame turn glides 20° onto its rest view on the first view of a
+    vehicle in a page session. Pointer drag turns it with a small inertia;
+    horizontal trackpad scroll turns it; Left and Right arrow keys step 10°;
+    Home shows the front and End the rest view. With reduced motion there is
+    no glide and no inertia.
   - Rivian configurator frames are not used. The Rivian terms of use do not
     allow copying them into the app.
   - Keep the complete silhouette visible and preserve the image aspect ratio.
@@ -161,22 +160,31 @@ There is no appearance gallery, Theme Studio entry or interface selector.
 
 ### Now
 
-Now (`/`) answers "is my car OK". The order is fixed:
+Now (`/`) answers "is my car OK". Phone: one column. 960 px and wider: two
+columns; the right column starts level with the car stage, and the Last 30
+days row spans the page.
 
-1. The status title (`h1`).
-2. One line of status chips (lock, plug, charge schedule). The chips are never
-   over the car.
-3. The car in its own area, turning through the owner's real Rivian images.
-   There is no hint text and there are no toy buttons.
-4. The Battery % and Range heroes, with the limit bar and "enough for about
-   N days". That sentence shows only when its rule fires.
-5. The Odometer card, with "This week" and 7 day bars.
-6. "Needs a look", only when a rule fires.
-7. The Today/Latest rail: the latest drive, charge and park.
+1. The header: the car name (`h1`), one status chip ("Parked · Home · Locked"
+   from real readings; "Not updating" when the data is stale) and the update
+   time.
+2. The car stage (see Vehicle artwork). Nothing covers the car.
+3. The Battery card: battery %, estimated range, the bar with the charge-limit
+   marker. Values count up and the bar fills on view.
+4. Three tiles: Doors, Tires, Cabin. Each opens Car. A missing reading shows
+   "Not reported".
+5. Latest: the last trip and the last charge. Each opens its Activity detail.
+6. This week (Monday to today): trip miles, daily bars, efficiency, energy
+   charged, cost, and "N charges this week have no cost yet".
+7. Last 30 days: charging cost by Home, Office and Other, efficiency per week
+   and loss while parked per day. Each opens its Insights tab.
 
-Now has no charts, no period picker and no chart picker. Motion runs on the
-first view of a session only. It uses transform and opacity only. With reduced
-motion, there is no motion.
+Live states come from the vehicle status. Charging shows power, battery with a
+striped bar, energy added, time left, range added and the power curve of the
+session. Driving shows the live map with the car marker, the trip so far,
+battery, range left and time. A car with no trips and no charges shows Day one
+(empty cards and the setup checklist). The skeleton keeps the page layout while
+the first reads load. Efficiency follows the owner unit (Wh/mi, mi/kWh or
+kWh/100 mi, `useEfficiencyUnit`). With reduced motion, there is no motion.
 
 ### Trip detail
 

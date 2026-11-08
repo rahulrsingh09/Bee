@@ -161,6 +161,8 @@ export async function installRFixture(page: Page, options: {
     if (path === '/v1/admin/account-invitations') return json({ invitations: [] });
     if (path === '/v1/admin/vehicles') return json({ vehicles: [vehicle] });
     if (/\/vehicles\/[^/]+\/images$/.test(path)) return json({ all: [] });
+    // Now live views: no charge or trip in progress unless a test routes these reads itself.
+    if (/\/vehicles\/[^/]+\/(live-session|active-trip)$/.test(path)) return route.fulfill({ status: 204, body: '' });
     if (/\/vehicles\/[^/]+\/idle-drain$/.test(path)) return json({ vehicle_id: vehicle.id, periods: [] });
     if (/\/vehicles\/[^/]+\/charging-networks$/.test(path)) return json([]);
     // The Now page reads the schedule; the preview vehicle has no schedule.
@@ -323,7 +325,7 @@ export async function installRFixture(page: Page, options: {
     if (path.startsWith('/v1/trips/trip-')) return json([]);
     if (path === '/v1/charging') return json({ items: [charge], total: 1, page: 1, per_page: 10 });
     if (path === '/v1/charging/charge-1') return json(charge);
-    if (path === '/v1/charging/sessions/charge-1/curve') return json([]);
+    if (/^\/v1\/charging\/sessions\/[^/]+\/curve$/.test(path)) return json([]);
     // Cross-session DC curve rows; empty unless the fixture asks for populated analytics.
     if (path === '/v1/charging/curve-analysis') return json(options.populatedAnalytics
       ? ['charge-2', 'charge-4'].flatMap((sessionId, session) => Array.from({ length: 8 }, (_, index) => ({

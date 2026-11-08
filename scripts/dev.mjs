@@ -655,12 +655,12 @@ function apiEnv() {
 function extractViteLocalUrl(output) {
   const cleaned = stripAnsi(output);
 
-  const localMatch = cleaned.match(/Local:\s+https?:\/\/localhost:(\d+)(?:\/|$)/i);
+  const localMatch = cleaned.match(/Local:\s+https?:\/\/(?:localhost|127\.0\.0\.1):(\d+)(?:\/|$)/i);
   if (localMatch) {
     return `http://localhost:${localMatch[1]}`;
   }
 
-  const genericMatch = cleaned.match(/http:\/\/localhost:(\d+)(?:\/|$)/i);
+  const genericMatch = cleaned.match(/http:\/\/(?:localhost|127\.0\.0\.1):(\d+)(?:\/|$)/i);
   if (genericMatch) {
     return `http://localhost:${genericMatch[1]}`;
   }

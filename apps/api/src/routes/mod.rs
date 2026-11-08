@@ -24,12 +24,15 @@ use crate::middleware::{
     rate_limit::{self, RateLimitClass},
 };
 
+pub mod account_sessions;
 pub mod api_keys;
 pub mod app_info;
 pub mod auth;
 pub mod backfill;
 pub mod backups;
 pub mod battery;
+pub mod charge_gaps;
+pub mod charge_place_tags;
 pub mod charging;
 mod charging_sql;
 pub mod charts;
@@ -281,6 +284,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(trip_tags::router())
         .merge(trip_recovery::router())
         .merge(charging::router())
+        .merge(charge_place_tags::router())
         .merge(charts::router())
         .merge(efficiency::router())
         .merge(external_connections::router())
@@ -299,6 +303,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(locations::router())
         .merge(grafana::router())
         .merge(auth::protected_router())
+        .merge(account_sessions::router())
         .merge(settings::router())
         .merge(users::router());
 
@@ -311,6 +316,7 @@ pub fn build_router(state: AppState) -> Router {
     let protected_heavy = Router::new()
         .merge(live::router())
         .merge(trip_recovery::read_router())
+        .merge(charge_gaps::router())
         .layer(RequestBodyLimitLayer::new(64 * 1024));
 
     let protected_upload = backups::upload_router()

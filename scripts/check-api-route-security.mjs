@@ -22,12 +22,15 @@ const metadataModules = new Set(
 // checks stay in the Rust handlers and are protected below by the deprecated
 // helper ban.
 const authorizationMatrix = new Map([
+  ['account_sessions', 'session_account_owner'],
   ['app_info', 'session'],
   ['api_keys', 'session_admin_or_vehicle_manager'],
   ['auth', 'public_metadata_and_session'],
   ['backfill', 'session_admin'],
   ['backups', 'session_admin'],
   ['battery', 'vehicle_read'],
+  ['charge_gaps', 'vehicle_read'],
+  ['charge_place_tags', 'session_vehicle_manager'],
   ['charging', 'vehicle_read_and_session_manager_mutation'],
   ['charts', 'session_vehicle_member'],
   ['cost_profiles', 'session_vehicle_manager'],

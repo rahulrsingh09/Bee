@@ -85,6 +85,12 @@ Administrative disablement also revokes all existing session families, so
 reenabling the account requires a fresh login. New session issuance locks the
 enabled account while creating the family to serialize it with disablement.
 Browser renewals share a cross-tab lock without storing access or refresh tokens.
+`POST /v1/auth/sessions/revoke-others` ("Sign out other devices") revokes every
+other session family of the signed-in user and keeps the one whose refresh
+cookie the request carries. Without a valid cookie of that user it changes
+nothing (`409`). API keys cannot call it. It records an
+`other_sessions_revoked` security event. A password change revokes every
+session family, the current one included.
 
 Enrollment rechecks the selected vehicle against the signed-in Rivian account
 before writing local data. First enrollment creates the owner; a verified user

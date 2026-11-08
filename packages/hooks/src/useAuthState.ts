@@ -17,17 +17,27 @@ export function useResolvedVehicleSelection() {
   const setDefaultVehicleId = useAuth((state) => state.setDefaultVehicleId);
   const setActiveVehicleId = useAuth((state) => state.setActiveVehicleId);
   const vehiclesQuery = useVehicles();
-  const vehicles = React.useMemo(() => vehiclesQuery.data ?? [], [vehiclesQuery.data]);
+  const allVehicles = React.useMemo(() => vehiclesQuery.data ?? [], [vehiclesQuery.data]);
+  // Demo vehicles stay out of every picker and of the default selection when a real vehicle exists.
+  const vehicles = React.useMemo(() => {
+    const real = allVehicles.filter((vehicle) => !vehicle.is_demo);
+    return real.length ? real : allVehicles;
+  }, [allVehicles]);
 
+  // Stored ids are cleared only when the account no longer has the vehicle at all.
   const ownedVehicleIds = React.useMemo(
+    () => new Set(allVehicles.map((vehicle) => vehicle.id)),
+    [allVehicles],
+  );
+  const shownVehicleIds = React.useMemo(
     () => new Set(vehicles.map((vehicle) => vehicle.id)),
     [vehicles],
   );
 
-  const validatedActiveVehicleId = activeVehicleId && ownedVehicleIds.has(activeVehicleId)
+  const validatedActiveVehicleId = activeVehicleId && shownVehicleIds.has(activeVehicleId)
     ? activeVehicleId
     : null;
-  const validatedDefaultVehicleId = defaultVehicleId && ownedVehicleIds.has(defaultVehicleId)
+  const validatedDefaultVehicleId = defaultVehicleId && shownVehicleIds.has(defaultVehicleId)
     ? defaultVehicleId
     : null;
   const effectiveVehicleId = validatedActiveVehicleId ?? validatedDefaultVehicleId ?? vehicles[0]?.id ?? null;

@@ -68,3 +68,9 @@ export { AuthenticatedVehicleArtwork, useVehicleArtwork } from './useVehicleArtw
 export { getVehicleArtworkFallback, normalizeVehicleArtworkModel, resolveVehicleArtwork } from './vehicleArtworkFallback';
 export type { ResolvedVehicleArtwork, VehicleArtworkFallbackModel, VehicleArtworkUsage } from './vehicleArtworkFallback';
 export { carDataHealthKeys, fetchChargeGaps, fetchLifetimeTrips, normalizeChargeGaps, useChargeGaps, useChargeHistoryBackfillStatus, useLifetimeTrips, useRecoverMissedCharges } from './useCarDataHealth';
+export {
+  chargeBackfillQueryKey,
+  useChargeBackfillStatus,
+  useRevokeOtherAuthSessions,
+  useTriggerChargeBackfill,
+} from './useRAccount';

@@ -50,12 +50,10 @@ const dashboards = new Map<string, DashboardConfig>([
 ]);
 
 const routeCases = [
-  { path: '/d/overview-fixture', slug: 'dashboard', widgetId: 'd1000001-0000-0000-0000-000000000002' },
   { path: '/battery', slug: 'battery', widgetId: 'd2000002-0000-0000-0000-000000000001' },
   { path: '/charging', slug: 'charging', widgetId: 'd4000004-0000-0000-0000-000000000001' },
   { path: '/efficiency', slug: 'efficiency', widgetId: 'd3000003-0000-0000-0000-000000000001' },
   { path: '/trips', slug: 'trips', widgetId: 'd5000005-0000-0000-0000-000000000005' },
-  { path: '/d/custom-dashboard', slug: 'custom-dashboard', widgetId: '33333333-3333-3333-3333-333333333333' },
 ] as const;
 
 const EDIT_CONTROL_GEOMETRY = {
@@ -69,57 +67,6 @@ const EDIT_CONTROL_GEOMETRY = {
 };
 
 test.describe('dashboard editability in a browser', () => {
-  test('renders the R1T fallback overview with tailgate and side-bin cover states', async ({ page }) => {
-    await page.setViewportSize({ width: 1240, height: 760 });
-    await installApiMocks(page, {
-      vehicleStatus: {
-        vehicle_id: 'vehicle-1',
-        battery_level: 78,
-        range_miles: 248,
-        battery_limit: 85,
-        door_rear_left_locked: true,
-        door_front_left_locked: true,
-        door_rear_right_locked: true,
-        door_front_right_locked: true,
-        closure_tailgate_locked: true,
-        closure_liftgate_locked: false,
-        closure_frunk_locked: true,
-        side_bin_left_locked: false,
-        side_bin_right_locked: true,
-        side_bin_left_closed: true,
-        side_bin_right_closed: false,
-      },
-    });
-    await page.goto('/d/overview-fixture');
-
-    const fallbackArtwork = page.locator('img[src="/vehicle-images/fallbacks/r1t/overview.webp"]').first();
-    await expect(fallbackArtwork).toBeVisible();
-    await expect(fallbackArtwork).toHaveAttribute('data-artwork-fallback', 'true');
-    const fallbackTransform = await fallbackArtwork.evaluate((image) => image.style.transform);
-    expect(fallbackTransform).toContain('translate(-50%, -50%) rotate(90deg) scaleX(');
-    expect(Number(fallbackTransform.match(/scaleX\(([^)]+)\)/)?.[1])).toBeCloseTo(509 / 446);
-
-    await expect(page.getByTitle('Tailgate lock')).toHaveClass(/left-\[4%\]/);
-    await expect(page.getByTitle('Left side bin cover: closed')).toHaveClass(/left-\[36%\]/);
-    await expect(page.getByTitle('Left side bin cover: closed')).toHaveClass(/top-\[24%\]/);
-    await expect(page.getByTitle('Left side bin cover: closed')).toHaveClass(/text-status-positive/);
-    await expect(page.getByTitle('Right side bin cover: open')).toHaveClass(/left-\[36%\]/);
-    await expect(page.getByTitle('Right side bin cover: open')).toHaveClass(/top-\[76%\]/);
-    await expect(page.getByTitle('Right side bin cover: open')).toHaveClass(/text-accent/);
-    await expect(page.getByTitle('Tonneau lock')).toHaveCount(0);
-
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.reload();
-    const leftCover = page.getByTitle('Left side bin cover: closed');
-    const rightCover = page.getByTitle('Right side bin cover: open');
-    await leftCover.scrollIntoViewIfNeeded();
-    await expect(leftCover).toBeVisible();
-    await expect(rightCover).toBeVisible();
-    const [leftBox, rightBox] = await Promise.all([leftCover.boundingBox(), rightCover.boundingBox()]);
-    expect(leftBox?.width).toBeGreaterThanOrEqual(24);
-    expect(rightBox?.width).toBeGreaterThanOrEqual(24);
-  });
-
   for (const routeCase of routeCases) {
     test(`${routeCase.slug} exposes visible, hit-testable widget editing`, async ({ page }) => {
       await installApiMocks(page);
@@ -248,7 +195,7 @@ test.describe('mobile app navigation', () => {
 
     const navigation = page.getByRole('navigation', { name: 'Primary navigation' });
     await expect(navigation).toBeVisible();
-    await expect(navigation).toHaveCSS('position', 'fixed');
+    await expect(page.locator('.r-rail')).toHaveCSS('position', 'fixed');
     const box = (await navigation.boundingBox())!;
     expect(box.y).toBeGreaterThan(740);
     expect(box.x).toBeGreaterThanOrEqual(0);
@@ -263,10 +210,9 @@ test.describe('mobile app navigation', () => {
       expect(box).not.toBeNull();
       expect(box!.height).toBeGreaterThanOrEqual(44);
     }
-    // The top bar holds only the R mark and freshness. Settings and Sign out live on the Car tab.
-    const header = page.getByRole('banner');
-    await expect(header.getByRole('link', { name: 'Settings', exact: true })).toHaveCount(0);
-    await expect(header.getByRole('button', { name: 'Sign out' })).toHaveCount(0);
+    // Phones open Settings from the gear; Sign out lives in Settings → Account.
+    await expect(page.locator('.r-gearbtn')).toBeVisible();
+    expect((await page.locator('.r-gearbtn').boundingBox())!.height).toBeGreaterThanOrEqual(44);
 
     await insights!.click();
     await expect(page).toHaveURL(/\/insights$/);
@@ -277,7 +223,7 @@ test.describe('mobile app navigation', () => {
 
     await car!.click();
     await expect(page).toHaveURL(/\/vehicle-health$/);
-    const settings = page.getByRole('main').getByRole('link', { name: /Settings/ });
+    const settings = page.locator('.r-settings-entry a');
     await expect(settings).toBeVisible();
     expect((await settings.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     await page.goto('/settings?section=account');

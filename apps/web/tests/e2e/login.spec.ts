@@ -33,7 +33,9 @@ test.beforeEach(async ({ page }) => {
 test('login page renders the auth shell', async ({ page }) => {
   await page.goto('/login');
 
-  await expect(page.locator('.r-auth-brand .r-mark')).toHaveText('R');
+  await expect(page.locator('.r-auth-brand .r-logo')).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Sign in to R' })).toBeVisible();
+  await expect(page).toHaveTitle('Sign in · R');
   await expect(page.getByText('Your Rivian, understood.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
   await expect(page.getByLabel('Email')).toBeVisible();

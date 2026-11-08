@@ -42,12 +42,12 @@ for (const width of [390, 1280]) {
       const paths = [
         '/', '/trips', '/charging', '/efficiency', '/battery', '/battery/phantom-drain', '/vehicle-health',
         '/trips/trip-1', '/charging/charge-1', '/explore', '/settings', '/users',
-        ...['vehicles','dashboards','charts','units','places','charging','external','api','jobs','raw','backup','account','authentication'].map(section => `/settings?section=${section}`),
-        '/d/dashboard', '/d/trips', '/admin/dashboards', '/connect', '/connect/otp?challenge_id=challenge-1',
+        ...['account', 'sign-in', 'rivian', 'rates', 'backups', 'units'].map(section => `/settings?section=${section}`),
+        '/d/dashboard', '/admin/dashboards',
       ];
       for (const path of paths) {
         await page.goto(path);
-        await expect(page.locator('.r-app'), path).toBeVisible();
+        await expect(page.locator('.r-app'), path).toBeVisible({ timeout: 15_000 });
         await expect(page.locator('h1').first(), path).toBeVisible();
         await expect(page.locator('html')).toHaveClass(new RegExp(mode));
         const primary = page.getByRole('navigation', { name: 'Primary navigation' });
@@ -56,7 +56,7 @@ for (const width of [390, 1280]) {
           await expect(primary.getByRole('link', { name, exact: true })).toBeVisible();
         }
         await expect(page.getByRole('link', { name: 'Explore', exact: true })).toHaveCount(0);
-        await expect(page.getByRole('button', { name: /^Switch to (light|dark) mode$/ })).toHaveCount(0);
+        await expect(page.getByRole('button', { name: /^Switch to (light|dark) mode$/ })).toHaveCount(1);
         await expect(page.getByText(/something went wrong/i)).toHaveCount(0);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), path).toBe(true);
         if (['/', '/settings', '/vehicle-health', '/charging'].includes(path)) {
@@ -118,27 +118,6 @@ test('the owner-image turn cross-fades in 180 ms without reduced motion', async 
   expect(await layer.evaluate(element => getComputedStyle(element).transition)).toContain('opacity 0.18s');
 });
 
-test('settings navigation, search, units and compatibility URLs have no interface chooser', async ({ page }) => {
-  const fixture = await installRFixture(page, { role: 'super_user' });
-  await page.goto('/settings');
-  await page.getByLabel('Find a setting').fill('time');
-  await expect(page.getByRole('button', { name: /Units & time/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: /^API Access/ })).toHaveCount(0);
-  await page.getByRole('button', { name: /Units & time/ }).click();
-  await expect(page).toHaveURL(/section=units/);
-  await expect(page.getByLabel('Application time zone')).toBeVisible();
-  await page.getByRole('button', { name: 'All settings', exact: true }).click();
-  await expect(page.getByLabel('Find a setting')).toBeVisible();
-  await page.goto('/settings?section=appearance');
-  await expect(page.getByLabel('Application time zone')).toBeVisible();
-  await expect(page.getByText('Appearance mode', { exact: true })).toHaveCount(0);
-  await page.goto('/settings/themes/old-theme');
-  await expect(page).toHaveURL(/\/settings$/);
-  await expect(page.getByLabel('Find a setting')).toBeVisible();
-  await expect(page.getByRole('radio', { name: /Classic|RAD/ })).toHaveCount(0);
-  expect(fixture.writes).toEqual([]);
-});
-
 test('changing vehicle clears old readings until the selected vehicle snapshot arrives', async ({ page }) => {
   await installRFixture(page, { secondVehicle: true, statusDelay: 1500 });
   await page.goto('/');
@@ -150,25 +129,6 @@ test('changing vehicle clears old readings until the selected vehicle snapshot a
   await expect(page.locator('.now-energy')).toContainText('20%');
   await expect(page.getByRole('slider')).toHaveCount(0);
 });
-
-for (const width of [390, 1280]) {
-  test(`chart editor keeps its focused workflow in the R theme at ${width}px`, async ({ page }) => {
-    await page.setViewportSize({ width, height: 900 });
-    await installRFixture(page, { role: 'super_user', populatedAdmin: true, mode: 'dark' });
-    await page.goto('/settings/charts/new');
-    await expect(page.locator('.r-editor')).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'New chart', exact: true })).toBeVisible();
-    await expect(page.getByRole('navigation', { name: 'Chart editor sections' })).toBeVisible();
-    for (const section of ['curves', 'display', 'advanced', 'basics']) {
-      await page.getByRole('button', { name: section, exact: true }).click();
-      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
-    }
-    await page.getByRole('button', { name: 'Back to charts' }).click();
-    await expect(page.getByRole('dialog')).toBeVisible();
-    await page.getByRole('button', { name: /keep editing/i }).click();
-    await expect(page.getByRole('heading', { name: 'New chart', exact: true })).toBeVisible();
-  });
-}
 
 for (const width of [390, 1280]) {
   test(`main trip map supports tap, drag and keyboard inspection at ${width}px`, async ({ page }) => {

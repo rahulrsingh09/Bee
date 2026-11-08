@@ -140,8 +140,9 @@ for (const width of [390, 1280]) for (const mode of ['dark', 'light'] as const) 
     } else {
       const map = (await page.locator('[data-trip-map]').boundingBox())!;
       const summary = (await page.locator('[data-trip-summary]').boundingBox())!;
-      expect(map.x).toBe(0);
-      expect(map.width).toBe(width);
+      // Full bleed: the map covers the screen width (the shell gutter is 16 px; the page bleeds 20 px).
+      expect(map.x).toBeLessThanOrEqual(0);
+      expect(map.x + map.width).toBeGreaterThanOrEqual(width);
       expect(summary.y).toBeLessThan(map.y + map.height);
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

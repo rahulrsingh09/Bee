@@ -16,7 +16,8 @@ There is no appearance gallery, Theme Studio entry or interface selector.
 
 - Use the R mark, neutral surfaces and quiet borders. Each tab has one job: Now
   answers "is my car OK", Activity lists what the car did, Insights holds the
-  analysis pages, and Car holds vehicle health and Settings. See
+  analysis pages, and Car holds vehicle health. Settings opens from the rail or
+  the gear. See
   [R navigation](#r-navigation) and [Now](#now).
 - Use neutral surfaces, restrained borders and `--r-signal`. Cove teal, lime,
   caliper gold and supporting cool series colors form the fixed R data palette.
@@ -132,32 +133,44 @@ There is no appearance gallery, Theme Studio entry or interface selector.
 
 ### R navigation
 
-- The R shell has four tabs: Now (`/`), Activity, Insights (`/insights`) and
-  Car (`/vehicle-health`). In release 1, Activity opens the trips list
-  (`/trips`). The phone dock and the desktop pill navigation show the same four
-  tabs, each with its icon and its label. Labels are always visible.
-- A detail page keeps the tab of the list that opens it:
-  - Activity: `/trips`, a trip (`/trips/<id>`) and a charge
-    (`/charging/<id>`).
-  - Insights: `/insights`, `/charging`, `/battery` and its sections,
-    `/efficiency`, custom dashboards (`/d/<slug>`) and `/settings/charts`.
-  - Car: `/vehicle-health` and the other Settings pages.
-- Up to 900 px wide, the tabs are a dock at the bottom of the screen. The dock
-  is 66 px tall, at most 410 px wide, and sits above the safe area. Each tab is
-  at least 44 px wide and 54 px tall. The page has bottom padding equal to the
-  dock height and its offset, so the dock never covers page content. Wider
-  screens show the tabs as a pill row in the top bar.
-- The top bar shows only the R mark (a link to Now) and the data freshness:
-  "Updated 2 min ago", or an amber dot and "No data for 3 h" when telemetry is
-  stale. The top bar has no theme, Settings or Sign out icons.
-- The Insights hub is one list of rows (title and one line): Cost, Battery,
-  Parked loss, Efficiency and Custom dashboards. Lifetime is added when its
-  page exists.
-- Settings is a labelled row at the bottom of the Car tab. Sign out is in
-  Settings → Account.
-- `/explore` redirects to `/insights`. There is no Explore tab.
-- The R dock replaces the upstream full-screen navigation sheet that is
-  described in [Responsive Control Surfaces](#responsive-control-surfaces).
+Release 2 (v5 trial) shell. Source: `apps/web/src/features/r-experience/RAppLayout.tsx`
+and `r-experience.css`.
+
+- Brand: the app name is **R** in titles (`<Tab> · R`), sign-in, first run and
+  `manifest.webmanifest`. The logo is `RMark` (the v5 `LOGO()` mark: accent tile
+  with the R stroke). The font is Inter (variable), served from
+  `/fonts/InterVariable.woff2` with its OFL license beside it, with
+  `font-feature-settings: "cv11", "ss01"` (numbers add `"tnum"`).
+- Four tabs: Now (`/`), Activity (`/trips`), Insights (`/insights`) and Car
+  (`/vehicle-health`). Below 960 px they are a bottom bar with an accent ink
+  bar above the active tab. From 960 px they are a 232 px left rail with the
+  logo at the top and Settings at the bottom.
+- Settings is its own area (`/settings`, and the `/connect` pages). On phones it
+  opens from the gear button in the page header; the gear is hidden on Settings.
+  Every page header also has the light and dark switch.
+- Pages start with `RPageHeader` (title, sub line, gear and theme buttons). A page
+  without it gets the two buttons at the top right of the content.
+- Data freshness ("Updated 2 min ago", "No data for 6 h") is
+  `RFreshnessIndicator`; pages put it in their header sub line.
+- App banners come from real data (`rConnectionBanner` in `useRConnection.ts`):
+  "You're offline." when the browser is offline, and "Rivian connection lost."
+  with Reconnect when Rivian asks for a new sign-in, the collector fails, or the
+  Rivian socket is silent (`telemetry_stale_reason = ws_silent`). A sleeping car
+  with only an old battery reading shows no banner.
+- Removed pages redirect: `/explore`, `/d/<slug>`, `/admin/dashboards` and
+  `/settings/charts/*` go to `/insights`; `/settings/themes/*` goes to
+  `/settings`.
+- Settings has five cards only: Account, Sign-in methods, Rivian account,
+  Charging rates (Home and Office $ per kWh, saved to the place cost profiles)
+  and Backups (collapsed). Sign-in rules: never both methods off; password
+  sign-in turns off only after SSO is on, tested and linked to this account.
+- R kit classes (shared, in `r-experience.css`): `r-card`, `r-pad`, `r-ctitle`,
+  `r-note`, `r-btn` (`-ghost`, `-danger`, `-sm`, `-big`), `r-iconbtn`,
+  `r-switch`, `r-trow`, `r-setform`, `r-callout`, `r-banner`, `r-okc`,
+  `r-warnc`. Colors are the v5 `--r-*` tokens in `globals.css` (`--r-bg`,
+  `--r-s1`..`--r-s3`, `--r-line`, `--r-t1`..`--r-t3`, `--r-acc`, `--r-home`,
+  `--r-office`, `--r-public`, `--r-good`, `--r-warn`, `--r-crit`); the R surface
+  and text `--rm-*` tokens point at them.
 
 ### Now
 

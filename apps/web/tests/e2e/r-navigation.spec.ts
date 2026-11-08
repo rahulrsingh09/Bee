@@ -8,7 +8,7 @@ const tabs = [
   ['Car', '/vehicle-health'],
 ] as const;
 
-// Release 1 mapping: each URL keeps exactly one tab active.
+// Each URL keeps exactly one tab active; Settings is its own area.
 const activeTab: Array<[string, typeof tabs[number][0]]> = [
   ['/', 'Now'],
   ['/trips', 'Activity'],
@@ -19,7 +19,16 @@ const activeTab: Array<[string, typeof tabs[number][0]]> = [
   ['/battery/phantom-drain', 'Insights'],
   ['/efficiency', 'Insights'],
   ['/vehicle-health', 'Car'],
-  ['/settings', 'Car'],
+];
+
+// Removed pages keep old links working.
+const redirects: Array<[string, RegExp]> = [
+  ['/explore', /\/insights$/],
+  ['/d/dashboard', /\/insights$/],
+  ['/admin/dashboards', /\/insights$/],
+  ['/settings/charts/new', /\/insights$/],
+  ['/settings/charts/chart-1', /\/insights$/],
+  ['/settings/themes/old-theme', /\/settings$/],
 ];
 
 // Client-side visit: one full load per test keeps the dev server cost low.
@@ -31,15 +40,17 @@ async function visit(page: Page, path: string) {
 }
 
 for (const width of [390, 1280]) for (const mode of ['dark', 'light'] as const) {
-  test(`four tabs share one model and have room at ${width}px in ${mode}`, async ({ page }, testInfo) => {
+  test(`bottom bar or rail with four tabs and Settings at ${width}px in ${mode}`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 900 });
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await installRFixture(page, { mode });
     await page.goto('/');
     const nav = page.getByRole('navigation', { name: 'Primary navigation' });
     const links = nav.getByRole('link');
-    await expect(links).toHaveCount(4);
-    let previousRight = 0;
+    // The first load can wait for the dev server to compile the page.
+    await expect(links).toHaveCount(4, { timeout: 20_000 });
+    const phone = width < 960;
+    let previous = 0;
     for (const [index, [label, href]] of tabs.entries()) {
       const link = links.nth(index);
       await expect(link).toHaveText(label);
@@ -48,32 +59,36 @@ for (const width of [390, 1280]) for (const mode of ['dark', 'light'] as const) 
       const box = (await link.boundingBox())!;
       expect(box.width).toBeGreaterThanOrEqual(44);
       expect(box.height).toBeGreaterThanOrEqual(44);
-      expect(box.x).toBeGreaterThanOrEqual(previousRight);
+      if (phone) { expect(box.x).toBeGreaterThanOrEqual(previous); previous = box.x + box.width; }
+      else { expect(box.y).toBeGreaterThanOrEqual(previous); previous = box.y + box.height; }
       expect(box.x + box.width).toBeLessThanOrEqual(width);
-      previousRight = box.x + box.width;
     }
     await expect(nav.getByRole('link', { name: 'Now', exact: true })).toHaveAttribute('aria-current', 'page');
-    await expect(nav.getByRole('link', { name: 'Explore' })).toHaveCount(0);
-
-    const header = page.locator('.r-header');
-    await expect(header.getByRole('button')).toHaveCount(0);
-    await expect(header.getByRole('link', { name: 'Settings' })).toHaveCount(0);
-    await expect(header.getByText(/^Updated (just now|\d+ min ago)$/)).toBeVisible();
+    await expect(page.getByRole('button', { name: `Switch to ${mode === 'dark' ? 'light' : 'dark'} mode` })).toBeVisible();
 
     const navBox = (await nav.boundingBox())!;
-    if (width <= 900) {
-      expect(navBox.y).toBeGreaterThan(740);
+    const railSettings = page.locator('.r-rail-settings');
+    const gear = page.locator('.r-gearbtn');
+    if (phone) {
+      // Bottom bar at the bottom of the screen, gear in the page header, no rail Settings.
+      expect(navBox.y).toBeGreaterThan(780);
       expect(navBox.y + navBox.height).toBeLessThanOrEqual(900);
-      const padding = await page.locator('.r-main').evaluate(element => parseFloat(getComputedStyle(element).paddingBottom));
-      expect(padding).toBeGreaterThanOrEqual(navBox.height + 16);
+      await expect(railSettings).toBeHidden();
+      await expect(gear).toBeVisible();
+      const ink = (await page.locator('.r-tab-ink').boundingBox())!;
+      const now = (await links.first().boundingBox())!;
+      expect(Math.abs(ink.x + ink.width / 2 - (now.x + now.width / 2))).toBeLessThan(2);
+      const padding = await page.locator('.r-app').evaluate(element => parseFloat(getComputedStyle(element).paddingBottom));
+      expect(padding).toBeGreaterThanOrEqual(navBox.height);
     } else {
-      const logo = (await page.locator('.r-brand').boundingBox())!;
-      const freshness = (await page.locator('.r-freshness').boundingBox())!;
-      expect(navBox.y).toBeLessThan(100);
-      expect(navBox.x).toBeGreaterThanOrEqual(logo.x + logo.width);
-      expect(navBox.x + navBox.width).toBeLessThanOrEqual(freshness.x);
+      // Left rail: logo at the top, Settings at the bottom, no gear.
+      expect(navBox.x).toBeLessThan(232);
+      await expect(page.locator('.r-brand .r-logo')).toBeVisible();
+      await expect(railSettings).toBeVisible();
+      await expect(gear).toBeHidden();
+      const settingsBox = (await railSettings.boundingBox())!;
+      expect(settingsBox.y).toBeGreaterThan(780);
     }
-    await nav.screenshot({ path: testInfo.outputPath('navigation.png') });
     await page.screenshot({ path: testInfo.outputPath('now.png') });
 
     for (const [label, href] of tabs) {
@@ -82,21 +97,22 @@ for (const width of [390, 1280]) for (const mode of ['dark', 'light'] as const) 
       await expect(nav.getByRole('link', { name: label, exact: true })).toHaveAttribute('aria-current', 'page');
       await expect(nav.locator('[aria-current="page"]')).toHaveCount(1);
     }
+    await page.getByRole('link', { name: 'Settings' }).filter({ visible: true }).first().click();
+    await expect(page).toHaveURL(/\/settings$/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
+    await expect(nav.locator('[aria-current="page"]')).toHaveCount(0);
+    await expect(page.locator('.r-gearbtn')).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
 
-  test(`Explore redirects to Insights and every page keeps one tab at ${width}px in ${mode}`, async ({ page }, testInfo) => {
+  test(`removed pages redirect and every page keeps one tab at ${width}px in ${mode}`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await installRFixture(page, { mode });
-    await page.goto('/explore');
-    await expect(page).toHaveURL(/\/insights$/);
-    await expect(page.getByRole('heading', { level: 1, name: 'Insights' })).toBeVisible();
-    const hub = page.getByRole('navigation', { name: 'Insights' });
-    for (const name of ['Cost', 'Battery', 'Parked loss', 'Efficiency', 'Custom dashboards']) {
-      await expect(hub.getByRole('link', { name: new RegExp(`^${name}`) })).toBeVisible();
+    for (const [path, target] of redirects) {
+      await page.goto(path);
+      await expect(page, path).toHaveURL(target, { timeout: 15_000 });
     }
-    await page.screenshot({ path: testInfo.outputPath('insights.png'), fullPage: true });
     const nav = page.getByRole('navigation', { name: 'Primary navigation' });
     for (const [path, label] of activeTab) {
       await visit(page, path);
@@ -107,15 +123,50 @@ for (const width of [390, 1280]) for (const mode of ['dark', 'light'] as const) 
   });
 }
 
-test('stale telemetry shows the warning dot and the no-data age', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 900 });
+test('the theme button switches light and dark and saves it', async ({ page }) => {
+  const fixture = await installRFixture(page, { mode: 'dark' });
+  await page.goto('/settings');
+  await page.getByRole('button', { name: 'Switch to light mode' }).click();
+  await expect(page.locator('html')).toHaveClass(/light/);
+  await expect(page.getByRole('button', { name: 'Switch to dark mode' })).toBeVisible();
+  expect(fixture.writes).toContain('PUT /v2/auth/preferences/theme');
+});
+
+for (const width of [390, 1280]) {
+  test(`a lost Rivian connection shows a banner with Reconnect at ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await installRFixture(page, { statusOverrides: { auth_state: 'needs_reauth' } });
+    await page.goto('/insights');
+    const banner = page.getByRole('alert').filter({ hasText: 'Rivian connection lost.' });
+    await expect(banner).toBeVisible({ timeout: 15_000 });
+    await expect(banner).toContainText('After you reconnect, R recovers the missed charges from Rivian.');
+    const reconnect = banner.getByRole('link', { name: 'Reconnect' });
+    await expect(reconnect).toHaveAttribute('href', '/connect?mode=refresh&vehicle_id=owner-vehicle');
+    const box = (await reconnect.boundingBox())!;
+    expect(box.height).toBeGreaterThanOrEqual(36);
+    await page.screenshot({ path: testInfo.outputPath('rivian-lost.png') });
+    await reconnect.click();
+    await expect(page.getByRole('heading', { name: 'Reconnect your Rivian account' })).toBeVisible();
+  });
+}
+
+test('a sleeping car with an old battery reading shows no banner', async ({ page }) => {
   await installRFixture(page, {
-    statusOverrides: { telemetry_stale: true, last_updated: new Date(Date.now() - 6 * 3_600_000 - 60_000).toISOString() },
+    statusOverrides: { telemetry_stale: true, telemetry_stale_reason: 'battery_stale', last_updated: new Date(Date.now() - 6 * 3_600_000).toISOString() },
   });
   await page.goto('/insights');
-  const freshness = page.locator('.r-freshness');
-  await expect(freshness).toHaveText('No data for 6 h');
-  await expect(freshness).toHaveAttribute('data-state', 'stale');
+  await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('Rivian connection lost.')).toHaveCount(0);
+});
+
+test('going offline shows the offline banner, and it clears when back online', async ({ page, context }) => {
+  await installRFixture(page);
+  await page.goto('/insights');
+  await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible({ timeout: 15_000 });
+  await context.setOffline(true);
+  await expect(page.getByText("You're offline.")).toBeVisible();
+  await context.setOffline(false);
+  await expect(page.getByText("You're offline.")).toHaveCount(0);
 });
 
 for (const width of [390, 1280]) {

@@ -77,13 +77,15 @@ unchanged.
 
 ## Routes and settings
 
-The R shell has four tabs: Now (`/`), Activity (`/trips` in release 1),
-Insights (`/insights`) and Car (`/vehicle-health`). The phone dock and the
-desktop pill navigation show the same four tabs. `rNavigationTab()` maps every
-URL to one tab: trips and a charge detail select Activity; the Insights hub,
-`/charging`, Battery, Efficiency, custom dashboards and `/settings/charts`
-select Insights; everything else selects Car. `/explore` redirects to
-`/insights`. Release 2 replaces Activity with the merged log and adds the new
+The R shell has four tabs: Now (`/`), Activity (`/trips`), Insights
+(`/insights`) and Car (`/vehicle-health`): a bottom bar below 960 px and a left
+rail with Settings at the bottom from 960 px. `rNavigationTab()` maps every URL
+to one area: trips and a charge detail select Activity; the Insights hub,
+`/charging`, Battery and Efficiency select Insights; `/settings`, `/connect` and
+`/users` select Settings; everything else selects Car. `/explore`, `/d/<slug>`,
+`/admin/dashboards` and `/settings/charts/*` redirect to `/insights`;
+`/settings/themes/*` redirects to `/settings`. The first-run steps live on
+`/connect` and `/connect/otp`. Release 2 replaces Activity with the merged log and adds the new
 Insights pages. The full rules are in
 [`docs/branding.md`](../branding.md#r-navigation).
 Battery overview and Parked loss share a visible section navigation. Exact

@@ -2124,6 +2124,13 @@ export class AuthenticatedTransport {
       }
     }
   }
+
+  // ── Account sessions (R Settings) ─────────────────────────────────────────
+
+  /** Signs out every other device and keeps this browser session (`{ revoked }`; 409 without a session cookie). */
+  async revokeOtherAuthSessions(): Promise<{ revoked: number }> {
+    return this.request('POST', '/v1/auth/sessions/revoke-others');
+  }
 }
 
 export const transport = new AuthenticatedTransport();
@@ -2354,6 +2361,8 @@ const MUTATION_ACTION_RULES: MutationActionRule[] = [
   { pattern: new RegExp(`^/v1/(admin/)?charts(/${ID})?$`), actions: { POST: 'create the chart', PUT: 'save the chart', DELETE: 'delete the chart' } },
   { pattern: /^\/v1\/auth\/preferences(\/.*)?$/, actions: { PUT: 'save your preferences' } },
   { pattern: /^\/v1\/settings\/.+$/, actions: { PUT: 'save the settings' } },
+  { pattern: new RegExp(`^/v1/vehicles/${ID}/(charging-)?backfill$`), actions: { POST: 'recover the missed charges' } },
+  { pattern: /^\/v1\/auth\/sessions\/revoke-others$/, actions: { POST: 'sign out the other devices' } },
 ];
 
 /**

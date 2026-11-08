@@ -1,11 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { rNavigation, rNavigationTab, type RTabKey } from './RAppLayout';
+import { rNavigation, rNavigationTab, type RAreaKey } from './RAppLayout';
 
 // New upstream routes require an explicit R coverage decision before integration.
 // Each reviewed route also names the tab that is active on it (release 1 mapping).
-const reviewedRoutes: Record<string, RTabKey> = {
+const reviewedRoutes: Record<string, RAreaKey> = {
   '/': 'now',
   '/trips': 'activity',
   '/trips/$tripId': 'activity',
@@ -15,19 +15,29 @@ const reviewedRoutes: Record<string, RTabKey> = {
   '/battery': 'insights',
   '/battery/phantom-drain': 'insights',
   '/efficiency': 'insights',
-  '/d/$slug': 'insights',
-  '/settings/charts/$chartId': 'insights',
-  '/settings/charts/new': 'insights',
-  '/explore': 'insights',
   '/vehicle-health': 'car',
-  '/settings': 'car',
-  '/settings/themes/$themeId': 'car',
-  '/connect': 'car',
-  '/connect/otp': 'car',
-  '/users': 'car',
-  '/admin/dashboards': 'car',
+  '/settings': 'settings',
+  '/connect': 'settings',
+  '/connect/otp': 'settings',
+  '/users': 'settings',
   '/activate': 'car',
   '/login': 'car',
+  // Removed in release 2. Each one only redirects; the target page sets the tab.
+  '/d/$slug': 'car',
+  '/settings/charts/$chartId': 'settings',
+  '/settings/charts/new': 'settings',
+  '/settings/themes/$themeId': 'settings',
+  '/explore': 'car',
+  '/admin/dashboards': 'car',
+};
+
+const redirects: Record<string, string> = {
+  'd.$slug': '/insights',
+  'admin.dashboards': '/insights',
+  'explore': '/insights',
+  'settings.charts.new': '/insights',
+  'settings.charts.$chartId': '/insights',
+  'settings.themes.$themeId': '/settings',
 };
 
 const sample = (path: string) => path.replace(/\$[A-Za-z]+/g, 'sample-id');
@@ -47,15 +57,15 @@ describe('R route coverage contract', () => {
     expect(paths.sort()).toEqual(Object.keys(reviewedRoutes).sort());
   });
 
-  it('keeps Explore only as a redirect to Insights', () => {
-    const source = readFileSync(resolve(process.cwd(), 'src/routes/explore.tsx'), 'utf8');
-    expect(source).toMatch(/redirect\(\{ to: '\/insights', replace: true \}\)/);
+  it.each(Object.entries(redirects))('keeps %s only as a redirect to %s', (file, target) => {
+    const source = readFileSync(resolve(process.cwd(), `src/routes/${file}.tsx`), 'utf8');
+    expect(source).toContain(`redirect({ to: '${target}', replace: true })`);
     expect(source).not.toMatch(/component:/);
   });
 });
 
 describe('R navigation tabs', () => {
-  it('shows four tabs in the release 1 order and targets', () => {
+  it('shows four tabs in order with their targets', () => {
     expect(rNavigation.map(({ label, to }) => [label, to])).toEqual([
       ['Now', '/'], ['Activity', '/trips'], ['Insights', '/insights'], ['Car', '/vehicle-health'],
     ]);
@@ -65,10 +75,9 @@ describe('R navigation tabs', () => {
     expect(rNavigationTab(sample(path))).toBe(tab);
   });
 
-  it('keeps chart settings under Insights and every other settings page under Car', () => {
-    expect(rNavigationTab('/settings/charts')).toBe('insights');
-    expect(rNavigationTab('/settings/chartsx')).toBe('car');
-    expect(rNavigationTab('/settings/')).toBe('car');
+  it('maps Settings, connect and detail pages to their areas', () => {
+    expect(rNavigationTab('/settings/')).toBe('settings');
+    expect(rNavigationTab('/settingsx')).toBe('car');
     expect(rNavigationTab('/trips/')).toBe('activity');
     expect(rNavigationTab('/charging/abc/curve')).toBe('insights');
     expect(rNavigationTab('/battery-other')).toBe('car');

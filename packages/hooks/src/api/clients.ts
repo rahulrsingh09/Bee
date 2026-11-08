@@ -19,7 +19,7 @@ export const authClient = client(
   'getAuthConfig', 'getOidcIdentities', 'startOidc', 'startOidcLink', 'startOidcPasswordSetup', 'unlinkOidc',
   'getUnitPreferences', 'updateUnitPreferences', 'updateThemePreferences', 'getDashboardChartFavorites',
   'updateDashboardChartFavorite', 'getAppTimezone', 'updateAppTimezone',
-  'getAppVersion',
+  'getAppVersion', 'revokeOtherAuthSessions',
 );
 
 export const vehicleClient = client(

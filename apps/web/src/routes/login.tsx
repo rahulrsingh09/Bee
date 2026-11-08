@@ -6,7 +6,6 @@ import { rootRoute } from './__root';
 import { api, consumeExplicitLogoutIntent, useAuth } from '@riviamigo/hooks';
 import { Button, Input } from '@riviamigo/ui/primitives';
 import { RAuthBrand } from '../features/r-experience/RAuthBrand';
-import { Zap, Route, Battery } from 'lucide-react';
 import { normalizeLoginRedirectTarget } from '../components/layout/AuthGuard';
 import { PASSWORD_MIN_LENGTH, PasswordRequirements } from '../components/auth/PasswordRequirements';
 import { emitAuthError } from '../components/feedback/toast';
@@ -125,6 +124,8 @@ export function LoginPage() {
     void startSso();
   }, [config?.oidc_auto_login, ssoReady, isAuthenticated, isBootstrapping, restoringSession, search.error, search.password_changed, startSso, consumeExplicitLogoutIntent]);
 
+  useEffect(() => { document.title = setupRequired ? 'Set up · R' : 'Sign in · R'; }, [setupRequired]);
+
   if (restoringSession) {
     return (
       <div className="min-h-screen bg-bg-page flex items-center justify-center px-4">
@@ -183,15 +184,13 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-bg-page flex items-center justify-center px-4 relative overflow-hidden">
+    <main className="r-auth min-h-screen flex items-center justify-center px-4 relative overflow-hidden">
       <div className="w-full max-w-sm relative z-10">
         <RAuthBrand />
 
         {/* Auth card */}
-        <div className="bg-bg-glass backdrop-blur-md border border-border rounded-2xl p-6 shadow-xl">
-          <p className="text-[11px] font-semibold text-fg-tertiary uppercase tracking-widest mb-5">
-            {setupRequired ? 'Set up R' : 'Sign in'}
-          </p>
+        <div className="r-card r-auth-card">
+          <h1 className="r-auth-title">{setupRequired ? 'Set up R' : 'Sign in to R'}</h1>
           {search.password_changed === '1' && (
             <p role="status" className="mb-4 rounded-lg border border-status-positive/30 bg-status-positive/10 px-3 py-2 text-xs text-status-positive">
               Password changed. Sign in with your new password.
@@ -259,24 +258,7 @@ export function LoginPage() {
           {!passwordEnabled && !ssoReady && config && <p role="status" className="text-xs text-fg-secondary">Sign-in is temporarily unavailable. Ask an administrator to restore an authentication method.</p>}
           {!setupRequired && <p className="mt-5 pt-5 border-t border-border text-center text-xs text-fg-tertiary">Need access? Ask an administrator for an activation link.</p>}
         </div>
-
-        {/* Feature callouts */}
-        <div className="mt-8 grid grid-cols-3 gap-3">
-          {[
-            { icon: Route, label: 'Trip analytics', sub: 'Every drive logged' },
-            { icon: Zap, label: 'Charge history', sub: 'Sessions & cost' },
-            { icon: Battery, label: 'Battery health', sub: 'Battery level over time' },
-          ].map(({ icon: Icon, label, sub }) => (
-            <div key={label} className="text-center">
-              <div className="flex justify-center mb-1.5">
-                <Icon className="h-3.5 w-3.5 text-accent/70" />
-              </div>
-              <p className="text-[11px] font-medium text-fg-secondary">{label}</p>
-              <p className="text-[10px] text-fg-tertiary mt-0.5">{sub}</p>
-            </div>
-          ))}
-        </div>
       </div>
-    </div>
+    </main>
   );
 }

@@ -441,34 +441,6 @@ pub async fn rivian_vehicle_images(
     client: &reqwest::Client,
     tokens: &RivianTokenBundle,
 ) -> Result<Vec<RivianVehicleImage>, RivianAuthError> {
-    outbound_policy::require_optional_traffic()?;
-    let query = r#"
-      query getVehicleImages($extension: String, $resolution: String, $versionForVehicle: String, $versionForPreOrder: String) {
-        getVehicleOrderMobileImages(resolution: $resolution, extension: $extension, version: $versionForPreOrder) {
-          ...image
-        }
-        getVehicleMobileImages(resolution: $resolution, extension: $extension, version: $versionForVehicle) {
-          ...image
-        }
-      }
-
-      fragment image on VehicleMobileImage {
-          orderId
-          vehicleId
-          url
-          extension
-          resolution
-          size
-          design
-          placement
-          overlays {
-            url
-            overlay
-            zIndex
-          }
-      }
-    "#;
-
     let mut images = Vec::new();
     let mut seen = std::collections::HashSet::new();
     let mut app_session_token = tokens.app_session_token.clone();
@@ -477,16 +449,9 @@ pub async fn rivian_vehicle_images(
     for (style, version) in [("photo", "2"), ("cel", "3")] {
         let mut attempt = 0;
         let status = loop {
-            let body = serde_json::json!({
-                "operationName": "getVehicleImages",
-                "query": query,
-                "variables": {
-                    "extension": serde_json::Value::Null,
-                    "resolution": "@3x",
-                    "versionForVehicle": version,
-                    "versionForPreOrder": version
-                }
-            });
+            // The owner-approved artwork exception: this fixed query only.
+            // Other optional traffic stays behind `require_optional_traffic`.
+            let body = outbound_policy::vehicle_images_request(version)?;
 
             let req = outbound_policy::rivian_post(&gateway_url()?)?
                 .header("User-Agent", USER_AGENT)

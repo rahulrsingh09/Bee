@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   trigger: vi.fn(),
   backfill: { status: 'done', history_backfilled_at: null as string | null, rivian_session_count: 40, local_session_count: 37, missing_source_count: null as number | null },
   vehicleAuth: null as string | null,
+  banner: null as null | { kind: 'rivian'; since: string | null; reason: 'credentials' | 'feed' },
   places: [] as Place[],
   api: {
     getOidcIdentities: vi.fn(),
@@ -35,6 +36,12 @@ vi.mock('@tanstack/react-router', () => ({
 vi.mock('../../features/r-experience/RAppLayout', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../features/r-experience/RAppLayout')>()),
   RAppLayout: ({ children }: { children: React.ReactNode }) => <main>{children}</main>,
+}));
+
+// The card reads the same connection state as the app banner.
+vi.mock('../../features/r-experience/useRConnection', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../features/r-experience/useRConnection')>()),
+  useRConnection: () => ({ banner: mocks.banner }),
 }));
 
 vi.mock('../../components/settings/BackupSection', () => ({ BackupSection: () => <p>Backup schedule editor</p> }));
@@ -64,7 +71,7 @@ import { SettingsContent, rSettingsSection } from '../../features/settings/Setti
 import { rSignInRules, rSignInState } from '../../features/settings/RSignInCard';
 import { rParseRate, rPlaceRate, rRatePlaces, rRateUpdateBody } from '../../features/settings/RRatesCard';
 import { rBackupSummary } from '../../features/settings/RBackupsCard';
-import { rBackfillLine } from '../../features/settings/RRivianCard';
+import { rBackfillLine, rRivianCardState } from '../../features/settings/RRivianCard';
 
 const place = (overrides: Partial<Place>): Place => ({
   id: 'p-home', name: 'Home', latitude: 47.6, longitude: -122.3, radius_m: 120, is_home: true, is_work: false,
@@ -96,6 +103,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.role = 'super_user';
   mocks.vehicleAuth = null;
+  mocks.banner = null;
   mocks.places = [place({}), place({ id: 'p-office', name: 'Office', is_home: false, is_work: true,
     charging: { id: 'cp-2', name: 'Office', billing_type: 'free', rate: 0, session_fee: 0, currency: 'USD', timezone: null, tou_periods: [] } })];
   mocks.api.getOidcIdentities.mockResolvedValue({ password_configured: true, oidc_linked: false, oidc_link_available: false });
@@ -200,6 +208,24 @@ describe('Settings page', () => {
     expect(within(rivian).getByRole('button', { name: 'Recover now' })).toBeDisabled();
   });
 
+  it('agrees with the app banner when no new data arrives from Rivian', () => {
+    mocks.banner = { kind: 'rivian', since: null, reason: 'feed' };
+    renderSettings();
+    const rivian = screen.getByRole('region', { name: 'Rivian account' });
+    expect(within(rivian).queryByText('Connected')).not.toBeInTheDocument();
+    expect(within(rivian).getByText('Not receiving')).toBeInTheDocument();
+    expect(within(rivian).getByText(/No new data is arriving\./)).toBeInTheDocument();
+    expect(within(rivian).getByRole('link', { name: 'Reconnect' })).toBeInTheDocument();
+  });
+
+  it('says Reconnect needed when the banner reports expired Rivian credentials', () => {
+    mocks.banner = { kind: 'rivian', since: null, reason: 'credentials' };
+    renderSettings();
+    const rivian = screen.getByRole('region', { name: 'Rivian account' });
+    expect(within(rivian).getByText('Reconnect needed')).toBeInTheDocument();
+    expect(within(rivian).getByRole('button', { name: 'Recover now' })).toBeDisabled();
+  });
+
   it('saves the Home rate to the Home place cost profile and leaves Office alone', async () => {
     renderSettings();
     const home = screen.getByLabelText('Home · $ per kWh');
@@ -269,5 +295,10 @@ describe('Settings rules', () => {
     expect(rBackfillLine(undefined, true)).toBe('Fetching charges from Rivian…');
     expect(rBackfillLine({ vehicle_id: 'v', status: 'error', history_backfilled_at: null, rivian_session_count: null, local_session_count: 0 }, false)).toBe('The last recovery failed. Try again.');
     expect(rBackupSummary(undefined).note).toBe('Backup status is not available.');
+    expect(rRivianCardState(null, false)).toBe('connected');
+    expect(rRivianCardState(null, true)).toBe('reconnect');
+    expect(rRivianCardState({ kind: 'offline', since: null }, false)).toBe('connected');
+    expect(rRivianCardState({ kind: 'rivian', since: null, reason: 'feed' }, false)).toBe('feed');
+    expect(rRivianCardState({ kind: 'rivian', since: null, reason: 'credentials' }, false)).toBe('reconnect');
   });
 });

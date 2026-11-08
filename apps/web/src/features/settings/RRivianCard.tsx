@@ -9,10 +9,21 @@ import { formatAppDate } from '@riviamigo/ui/lib/dateTime';
 import { getRivianCredentialRenewalNotice } from '../../lib/rivianCredentialRenewal';
 import { rWhen } from '../r-experience/RAppLayout';
 import { RIconCheck, RIconWarn } from '../r-experience/RShellIcons';
+import { useRConnection, type RConnectionBanner } from '../r-experience/useRConnection';
 
 /** True when Rivian asked for a new sign-in. */
 export function rRivianNeedsReconnect(vehicle: Pick<Vehicle, 'auth_state' | 'renewal_state'> | undefined, status?: Pick<VehicleStatus, 'auth_state' | 'renewal_state'> | null) {
   return [vehicle, status].some(item => item?.auth_state === 'needs_reauth' || item?.renewal_state === 'reauth_required');
+}
+
+/**
+ * The card state, from the same reading as the app banner, so the card and the banner always agree.
+ * "reconnect": Rivian asked for a new sign-in. "feed": the sign-in is good, but no new data arrives.
+ */
+export function rRivianCardState(banner: RConnectionBanner | null, needsReconnect: boolean): 'connected' | 'reconnect' | 'feed' {
+  if (needsReconnect || (banner?.kind === 'rivian' && banner.reason === 'credentials')) return 'reconnect';
+  if (banner?.kind === 'rivian') return 'feed';
+  return 'connected';
 }
 
 /** One line about the charging-history backfill. */
@@ -32,6 +43,7 @@ export function RRivianCard() {
   const { data: vehicles } = useVehicles();
   const vehicle = vehicles?.find(item => item.id === effectiveVehicleId);
   const status = useCurrentVehicleStatus(effectiveVehicleId ?? null).data ?? null;
+  const { banner } = useRConnection();
   const backfill = useChargeBackfillStatus(effectiveVehicleId ?? null);
   const recover = useTriggerChargeBackfill(effectiveVehicleId ?? null);
   const canManage = vehicle?.membership_role === 'owner' || vehicle?.membership_role === 'manager';
@@ -46,7 +58,8 @@ export function RRivianCard() {
     );
   }
 
-  const lost = rRivianNeedsReconnect(vehicle, status);
+  const state = rRivianCardState(banner, rRivianNeedsReconnect(vehicle, status));
+  const lost = state === 'reconnect';
   const renewal = getRivianCredentialRenewalNotice(status ?? vehicle);
   const connectedAt = vehicle.credential_issued_at ?? vehicle.created_at;
   const refreshed = rWhen(status?.last_updated);
@@ -55,11 +68,14 @@ export function RRivianCard() {
     <section id="rivian" className="r-card r-pad r-rise" style={{ '--i': 2 } as React.CSSProperties} aria-labelledby="settings-rivian-title">
       <div className="r-ctitle">
         <h2 id="settings-rivian-title">Rivian account</h2>
-        {lost ? <span className="r-warnc"><RIconWarn />Reconnect needed</span> : <span className="r-okc"><RIconCheck />Connected</span>}
+        {state === 'reconnect' ? <span className="r-warnc"><RIconWarn />Reconnect needed</span>
+          : state === 'feed' ? <span className="r-warnc"><RIconWarn />Not receiving</span>
+            : <span className="r-okc"><RIconCheck />Connected</span>}
       </div>
       <div className="r-muted r-small">
         {connectedAt ? `Connected ${formatAppDate(connectedAt, { year: undefined })}` : 'Connected'}{refreshed ? ` · last refresh ${refreshed}` : ''}
       </div>
+      {state === 'feed' && <p className="r-note">{banner?.since ? `No new data since ${rWhen(banner.since)}.` : 'No new data is arriving.'} Reconnect if it does not come back.</p>}
       {renewal && !lost && <p className="r-note">{renewal.message}</p>}
       <p className="r-note">If trips or charges stop updating, reconnect. Rivian sends a code to your phone or email.</p>
       {canManage && <Link className="r-btn r-btn-ghost r-gap-top" to="/connect" search={{ mode: 'refresh', vehicle_id: vehicle.id }}>Reconnect</Link>}

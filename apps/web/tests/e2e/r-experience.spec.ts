@@ -129,25 +129,6 @@ test('changing vehicle clears old readings until the selected vehicle snapshot a
   await expect(page.locator('.now-batt')).toContainText('20%');
 });
 
-for (const width of [390, 1280]) {
-  test(`chart editor keeps its focused workflow in the R theme at ${width}px`, async ({ page }) => {
-    await page.setViewportSize({ width, height: 900 });
-    await installRFixture(page, { role: 'super_user', populatedAdmin: true, mode: 'dark' });
-    await page.goto('/settings/charts/new');
-    await expect(page.locator('.r-editor')).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'New chart', exact: true })).toBeVisible();
-    await expect(page.getByRole('navigation', { name: 'Chart editor sections' })).toBeVisible();
-    for (const section of ['curves', 'display', 'advanced', 'basics']) {
-      await page.getByRole('button', { name: section, exact: true }).click();
-      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
-    }
-    await page.getByRole('button', { name: 'Back to charts' }).click();
-    await expect(page.getByRole('dialog')).toBeVisible();
-    await page.getByRole('button', { name: /keep editing/i }).click();
-    await expect(page.getByRole('heading', { name: 'New chart', exact: true })).toBeVisible();
-  });
-}
-
 test('an R2 without owner images shows its packaged R2 artwork, never the bundled orbit frames', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await installRFixture(page);

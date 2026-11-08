@@ -8,29 +8,30 @@ const tabs = [
   ['Car', '/vehicle-health'],
 ] as const;
 
-// Each URL keeps exactly one tab active; Settings is its own area.
-const activeTab: Array<[string, typeof tabs[number][0]]> = [
-  ['/', 'Now'],
-  ['/trips', 'Activity'],
-  ['/trips/trip-1', 'Activity'],
-  ['/insights/cost', 'Insights'],
-  ['/insights/battery', 'Insights'],
-  ['/insights/lifetime', 'Insights'],
-  ['/insights', 'Insights'],
-  ['/charging/charge-1', 'Activity'],
-  ['/battery', 'Insights'],
-  ['/battery/phantom-drain', 'Insights'],
-  ['/efficiency', 'Insights'],
-  ['/vehicle-health', 'Car'],
+// Each URL keeps exactly one tab active; Settings is its own area. Old links land on their Insights tab.
+const activeTab: Array<[string, typeof tabs[number][0], RegExp]> = [
+  ['/', 'Now', /\/$/],
+  ['/trips', 'Activity', /\/trips$/],
+  ['/trips/trip-1', 'Activity', /\/trips\/trip-1$/],
+  ['/insights/cost', 'Insights', /\/insights\/cost$/],
+  ['/insights/battery', 'Insights', /\/insights\/battery$/],
+  ['/insights/lifetime', 'Insights', /\/insights\/lifetime$/],
+  ['/insights', 'Insights', /\/insights\/cost$/],
+  ['/charging/charge-1', 'Activity', /\/charging\/charge-1$/],
+  ['/battery', 'Insights', /\/insights\/battery$/],
+  ['/battery/phantom-drain', 'Insights', /\/insights\/battery$/],
+  ['/efficiency', 'Insights', /\/insights\/efficiency$/],
+  ['/vehicle-health', 'Car', /\/vehicle-health$/],
 ];
 
-// Removed pages keep old links working.
+// Removed pages keep old links working. "/insights" opens its Cost tab.
 const redirects: Array<[string, RegExp]> = [
-  ['/explore', /\/insights$/],
-  ['/d/dashboard', /\/insights$/],
-  ['/admin/dashboards', /\/insights$/],
-  ['/settings/charts/new', /\/insights$/],
-  ['/settings/charts/chart-1', /\/insights$/],
+  ['/explore', /\/insights\/cost$/],
+  ['/d/dashboard', /\/insights\/cost$/],
+  ['/d/charging', /\/insights\/cost$/],
+  ['/admin/dashboards', /\/insights\/cost$/],
+  ['/settings/charts/new', /\/insights\/cost$/],
+  ['/settings/charts/chart-1', /\/insights\/cost$/],
   ['/settings/themes/old-theme', /\/settings$/],
 ];
 
@@ -109,7 +110,7 @@ for (const width of [390, 1280]) for (const mode of ['dark', 'light'] as const) 
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
 
-  test(`removed pages redirect and every page keeps one tab at ${width}px in ${mode}`, async ({ page }) => {
+  test(`removed pages redirect and every page keeps one tab at ${width}px in ${mode}`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 900 });
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await installRFixture(page, { mode });
@@ -125,9 +126,9 @@ for (const width of [390, 1280]) for (const mode of ['dark', 'light'] as const) 
     await expect(page.getByRole('link', { name: /Custom dashboards/ })).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath('insights.png'), fullPage: true });
     const nav = page.getByRole('navigation', { name: 'Primary navigation' });
-    for (const [path, label] of activeTab) {
+    for (const [path, label, target] of activeTab) {
       await visit(page, path);
-      await expect(page).toHaveURL(new RegExp(`${path === '/' ? '' : path}$`));
+      await expect(page, path).toHaveURL(target);
       await expect(nav.getByRole('link', { name: label, exact: true })).toHaveAttribute('aria-current', 'page');
       await expect(nav.locator('[aria-current="page"]')).toHaveCount(1);
     }
@@ -153,8 +154,15 @@ for (const width of [390, 1280]) {
     await expect(banner).toContainText('After you reconnect, R recovers the missed charges from Rivian.');
     const reconnect = banner.getByRole('link', { name: 'Reconnect' });
     await expect(reconnect).toHaveAttribute('href', '/connect?mode=refresh&vehicle_id=owner-vehicle');
+    // Measure after the rise animations end: a running transform skews the box by a fraction of a pixel.
+    await page.evaluate(() => Promise.all(document.getAnimations()
+      .filter(animation => animation.effect?.getComputedTiming().endTime !== Infinity)
+      .map(animation => animation.finished)));
     const box = (await reconnect.boundingBox())!;
     expect(box.height).toBeGreaterThanOrEqual(36);
+    // The small button's ::before adds 4 px above and below for a 44 px target.
+    const target = await reconnect.evaluate(element => element.getBoundingClientRect().height - 2 * parseFloat(getComputedStyle(element, '::before').top));
+    expect(target).toBeGreaterThanOrEqual(44);
     await page.screenshot({ path: testInfo.outputPath('rivian-lost.png') });
     await reconnect.click();
     await expect(page.getByRole('heading', { name: 'Reconnect your Rivian account' })).toBeVisible();

@@ -3,12 +3,19 @@ import { installRFixture } from './r-experience.fixture';
 
 test.use({ viewport: { width: 393, height: 659 }, isMobile: true, hasTouch: true });
 
-test('efficiency changes update chart readings immediately', async ({ page }) => {
+test('efficiency unit changes update the Insights readings immediately', async ({ page }) => {
   await installRFixture(page, { populatedAdmin: true, populatedAnalytics: true });
+  // The old Efficiency page opens the Efficiency tab of Insights.
   await page.goto('/efficiency');
-  await expect(page.locator('[data-testid="sensor-chip"]').filter({ hasText: 'Efficiency (net)' }).first()).toContainText('3.1 mi/kWh');
-  await page.getByRole('button', { name: /Toggle efficiency units/ }).click();
-  await expect(page.locator('[data-testid="sensor-chip"]').filter({ hasText: 'Efficiency (net)' }).first()).toContainText('320 Wh/mi');
+  await expect(page).toHaveURL(/\/insights\/efficiency$/);
+  const average = page.getByRole('region', { name: 'Average efficiency' });
+  const perWeek = average.getByRole('img', { name: 'Efficiency per week' });
+  await expect(average.locator('.ri-big')).toHaveText('320Wh/mi');
+  await expect(perWeek).toContainText('320');
+  await average.getByRole('group', { name: 'Efficiency unit' }).getByRole('button', { name: 'mi/kWh', exact: true }).click();
+  await expect(average.locator('.ri-big')).toHaveText('3.13mi/kWh');
+  await expect(perWeek).toContainText('3.13');
+  await expect(perWeek).not.toContainText('320');
 });
 
 /** A small PNG for every owner image (data URL decoded). The protected image cache serves it. */
@@ -70,33 +77,38 @@ for (const mode of ['dark', 'light'] as const) {
       const context = await browser.newContext({ viewport: { width: 393, height: 659 } });
       const page = await context.newPage();
       await installRFixture(page, { mode, palette, populatedAdmin: true, populatedAnalytics: true });
-      await page.goto('/d/charging');
-      const sessions = page.locator('[data-testid="sensor-chip"]').filter({ hasText: /^Charges/ }).first();
-      await expect(sessions).toContainText('25');
-      results.push(await sessions.evaluate(element => {
-        const value = element.querySelector('.font-mono')!;
+      await page.goto('/insights/charging');
+      const charges = page.locator('.ri-spec > div').filter({ has: page.locator('dt', { hasText: /^Charges$/ }) });
+      await expect(charges.locator('dd.ri-v')).toHaveText('1');
+      const bar = page.getByRole('region', { name: 'Energy charged per week' }).locator('svg path[data-tip]').first();
+      await expect(bar).toBeAttached();
+      results.push(await charges.evaluate((element, barFill) => {
+        const value = element.querySelector('dd.ri-v')!;
         const style = getComputedStyle(value);
         const root = getComputedStyle(document.documentElement);
+        const insights = getComputedStyle(element.closest('.ri')!);
         return {
-          color: style.color, halo: style.textShadow,
+          color: style.color, halo: style.textShadow, bar: barFill,
+          home: insights.getPropertyValue('--ri-home'), office: insights.getPropertyValue('--ri-office'), other: insights.getPropertyValue('--ri-other'),
           series: root.getPropertyValue('--rm-series-02'), drive: root.getPropertyValue('--rm-dm-towing'),
           accent: root.getPropertyValue('--rm-chart-accent'), success: root.getPropertyValue('--rm-chart-success'),
         };
-      }));
+      }, await bar.evaluate(element => getComputedStyle(element).fill)));
       await context.close();
     }
     expect(results[0]).toEqual(results[1]);
     expect(results[0]!.halo).toBe('none');
     expect(results[0]!.accent).not.toBe(results[0]!.success);
+    expect(new Set([results[0]!.home, results[0]!.office, results[0]!.other]).size).toBe(3);
   });
 }
 
 test('populated phone charts retain readable labels within their visible frame', async ({ page }, testInfo) => {
   await installRFixture(page, { populatedAdmin: true, populatedAnalytics: true });
-  await page.goto('/d/charging');
-  const chart = page.locator('[data-chart-renderer="daily-charge-sessions"]');
+  await page.goto('/insights/charging');
+  const chart = page.getByRole('region', { name: 'Energy charged per week' }).locator('.ri-chart').first();
   await expect(chart.locator('svg')).toBeVisible();
-  await expect(chart.locator('[data-testid="daily-charge-axis-label"]').first()).toBeVisible();
+  await expect(chart.locator('svg text').filter({ hasText: /\S/ }).first()).toBeVisible();
   const geometry = await chart.evaluate(element => {
     const svg = element.querySelector('svg')!;
     const text = [...svg.querySelectorAll('text')].filter(node => node.textContent?.trim());
@@ -117,93 +129,3 @@ test('populated phone charts retain readable labels within their visible frame',
   await chart.scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath('iphone-charging-chart.png') });
 });
-
-test('settings pickers stay inside the phone viewport and restore focus', async ({ page }) => {
-  await installRFixture(page, { populatedAdmin: true, role: 'super_user' });
-  await page.goto('/settings?section=units');
-  await page.getByRole('button', { name: /^Custom/ }).click();
-  const trigger = page.getByRole('button', { name: 'Application time zone', exact: true });
-  await page.getByRole('button', { name: 'Efficiency display', exact: true }).click();
-  await page.keyboard.press('Tab');
-  await expect(trigger).toBeFocused();
-  await trigger.evaluate(element => window.scrollTo(0, scrollY + element.getBoundingClientRect().top - 500));
-  await trigger.click();
-  const menu = page.getByRole('listbox', { name: 'Application time zone' });
-  const bounds = (await menu.boundingBox())!;
-  expect(bounds.x).toBeGreaterThanOrEqual(11);
-  expect(bounds.x + bounds.width).toBeLessThanOrEqual(382);
-  expect(bounds.y).toBeGreaterThanOrEqual(11);
-  expect(bounds.y + bounds.height).toBeLessThanOrEqual(648);
-  await page.keyboard.press('Escape');
-  await expect(trigger).toBeFocused();
-  await expect(menu).toHaveCount(0);
-  await trigger.press('ArrowDown');
-  await expect(menu.getByRole('option', { selected: true })).toBeFocused();
-  const enabled = menu.locator('[role="option"]:not(:disabled)');
-  const currentIndex = await enabled.evaluateAll(elements => elements.findIndex(element => element.getAttribute('aria-selected') === 'true'));
-  const nextOption = enabled.nth((currentIndex + 1) % await enabled.count());
-  const nextLabel = await nextOption.textContent();
-  await page.keyboard.press('ArrowDown');
-  await expect(nextOption).toBeFocused();
-  await page.keyboard.press('Enter');
-  await expect(menu).toHaveCount(0);
-  await expect(trigger).toContainText(nextLabel!.trim());
-  await page.getByRole('button', { name: 'Settings section', exact: true }).click();
-  const section = (await page.getByRole('listbox', { name: 'Settings section' }).boundingBox())!;
-  expect(section.x + section.width).toBeLessThanOrEqual(382);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-});
-
-test('vehicle settings keep Catalina Cove artwork and capture controls fit long names', async ({ page }) => {
-  const name = 'Catalina Cove R2 Performance Family Adventure';
-  await installRFixture(page, { populatedAdmin: true, unknownConfiguration: true, vehicleName: name, role: 'super_user' });
-  await page.goto('/settings?section=vehicles');
-  await expect(page.getByRole('img', { name: 'Catalina Cove R2 Performance with 21-inch wheels' })).toBeVisible();
-  await page.goto('/settings?section=raw');
-  await page.getByRole('button', { name: `Start capture for ${name}` }).click();
-  const stop = page.getByRole('button', { name: `Stop capture for ${name}` });
-  const bounds = (await stop.boundingBox())!;
-  expect(bounds.x + bounds.width).toBeLessThanOrEqual(393);
-  await stop.click();
-  const restart = page.getByRole('button', { name: `Start capture for ${name}` });
-  await expect(restart).toBeVisible();
-  await restart.click();
-  const confirmation = page.getByRole('dialog', { name: 'Replace the previous capture?' });
-  await expect(confirmation).toBeVisible();
-  await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await expect(confirmation).toHaveCount(0);
-  await expect(restart).toBeFocused();
-  await expect(stop).toHaveCount(0);
-  await restart.click();
-  await confirmation.getByRole('button', { name: 'Start new capture', exact: true }).click();
-  await expect(confirmation).toHaveCount(0);
-  await expect(stop).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-});
-
-for (const width of [320, 402]) {
-  test(`connection names and job actions remain visible at ${width}px`, async ({ page }, testInfo) => {
-    await page.setViewportSize({ width, height: 874 });
-    await installRFixture(page, { populatedAdmin: true, role: 'super_user' });
-    await page.goto('/settings?section=external');
-    const connections = page.getByRole('navigation', { name: 'External connections' });
-    for (const button of await connections.getByRole('button').all()) {
-      await button.click();
-      await expect(button).toHaveAttribute('aria-pressed', 'true');
-      expect(await button.evaluate(e => {
-        const box = e.getBoundingClientRect();
-        return box.left >= 0 && box.right <= innerWidth && e.scrollWidth <= e.clientWidth;
-      })).toBe(true);
-    }
-    await connections.screenshot({ path: testInfo.outputPath('connection-options.png') });
-    await page.goto('/settings?section=jobs');
-    const run = page.getByRole('button', { name: 'Run', exact: true });
-    await run.scrollIntoViewIfNeeded();
-    await expect(run).toBeVisible();
-    expect(await run.evaluate(e => {
-      const box = e.getBoundingClientRect();
-      return box.left >= 0 && box.right <= innerWidth && e.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
-    })).toBe(true);
-    await page.screenshot({ path: testInfo.outputPath('jobs-mobile.png') });
-  });
-}

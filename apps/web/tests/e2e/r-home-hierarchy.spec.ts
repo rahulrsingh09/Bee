@@ -321,5 +321,46 @@ test('Now shows the loading skeleton until the first reads arrive', async ({ pag
 test('the old Overview dashboard URL opens Insights, since R has no custom dashboards', async ({ page }) => {
   await installRFixture(page, { populatedAdmin: true });
   await page.goto('/d/dashboard');
-  await expect(page).toHaveURL(/\/insights$/);
+  // "/insights" opens its Cost tab.
+  await expect(page).toHaveURL(/\/insights\/cost$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Insights' })).toBeVisible();
 });
+
+test('a car that is on in park shows the parked view, not Driving', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  // Prod shape: the power state stays "go" while the gear is in park.
+  await installRFixture(page, { mode: 'dark', statusOverrides: { power_state: 'go', gear_status: 'park', speed_mph: 0 } });
+  await installNowData(page);
+  await page.goto('/');
+  await expect(page.locator('.now-chip')).toHaveText('Parked · Home · Locked', { timeout: 15_000 });
+  await expect(page.getByRole('region', { name: 'This trip', exact: true })).toHaveCount(0);
+  await expect(page.locator('.now-live-map')).toHaveCount(0);
+  await expect(page.locator('.now-batt')).toContainText('68%');
+  expect(await page.getByRole('heading', { level: 2 }).allTextContents()).toEqual(['Latest', 'This week', 'Last 30 days']);
+});
+
+test('Now never shows the Demo R1S next to the real car', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await installRFixture(page, { mode: 'dark', demoVehicle: true });
+  await installNowData(page);
+  await page.goto('/');
+  await expect(page.getByRole('heading', { level: 1, name: 'Your Rivian' })).toBeVisible({ timeout: 15_000 });
+  // One real vehicle: no picker, and nothing names the demo vehicle.
+  await expect(page.getByRole('combobox', { name: 'Select vehicle' }).or(page.getByRole('button', { name: 'Select vehicle' }))).toHaveCount(0);
+  await expect(page.getByText('Demo R1S')).toHaveCount(0);
+});
+
+test('the Last 30 days cards open their Insights tab', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await installRFixture(page, { mode: 'dark' });
+  await installNowData(page);
+  await page.goto('/');
+  for (const [name, tab] of [[/Charging cost/, 'cost'], [/^Efficiency/, 'efficiency'], [/Loss while parked/, 'battery']] as const) {
+    await page.getByRole('link', { name }).click();
+    await expect(page).toHaveURL(new RegExp(`/insights/${tab}$`), { timeout: 15_000 });
+    await page.goBack();
+    await expect(page.getByRole('heading', { level: 2, name: 'Last 30 days' })).toBeVisible();
+  }
+});
+

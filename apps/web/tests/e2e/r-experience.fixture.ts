@@ -42,6 +42,8 @@ export async function installRFixture(page: Page, options: {
   activeSessions?: number;
   /** Shell node: the account keeps metric units (Settings no longer has a Units section). */
   metricUnits?: boolean;
+  /** The account also lists the Demo R1S (prod shape). R never shows it next to a real vehicle. */
+  demoVehicle?: boolean;
 } = {}) {
   const writes: string[] = [];
   const metricRequests: Record<string, unknown>[] = [];
@@ -297,7 +299,10 @@ export async function installRFixture(page: Page, options: {
       if (request.method() === 'PUT') timezone = request.postDataJSON().timezone;
       return json({ timezone });
     }
-    if (path === '/v1/vehicles') return json({ vehicles: [vehicle, ...(options.secondVehicle ? [{
+    if (path === '/v1/vehicles') return json({ vehicles: [...(options.demoVehicle ? [{
+      ...vehicle, id: 'demo-vehicle', rivian_vehicle_id: 'demo-r1s', model: 'R1S', display_name: 'Demo R1S', is_demo: true,
+      trim: null, color: null, wheel_option: null, interior_color: null,
+    }] : []), vehicle, ...(options.secondVehicle ? [{
       ...vehicle, id: 'other-vehicle', model: 'R1T', display_name: 'Other vehicle',
       trim: null, color: null, wheel_option: null, interior_color: null,
     }] : [])] });

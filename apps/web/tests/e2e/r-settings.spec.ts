@@ -74,8 +74,18 @@ test('Settings signs out the other devices and recovers missed charges', async (
 
 test('old Settings section links still open Settings', async ({ page }) => {
   await installRFixture(page, { role: 'super_user' });
-  for (const section of ['units', 'api', 'places', 'dashboards', 'authentication', 'vehicles', 'backup']) {
+  for (const section of ['units', 'api', 'places', 'dashboards', 'authentication', 'vehicles', 'raw', 'external', 'jobs', 'backup']) {
     await page.goto(`/settings?section=${section}`);
     await expect(page.getByRole('heading', { level: 1, name: 'Settings' }), section).toBeVisible();
   }
 });
+
+test('the Rivian card agrees with the banner when no new data arrives', async ({ page }) => {
+  await installRFixture(page, { role: 'super_user', statusOverrides: { worker_health: 'error' } });
+  await page.goto('/settings');
+  await expect(page.getByRole('alert').filter({ hasText: 'Rivian connection lost.' })).toBeVisible({ timeout: 15_000 });
+  const rivian = page.getByRole('region', { name: 'Rivian account' });
+  await expect(rivian.getByText('Not receiving', { exact: true })).toBeVisible();
+  await expect(rivian.getByText('Connected', { exact: true })).toHaveCount(0);
+});
+

@@ -19,9 +19,14 @@ There is no appearance gallery, Theme Studio entry or interface selector.
   analysis pages, and Car holds vehicle health. Settings opens from the rail or
   the gear. See
   [R navigation](#r-navigation) and [Now](#now).
-- Use neutral surfaces, restrained borders and `--r-signal`. Cove teal, lime,
+- Use neutral surfaces, restrained borders and the amber accent `--r-acc`
+  (`#f2c14e` dark, `#b88300` light) with `--r-acc-ink` on it. The accent marks
+  the route line, the play button and scrubber, primary buttons, the selected
+  row, the current software version and focus. `--rm-chart-accent`,
+  `--rm-map-route-0` and `--rm-charging-active` point at it, and `--r-signal`
+  is an alias of it. Cove teal, lime (`--r-series-lime`, series 01 only),
   caliper gold and supporting cool series colors form the fixed R data palette.
-  Status colors retain their meaning. R overrides belong in the existing token
+  Status colors retain their meaning: `--rm-status-positive` is `--r-good`. R overrides belong in the existing token
   owner, `packages/ui/src/tokens/globals.css`; saved account themes must not change
   automatic chart or sensor colors. Explicit chart-color overrides remain valid.
 - R contrast tokens. The R blocks in `globals.css` own these values for both modes:

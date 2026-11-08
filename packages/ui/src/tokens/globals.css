@@ -519,14 +519,17 @@ html.r-interface, body.r-experience, .r-palette-probe {
   --rm-glow-md: none !important;
   --rm-glow-lg: none !important;
   --rm-glow-button: none !important;
-  --r-signal: #bce177 !important;
-  --r-signal-ink: #131b0a !important;
+  /* The R accent role is amber (--r-acc), as in v5. --r-signal is an alias
+     of it for older R styles. The lime value stays only as data series 01. */
+  --r-signal: var(--r-acc) !important;
+  --r-signal-ink: var(--r-acc-ink) !important;
+  --r-series-lime: #bce177 !important;
   --r-cove: #79b5aa !important;
   --r-water: #b3d9fb !important;
   --r-caliper: #ddcd74 !important;
   --r-alert: #efaaa0 !important;
-  --rm-chart-accent: var(--r-signal) !important;
-  --rm-status-positive: var(--r-signal) !important;
+  --rm-chart-accent: var(--r-acc) !important;
+  --rm-status-positive: var(--r-good) !important;
   --rm-status-warning: var(--r-caliper) !important;
   --rm-status-danger: var(--r-alert) !important;
   --rm-status-info: var(--r-water) !important;
@@ -545,7 +548,7 @@ html.r-interface, body.r-experience, .r-palette-probe {
   --rm-chart-violet: #9986cd !important;
   --rm-chart-indigo: #7183c7 !important;
   --rm-chart-rose: #c17064 !important;
-  --rm-series-01: var(--r-signal) !important;
+  --rm-series-01: var(--r-series-lime) !important;
   --rm-series-02: var(--r-cove) !important;
   --rm-series-03: var(--r-water) !important;
   --rm-series-04: var(--r-caliper) !important;
@@ -577,14 +580,14 @@ html.r-interface, body.r-experience, .r-palette-probe {
   --rm-series-14-text: var(--rm-series-14) !important;
   --rm-series-15-text: var(--rm-series-15) !important;
   --rm-series-16-text: var(--rm-series-16) !important;
-  --rm-charging-active: var(--r-signal) !important;
+  --rm-charging-active: var(--r-acc) !important;
   --rm-charging-done: var(--r-cove) !important;
   --rm-charging-limited: var(--r-caliper) !important;
   --rm-charging-ac: var(--r-cove) !important;
   --rm-charging-dc: var(--r-caliper) !important;
   --rm-charging-dcfc: var(--r-caliper) !important;
   --rm-dm-everyday: var(--r-cove) !important;
-  --rm-dm-conserve: var(--r-signal) !important;
+  --rm-dm-conserve: var(--r-series-lime) !important;
   --rm-dm-terrain: var(--rm-series-08) !important;
   --rm-dm-sand: var(--r-caliper) !important;
   --rm-dm-rock: var(--rm-series-09) !important;
@@ -592,7 +595,7 @@ html.r-interface, body.r-experience, .r-palette-probe {
   --rm-dm-drift: var(--rm-chart-sky) !important;
   --rm-dm-towing: var(--r-caliper) !important;
   --rm-dm-unknown: var(--rm-text-secondary) !important;
-  --rm-map-route-0: var(--r-signal) !important;
+  --rm-map-route-0: var(--r-acc) !important;
   --rm-map-route-1: var(--r-cove) !important;
   --rm-map-route-2: var(--r-water) !important;
   --rm-map-route-3: var(--r-caliper) !important;
@@ -631,8 +634,7 @@ html.r-interface.light, .light body.r-experience, .r-palette-probe.light {
   --rm-border-control: #76817d !important;
   --rm-accent-hover: #273129 !important;
   --rm-accent-active: #3b463d !important;
-  --r-signal: #2d400e !important;
-  --r-signal-ink: #eff3ee !important;
+  --r-series-lime: #2d400e !important;
   --r-cove: #326b60 !important;
   --r-water: #03406f !important;
   --r-caliper: #756013 !important;

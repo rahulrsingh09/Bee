@@ -1,7 +1,7 @@
 /* Activity (v5): list, summary, timeline, split layout, trip and charge detail. Tokens only. */
 .r-act {
-  --r-act-accent: var(--r-accent, var(--rm-chart-accent));
-  --r-act-accent-ink: var(--r-accent-ink, var(--rm-text-on-accent));
+  --r-act-accent: var(--r-acc);
+  --r-act-accent-ink: var(--r-acc-ink);
   --r-act-accent-soft: color-mix(in srgb, var(--r-act-accent) 14%, transparent);
   --r-act-home: var(--r-home, var(--rm-series-15));
   --r-act-office: var(--r-office, var(--rm-series-12));

@@ -9,7 +9,7 @@ import {
   CATEGORIES, CATEGORY_COLOR, CATEGORY_LABEL, DEFAULT_GAS, byCategory, gasCost, inWeek, monthDay, n0, n1, placeGroups, sum, usd,
   weeksFrom, type Category, type GasSettings,
 } from '../insightsModel';
-import { ratePlace, usePlaceTag } from '../placeTags';
+import { rateDetail, ratePlace, usePlaceTag } from '../placeTags';
 
 const isGas = (value: unknown): value is GasSettings =>
   !!value && typeof value === 'object' && Number.isFinite((value as GasSettings).mpg) && Number.isFinite((value as GasSettings).price)
@@ -24,11 +24,6 @@ function rateText(place: Place | null) {
   if (profile.billing_type === 'tou') return 'Time of use';
   if (profile.billing_type === 'per_minute') return `$${profile.rate.toFixed(2)}/min`;
   return <>${profile.rate.toFixed(4)}<small className="ri-muted">/kWh</small></>;
-}
-
-function rateDetail(place: Place | null) {
-  if (!place) return 'No place tagged yet';
-  return [place.address?.city, place.charging?.name].filter(Boolean).join(' · ') || place.name;
 }
 
 export function CostTab({ data }: { data: InsightsData }) {
@@ -143,7 +138,7 @@ export function CostTab({ data }: { data: InsightsData }) {
             return (
               <div key={category} className="ri-rate">
                 <i className="ri-sw" style={{ background: CATEGORY_COLOR[category] }} />
-                <div><b>{CATEGORY_LABEL[category]}</b><div className="ri-muted">{rateDetail(place)}</div></div>
+                <div><b>{CATEGORY_LABEL[category]}</b><div className="ri-muted">{rateDetail(place, charges)}</div></div>
                 <b className="ri-num">{rateText(place)}</b>
               </div>
             );

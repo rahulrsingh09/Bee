@@ -36,6 +36,7 @@ vi.mock('@tanstack/react-router', () => ({
 }));
 vi.mock('../features/r-experience/RAppLayout', () => ({
   RAppLayout: ({ children }: { children: React.ReactNode }) => <main>{children}</main>,
+  RPageActions: () => null,
 }));
 vi.mock('../components/layout/NoVehicleState', () => ({
   NoVehicleState: ({ title }: { title: string }) => <p>{title}</p>,

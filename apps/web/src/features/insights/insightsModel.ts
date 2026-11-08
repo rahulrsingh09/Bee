@@ -1,5 +1,8 @@
 import type { ChargeCurvePoint, ChargeSession, PhantomDrainPeriod, Place, Trip } from '@riviamigo/types';
 import { chargeKind } from '../charging/detail/chargeDetailModel';
+import { chargePlace, shortPlace, tripPlace, tripTitleOf } from '../../lib/placeNames';
+
+export { shortPlace };
 
 /* ------------------------------------------------------------------ calendar days */
 
@@ -125,8 +128,6 @@ export const CATEGORIES: readonly Category[] = ['home', 'office', 'other'];
 export const CATEGORY_LABEL: Record<Category, string> = { home: 'Home', office: 'Office', other: 'Other' };
 export const CATEGORY_COLOR: Record<Category, string> = { home: 'var(--ri-home)', office: 'var(--ri-office)', other: 'var(--ri-other)' };
 
-export const shortPlace = (name: string) => name.replace(/^Near /, '');
-
 export function placeCategory(place: Place | null | undefined): Category {
   if (place?.is_home) return 'home';
   if (place?.is_work) return 'office';
@@ -198,7 +199,10 @@ export function chargeRows(sessions: readonly ChargeSession[], places: readonly 
     .map(session => {
       // "none" means the owner tagged the place Other: no saved place, whatever the location.
       const place = session.location_override_mode === 'none' ? null : savedPlaceFor(session, places);
-      const name = place?.name ?? (session.location_name?.trim() || session.rivian_city?.trim() || 'Unknown place');
+      const name = chargePlace(session, place).name;
+      // Group by where the charge was, not by its display name: two chargers in one town stay two places,
+      // as the place-tag API treats them.
+      const where = session.location_name?.trim() || session.rivian_city?.trim() || name;
       const start = new Date(session.started_at).getTime();
       return {
         id: session.id,
@@ -209,7 +213,7 @@ export function chargeRows(sessions: readonly ChargeSession[], places: readonly 
         cost: session.cost_usd ?? null,
         dc: chargeKind(session) === 'dc',
         category: placeCategory(place),
-        placeKey: place ? `place:${place.id}` : `name:${shortPlace(name).toLowerCase()}`,
+        placeKey: place ? `place:${place.id}` : `name:${where.toLowerCase()}`,
         placeName: shortPlace(name),
         place,
         socStart: session.soc_start,
@@ -220,13 +224,12 @@ export function chargeRows(sessions: readonly ChargeSession[], places: readonly 
     .sort((a, b) => a.start - b.start);
 }
 
-export function tripTitle(trip: Pick<Trip, 'start_place' | 'end_place'>) {
-  const from = shortPlace(trip.start_place?.trim() || 'Unknown place');
-  const to = shortPlace(trip.end_place?.trim() || 'Unknown place');
-  return from === to ? `Round trip · ${from}` : `${from} → ${to}`;
+/** The trip title with the shared place names: "Home → Ridgefield". */
+export function tripTitle(trip: Trip, places: readonly Place[] = []) {
+  return tripTitleOf(tripPlace(trip, 'start', places), tripPlace(trip, 'end', places));
 }
 
-export function tripRows(trips: readonly Trip[], timezone: string): TripRow[] {
+export function tripRows(trips: readonly Trip[], timezone: string, places: readonly Place[] = []): TripRow[] {
   return trips
     .filter(trip => trip.ended_at != null && Number.isFinite(trip.distance_mi))
     .map(trip => {
@@ -236,7 +239,7 @@ export function tripRows(trips: readonly Trip[], timezone: string): TripRow[] {
       return {
         id: trip.id, day: dayKeyOf(start, timezone), start, miles: Math.max(0, trip.distance_mi), whMi,
         tempC: trip.outside_temp_c ?? null, socStart: trip.soc_start, socEnd: trip.soc_end,
-        odoStart: trip.start_odometer_mi ?? null, odoEnd: trip.end_odometer_mi ?? null, title: tripTitle(trip),
+        odoStart: trip.start_odometer_mi ?? null, odoEnd: trip.end_odometer_mi ?? null, title: tripTitle(trip, places),
       };
     })
     .sort((a, b) => a.start - b.start);
@@ -329,17 +332,7 @@ export function speedGroups(charges: readonly ChargeRow[], curves: ReadonlyMap<s
 
 /* ------------------------------------------------------------------ battery */
 
-export interface CapacityDay { day: DayKey; kwh: number }
-
-/** The last usable-capacity reading of each day. */
-export function capacityByDay(rows: ReadonlyArray<{ ts: string; usable_kwh: number }>, timezone: string): CapacityDay[] {
-  const map = new Map<DayKey, number>();
-  for (const row of [...rows].sort((a, b) => a.ts.localeCompare(b.ts))) {
-    if (!Number.isFinite(row.usable_kwh) || row.usable_kwh <= 0) continue;
-    map.set(dayKeyOf(row.ts, timezone), row.usable_kwh);
-  }
-  return [...map.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([day, kwh]) => ({ day, kwh }));
-}
+export { capacityByDay, type CapacityDay } from '../../lib/batteryHealth';
 
 export interface BandDay { index: number; day: DayKey; lo: number; hi: number }
 

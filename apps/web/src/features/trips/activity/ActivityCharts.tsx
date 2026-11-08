@@ -1,4 +1,6 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
+import { Maximize2, X } from 'lucide-react';
 import { projectRoute, type RouteCoordinate } from './activityModel';
 
 function useWidth<T extends HTMLElement>(fallback = 320) {
@@ -182,5 +184,53 @@ export function RouteGlyph({ route, size = 44 }: { route: RouteCoordinate[] | nu
       <circle cx={points[0]![0]} cy={points[0]![1]} r={2.5} className="r-act-glyph-start" />
       <circle cx={end[0]} cy={end[1]} r={3.5} className="r-act-glyph-end" />
     </svg>
+  );
+}
+
+/**
+ * A detail chart with the "Expand" control of the other charts: it opens the chart full screen,
+ * taller. `render(big)` draws the chart; `big` is true in the full-screen view.
+ */
+export function ExpandableChart({ title, render }: { title: string; render: (big: boolean) => React.ReactNode }) {
+  const [open, setOpen] = React.useState(false);
+  const close = React.useCallback(() => setOpen(false), []);
+  return (
+    <>
+      {render(false)}
+      <div className="r-act-chart-tools">
+        <button type="button" className="r-act-xlink" onClick={() => setOpen(true)} aria-label={`Expand ${title}`} data-chart-expand>
+          <Maximize2 aria-hidden="true" />Expand
+        </button>
+      </div>
+      {open && <ChartSheet title={title} render={render} onClose={close} />}
+    </>
+  );
+}
+
+function ChartSheet({ title, render, onClose }: { title: string; render: (big: boolean) => React.ReactNode; onClose: () => void }) {
+  const closeRef = React.useRef<HTMLButtonElement>(null);
+  React.useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    closeRef.current?.focus();
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = overflow;
+      opener?.focus?.();
+    };
+  }, [onClose]);
+  return createPortal(
+    <div className="r-act r-act-sheet" role="dialog" aria-modal="true" aria-label={title} onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <div className="r-act-sheet-in">
+        <div className="r-act-sheet-h"><b>{title}</b>
+          <button ref={closeRef} type="button" className="r-act-iconbtn" onClick={onClose} aria-label="Close"><X aria-hidden="true" /></button>
+        </div>
+        {render(true)}
+      </div>
+    </div>,
+    document.body,
   );
 }

@@ -1,7 +1,9 @@
 import type { ChargeSession, Place, Trip } from '@riviamigo/types';
 import { getAppDateParts } from '@riviamigo/ui/lib/dateTime';
 import { chargeKind } from '../../charging/detail/chargeDetailModel';
-import { distanceKm, nearestTown } from './nearestTown';
+import { chargePlace, savedPlaceAt, shortPlace, tripPlace, tripTitleOf, type PlaceLabel } from '../../../lib/placeNames';
+
+export { shortPlace, tripPlace, type PlaceLabel };
 
 /** Trips shorter than this have coarse battery readings and stay out of efficiency averages. */
 export const SHORT_TRIP_MI = 3;
@@ -20,12 +22,6 @@ export type PlaceCategory = 'home' | 'office' | 'public';
 export type RouteCoordinate = [number, number];
 
 export const CATEGORY_LABEL: Record<PlaceCategory, string> = { home: 'Home', office: 'Office', public: 'Other' };
-
-export interface PlaceLabel {
-  name: string;
-  /** True when the name is the nearest town, not a saved place or an address. */
-  approximate: boolean;
-}
 
 interface Timed {
   id: string;
@@ -109,45 +105,8 @@ export function daysBetween(from: string, to: string) {
 
 /* ---------------- places ---------------- */
 
-const COORDINATE_LABEL = /^-?\d+(\.\d+)?,\s*-?\d+(\.\d+)?$/;
-
-function savedPlaceAt(lat: number | null | undefined, lng: number | null | undefined, places: Place[]) {
-  if (lat == null || lng == null) return null;
-  let best: Place | null = null;
-  let bestM = Number.POSITIVE_INFINITY;
-  for (const place of places) {
-    const meters = distanceKm(lat, lng, place.latitude, place.longitude) * 1000;
-    if (meters <= place.radius_m && meters < bestM) { best = place; bestM = meters; }
-  }
-  return best;
-}
-
-/** Trip end label: saved place, then address town, then nearest town ("Near …"). */
-export function tripPlace(trip: Trip, kind: 'start' | 'end', places: Place[]): PlaceLabel {
-  const lat = kind === 'start' ? trip.start_lat : trip.end_lat;
-  const lng = kind === 'start' ? trip.start_lng : trip.end_lng;
-  const saved = savedPlaceAt(lat, lng, places);
-  if (saved) return { name: saved.name, approximate: false };
-  const placeName = (kind === 'start' ? trip.start_place : trip.end_place)?.trim();
-  const address = kind === 'start' ? trip.start_address : trip.end_address;
-  // Without an address the API place name is a saved place name.
-  if (placeName && !address) return { name: placeName, approximate: false };
-  if (placeName && address) {
-    const town = placeName.split(',').at(-1)?.trim();
-    if (town) return { name: town, approximate: false };
-  }
-  const town = nearestTown(lat, lng);
-  if (town) return { name: `Near ${town}`, approximate: true };
-  return { name: 'Unknown place', approximate: false };
-}
-
-/** The name without the "Near " mark, for titles. */
-export function shortPlace(name: string) {
-  return name.replace(/^Near /, '');
-}
-
 export function tripTitle(trip: Pick<ActivityTrip, 'from' | 'to'>) {
-  return trip.from.name === trip.to.name ? `Round trip · ${shortPlace(trip.from.name)}` : `${shortPlace(trip.from.name)} → ${shortPlace(trip.to.name)}`;
+  return tripTitleOf(trip.from, trip.to);
 }
 
 export function chargeTitle(charge: Pick<ActivityCharge, 'dc' | 'place'>) {
@@ -168,18 +127,6 @@ export function placeCategory(name: string, savedPlace: Place | null): PlaceCate
   if (!savedPlace && key === 'home') return 'home';
   if (!savedPlace && key === 'office') return 'office';
   return 'public';
-}
-
-function chargePlace(session: ChargeSession, savedPlace: Place | null): { name: string; approximate: boolean } {
-  if (savedPlace) return { name: savedPlace.name, approximate: false };
-  const name = session.location_name?.trim();
-  // A full address display name is too long for a title; the nearest town replaces it.
-  const isAddress = name != null && name.split(',').length > 2;
-  if (name && !COORDINATE_LABEL.test(name) && !isAddress) return { name, approximate: false };
-  const town = nearestTown(session.location_lat, session.location_lng) ?? (session.rivian_city?.trim() || null);
-  if (town) return { name: `Near ${town}`, approximate: true };
-  if (name && isAddress) return { name: name.split(',').slice(0, 2).join(',').trim(), approximate: false };
-  return { name: 'Unknown place', approximate: false };
 }
 
 /* ---------------- cost ---------------- */
@@ -301,7 +248,7 @@ function inPeriod(item: Timed, from: string | null, today: string) {
 /** The timeline for the filters, newest first. */
 export function activityFeed(data: ActivityData, { filter, period, place, today }: FeedOptions): ActivityItem[] {
   const from = periodStartDay(period, today);
-  if (place) return sortNewest(data.charges.filter((charge) => charge.place === place && inPeriod(charge, from, today)));
+  if (place) return sortNewest(data.charges.filter((charge) => samePlace(charge.place, place) && inPeriod(charge, from, today)));
   let items: ActivityItem[] = [];
   if (filter !== 'charges') items = items.concat(data.trips.filter((trip) => inPeriod(trip, from, today)));
   if (filter !== 'trips') items = items.concat(data.charges.filter((charge) => inPeriod(charge, from, today)));
@@ -312,6 +259,11 @@ export function activityFeed(data: ActivityData, { filter, period, place, today 
     );
   }
   return sortNewest(items);
+}
+
+/** A place filter matches with or without the "Near " mark (Insights links use the short name). */
+function samePlace(name: string, filter: string) {
+  return shortPlace(name) === shortPlace(filter);
 }
 
 function sortNewest<T extends Timed>(items: T[]) {
@@ -377,7 +329,7 @@ export function summarize(data: ActivityData, { filter, period, place, today }: 
   const first = from ?? [...data.trips, ...data.charges].reduce((min, item) => (item.day && item.day < min ? item.day : min), today);
   const days = daysBetween(first, today);
   if (filter === 'charges' || place) {
-    const charges = data.charges.filter((charge) => inPeriod(charge, from, today) && (!place || charge.place === place));
+    const charges = data.charges.filter((charge) => inPeriod(charge, from, today) && (!place || samePlace(charge.place, place)));
     const kwh = charges.reduce((sum, charge) => sum + charge.kwh, 0);
     const home = charges.filter((charge) => charge.category === 'home').reduce((sum, charge) => sum + charge.kwh, 0);
     return {

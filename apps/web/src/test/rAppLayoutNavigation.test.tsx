@@ -24,7 +24,7 @@ vi.mock('../hooks/useThemePreferenceController', () => ({
   useThemePreferenceController: () => ({ mode: 'dark', onModeChange: mocks.setMode, isPending: false }),
 }));
 
-import { RAppLayout, RPageHeader } from '../features/r-experience/RAppLayout';
+import { RAppLayout, RPageActions, RPageHeader, useHidePageActions } from '../features/r-experience/RAppLayout';
 
 beforeEach(() => {
   mocks.pathname = '/trips';
@@ -57,6 +57,21 @@ describe('RAppLayout shell', () => {
   it('shows the buttons at the top right when a page has no RPageHeader', () => {
     render(<RAppLayout activeKey="activity"><h1>Old page</h1></RAppLayout>);
     expect(screen.getAllByRole('button', { name: 'Switch to light mode' })).toHaveLength(1);
+  });
+
+  it('keeps the buttons in a page title row with RPageActions, also under a banner', () => {
+    mocks.banner = { kind: 'rivian', since: null, reason: 'credentials' };
+    render(<RAppLayout activeKey="insights"><header data-testid="title-row"><h1>Insights</h1><RPageActions /></header></RAppLayout>);
+    const buttons = screen.getAllByRole('button', { name: 'Switch to light mode' });
+    expect(buttons).toHaveLength(1);
+    expect(within(screen.getByTestId('title-row')).getByRole('button', { name: 'Switch to light mode' })).toBe(buttons[0]);
+    expect(within(screen.getByTestId('title-row')).getByRole('link', { name: 'Settings' })).toHaveClass('r-gearbtn');
+  });
+
+  it('shows no gear and theme row on a page that hides it', () => {
+    function DetailPage() { useHidePageActions(); return <h2>Trip · 1 of 2</h2>; }
+    render(<RAppLayout activeKey="activity"><DetailPage /></RAppLayout>);
+    expect(screen.queryByRole('button', { name: 'Switch to light mode' })).toBeNull();
   });
 
   it('marks Settings active and hides the gear on the Settings page', () => {

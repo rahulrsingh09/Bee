@@ -206,6 +206,7 @@ These values do not change the standard production topology.
 |---|---|---|
 | `DEV_API_PORT` | Automatically selected near `3001` | Host-run API port for `pnpm dev:stack`. |
 | `DEV_WEB_PORT` | Automatically selected near `5173` | Vite development port. |
+| `DEV_WEB_HOST` | `127.0.0.1` | Vite development server bind address. The default accepts connections from this machine only. Set another address only when you must reach the dev server from another device; everyone on that network can then reach it. |
 | `DEV_POSTGRES_PORT` | Automatically selected near `5432` | Development TimescaleDB host port. |
 | `DEV_REDIS_PORT` | Automatically selected near `6379` | Development Redis host port. |
 | `DEV_GARAGE_PORT` | Automatically selected near `3900` | Development Garage S3 API port. |

@@ -275,15 +275,15 @@ describe('Now states', () => {
     expect(mocks.map.mock.lastCall?.[0]).toMatchObject({ activePoint: { lat: 47.6, lng: -122.3 } });
   });
 
-  it('uses the server trip in progress for the start, the trail and the time when it is available', async () => {
+  // The API has no trip-in-progress endpoint yet (ACTIVE_TRIP_API_AVAILABLE is false), so a server
+  // trip is not read. When the endpoint ships, restore the server-trip case: 7.5 mi and 27 min here.
+  it('works from the last trip while the API has no trip in progress', async () => {
     mocks.status = { ...parked, power_state: 'drive', speed_mph: 30, odometer_miles: 12507.5 };
     mocks.activeTrip = { started_at: '2026-11-07T19:33:00Z', start_odometer_mi: 12500, soc_start: 70, range_start_mi: 230,
       points: [{ ts: '2026-11-07T19:33:00Z', lat: 47.5, lng: -122.4 }, { ts: '2026-11-07T19:40:00Z', lat: 47.55, lng: -122.35 }] };
     renderNow();
     const card = screen.getByRole('region', { name: 'This trip' });
-    await waitFor(() => expect(card).toHaveTextContent('7.5mi'));
-    expect(card).toHaveTextContent('27 min');
-    await act(async () => {});
-    expect((mocks.map.mock.lastCall?.[0] as { track: unknown[] }).track.length).toBeGreaterThanOrEqual(3);
+    await waitFor(() => expect(card).toHaveTextContent('21.5mi'));
+    expect(card).not.toHaveTextContent('27 min');
   });
 });

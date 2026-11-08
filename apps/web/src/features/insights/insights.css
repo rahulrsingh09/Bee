@@ -33,7 +33,9 @@
 .ri :focus-visible { outline: 2px solid var(--ri-acc); outline-offset: 2px; border-radius: 8px; }
 
 /* heading and tabs */
-.ri-top { padding: 6px 0 6px; }
+.ri-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 18px 0 6px; }
+.ri-top-text { min-width: 0; }
+@media (min-width: 960px) { .ri-top { padding-top: 28px; } }
 .ri-top h1 { margin: 0; font-size: 26px; line-height: 1.15; letter-spacing: -.02em; font-weight: 700; }
 .ri-sub { margin-top: 6px; min-height: 18px; font-size: 13px; color: var(--ri-t3); }
 .ri-filters { position: sticky; top: 0; z-index: 10; padding: 10px 0; background: var(--ri-bg); }

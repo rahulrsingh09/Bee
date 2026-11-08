@@ -3,10 +3,11 @@ import { Link } from '@tanstack/react-router';
 import { useCurrentVehicleStatus, useDegradation, useMe, useResolvedVehicleSelection, useSavedPlaces } from '@riviamigo/hooks';
 import { getAppTimezone } from '@riviamigo/ui/lib/dateTime';
 import { NoVehicleState } from '../../components/layout/NoVehicleState';
-import { RAppLayout } from '../r-experience/RAppLayout';
+import { RAppLayout, RPageActions } from '../r-experience/RAppLayout';
 import { TipLayer } from './chartKit';
 import { useSegInk } from './controls';
 import type { InsightsData } from './InsightsContext';
+import { usableCapacityNow } from '../../lib/batteryHealth';
 import { capacityByDay, chargeRows, dayKeyOf, firstDay, monthDay, tripRows } from './insightsModel';
 import { useAllCharges, useAllTrips } from './useInsightsData';
 import { BatteryTab } from './tabs/BatteryTab';
@@ -59,7 +60,7 @@ function InsightsBody({ tab, vehicleId, onFirstDay }: { tab: InsightTab; vehicle
     if (!tripsQuery.data || !chargesQuery.data) return null;
     const places = placesQuery.data ?? [];
     const today = dayKeyOf(now, timezone);
-    const trips = tripRows(tripsQuery.data, timezone);
+    const trips = tripRows(tripsQuery.data, timezone, places);
     const charges = chargeRows(chargesQuery.data, places, timezone);
     return {
       vehicleId, userId: me.data?.user_id ?? null, timezone, today, first: firstDay(trips, charges, today), trips, charges, places,
@@ -82,7 +83,7 @@ function InsightsBody({ tab, vehicleId, onFirstDay }: { tab: InsightTab; vehicle
           ) : (
             <TipLayer className="ri-ins-grid">
               {tab === 'cost' && <CostTab data={data} />}
-              {tab === 'charging' && <ChargingTab data={data} capacityKwh={capacity[capacity.length - 1]?.kwh ?? null} />}
+              {tab === 'charging' && <ChargingTab data={data} capacityKwh={usableCapacityNow(capacity)} />}
               {tab === 'battery' && <BatteryTab data={data} capacity={capacity} />}
               {tab === 'efficiency' && <EfficiencyTab data={data} />}
               {tab === 'lifetime' && <LifetimeTab data={data} />}
@@ -100,8 +101,11 @@ export function InsightsHub({ tab = 'cost' }: { tab?: InsightTab }) {
     <RAppLayout activeKey="insights">
       <div className="ri">
         <div className="ri-top">
-          <h1>Insights</h1>
-          <p className="ri-sub">{first ? `Since ${monthDay(first)}, the first day of data` : '\u00a0'}</p>
+          <div className="ri-top-text">
+            <h1>Insights</h1>
+            <p className="ri-sub">{first ? `Since ${monthDay(first)}, the first day of data` : '\u00a0'}</p>
+          </div>
+          <RPageActions />
         </div>
         <InsightTabs tab={tab} />
         {!authReady || !vehicleSelectionReady ? <p className="ri-muted" role="status" aria-busy="true">Loading your vehicle…</p>

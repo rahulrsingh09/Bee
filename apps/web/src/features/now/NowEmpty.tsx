@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Check, ChevronRight, Minus } from 'lucide-react';
 import type { Vehicle, VehicleStatus } from '@riviamigo/types';
 import { api, useAuthReady } from '@riviamigo/hooks';
+import { RPageActions } from '../r-experience/RAppLayout';
 
 const ROAD = <svg viewBox="0 0 120 64" aria-hidden="true">
   <path d="M8 52 C 40 52, 40 14, 72 14 S 104 30, 112 12" className="now-ec-road" />
@@ -53,7 +54,7 @@ export function NowSkeleton({ name }: { name: string }) {
     <div className="now-skel" style={{ height, width, borderRadius: radius }} />;
   return <div className="now" aria-busy="true" aria-label="Loading">
     <header className="now-top"><div className="now-top-text"><h1>{name}</h1>
-      <div className="now-sub"><span className="now-skel" style={{ display: 'inline-block', height: 14, width: 140, borderRadius: 7 }} /></div></div></header>
+      <div className="now-sub"><span className="now-skel" style={{ display: 'inline-block', height: 14, width: 140, borderRadius: 7 }} /></div></div><RPageActions /></header>
     <div className="now-grid">
       <div className="now-main">{block(220, 28)}{block(130)}<div className="now-tiles">{block(76, 16)}{block(76, 16)}{block(76, 16)}</div></div>
       <div className="now-side"><div className="now-skel-gap" />{block(78)}{block(78)}<div className="now-skel-gap" />{block(220)}</div>

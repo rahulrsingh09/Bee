@@ -6,7 +6,7 @@ import { formatAppDate, formatAppTime } from '@riviamigo/ui/lib/dateTime';
 import {
   CATEGORY_LABEL, chargeTitle, duration, n0, n1, shortPlace, toActivityCharge, usd, type ActivityCharge, type PlaceCategory,
 } from '../../trips/activity/activityModel';
-import { LineChart } from '../../trips/activity/ActivityCharts';
+import { ExpandableChart, LineChart } from '../../trips/activity/ActivityCharts';
 import { Segmented } from '../../trips/activity/Segmented';
 import { costEntry, type CostEntryMode } from './chargeDetailModel';
 import { usePlaceTag } from './usePlaceTag';
@@ -133,7 +133,8 @@ export function ChargeDetailPane({ sessionId, vehicleId, canManage, charges, hea
         <h2 className="r-act-h2">Charge level</h2>
         <section className="r-act-card pad">
           {curveQuery.isLoading ? <Skeleton className="h-36 w-full" /> : levelPoints.length > 1 ? (
-            <LineChart
+            <ExpandableChart title="Charge level" render={(big) => <LineChart
+              height={big ? 320 : 150}
               label={`Charge level from ${n0(charge.socStart ?? levelPoints[0]!.y)}% to ${n0(charge.socEnd ?? levelPoints.at(-1)!.y)}%`}
               points={levelPoints}
               yDomain={[0, 100]}
@@ -144,26 +145,26 @@ export function ChargeDetailPane({ sessionId, vehicleId, canManage, charges, hea
               reference={limit != null ? { value: limit, label: `Limit ${n0(limit)}%` } : null}
               xLabels={xLabels}
               endLabels={[`${n0(levelPoints[0]!.y)}%`, `${n0(levelPoints.at(-1)!.y)}%`]}
-              testId="charge-level-chart"
-            />
+              testId={big ? 'charge-level-chart-big' : 'charge-level-chart'}
+            />} />
           ) : <p className="r-act-empty">No samples.</p>}
         </section>
 
         <h2 className="r-act-h2">Charging power</h2>
         <section className="r-act-card pad">
           {curveQuery.isLoading ? <Skeleton className="h-28 w-full" /> : powerPoints.length > 1 ? (
-            <LineChart
+            <ExpandableChart title={estimated ? 'Estimated charging power' : 'Charging power'} render={(big) => <LineChart
               label={estimated ? 'Estimated charging power' : 'Charging power'}
               points={powerPoints}
-              height={120}
+              height={big ? 320 : 120}
               yDomain={[0, powerTop]}
               ticks={[0, powerTop / 2, powerTop]}
               tickFormat={(value) => `${n0(value)} kW`}
               color={color}
               {...(xDomain ? { xDomain } : {})}
               xLabels={xLabels}
-              testId="charge-power-chart"
-            />
+              testId={big ? 'charge-power-chart-big' : 'charge-power-chart'}
+            />} />
           ) : <p className="r-act-empty">No samples.</p>}
           <p className="r-act-note" data-power-note>
             {estimated

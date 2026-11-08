@@ -58,6 +58,9 @@ export function rRateUpdateBody(place: Place, rate: number): UpsertPlaceBody {
 }
 
 const LABEL: Record<RRateKind, string> = { home: 'Home', office: 'Office' };
+
+/** Where the Home default rate ($0.189119 per kWh) comes from, as in v5. */
+const R_HOME_RATE_SOURCE = 'Home default: PSE Electric Summary Sheet S-6, Schedule 7, effective 2026-10-01, first 600 kWh per month, before city tax.';
 const SWATCH: Record<RRateKind, string> = { home: 'var(--r-home)', office: 'var(--r-office)' };
 
 /** Home and Office $ per kWh form. Saves to the place cost profiles through the places API. */
@@ -137,7 +140,7 @@ export function RRatesCard() {
     <section id="rates" className="r-card r-pad r-rise" style={{ '--i': 3 } as React.CSSProperties} aria-labelledby="settings-rates-title">
       <div className="r-ctitle"><h2 id="settings-rates-title">Charging rates</h2><span className="r-muted">used for cost</span></div>
       <RRatesForm />
-      <p className="r-note">Office 0 means free. Other places are priced per charge.</p>
+      <p className="r-note">{R_HOME_RATE_SOURCE} Office 0 means free. Other places are priced per charge.</p>
     </section>
   );
 }

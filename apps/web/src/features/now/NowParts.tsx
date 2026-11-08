@@ -6,6 +6,7 @@ import { formatAppDate, formatAppTime } from '@riviamigo/ui/lib/dateTime';
 import { useEfficiencyUnit } from '../r-experience/efficiencyUnit';
 import { RVehicleTurn } from '../r-experience/RVehicleOrbit';
 import { RVehicleLockStatus } from '../r-experience/RVehicleLockStatus';
+import { RPageActions } from '../r-experience/RAppLayout';
 import type { Vehicle } from '@riviamigo/types';
 import { NowBarChart, NowLineChart, paddedDomain } from './NowCharts';
 import {
@@ -36,6 +37,7 @@ export function NowHeader({ name, chip, chipState, sub, control }: {
       </div>
     </div>
     {control}
+    <RPageActions />
   </header>;
 }
 

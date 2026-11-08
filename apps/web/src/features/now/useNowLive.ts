@@ -18,6 +18,13 @@ function isActiveTrip(value: unknown): value is ActiveTrip {
 }
 
 /**
+ * The API does not serve GET /v1/vehicles/{id}/active-trip yet. Until it does, the app does not
+ * call it, and the live view works from the vehicle status and the last trip alone.
+ * Set this to true in the same change that adds the endpoint to the API.
+ */
+export const ACTIVE_TRIP_API_AVAILABLE = false;
+
+/**
  * GET /v1/vehicles/{id}/active-trip while the car drives. The read is optional: a server
  * without it (404), with no trip in progress (204) or with an error gives null, and the
  * live view then works from the vehicle status alone. Errors are not reported to the owner.
@@ -38,8 +45,8 @@ export function useActiveTrip(vehicleId: string, enabled: boolean) {
   return useQuery({
     queryKey: ['now', 'active-trip', vehicleId],
     queryFn: () => fetchActiveTrip(vehicleId),
-    enabled: authReady && enabled,
-    refetchInterval: enabled ? 30_000 : false,
+    enabled: ACTIVE_TRIP_API_AVAILABLE && authReady && enabled,
+    refetchInterval: ACTIVE_TRIP_API_AVAILABLE && enabled ? 30_000 : false,
     retry: false,
     staleTime: 0,
   });

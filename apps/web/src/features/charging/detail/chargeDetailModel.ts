@@ -37,6 +37,7 @@ const NETWORK_TITLES: Record<string, string> = {
   rivian: 'Rivian Adventure Network',
   'electrify america': 'Electrify America',
   evgo: 'EVgo',
+  chargepoint: 'ChargePoint',
 };
 
 export function networkTitle(vendor: string | null | undefined) {

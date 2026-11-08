@@ -11,6 +11,8 @@ import type {
   VehicleStatus,
 } from '@riviamigo/types';
 import { getTireHealthTone } from '@riviamigo/ui/lib/vehicleTires';
+import { getAppTimezone } from '@riviamigo/ui/lib/dateTime';
+import { batteryHealthPct as sharedBatteryHealthPct, capacityByDay } from '../../lib/batteryHealth';
 
 type TireHealthTone = ReturnType<typeof getTireHealthTone>;
 
@@ -197,28 +199,9 @@ export function closures(status: VehicleStatus | null | undefined, health: Vehic
   ];
 }
 
-/** Daily median of a capacity series (rows in time order), as [day, kWh]. */
-function dailyCapacity(rows: Array<{ ts: string; usable_kwh: number }>) {
-  const byDay = new Map<string, number[]>();
-  for (const row of rows) {
-    if (!Number.isFinite(row.usable_kwh) || row.usable_kwh <= 0) continue;
-    const day = row.ts.slice(0, 10);
-    byDay.set(day, [...(byDay.get(day) ?? []), row.usable_kwh]);
-  }
-  return [...byDay.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([day, values]) => {
-    const sorted = values.slice().sort((a, b) => a - b);
-    return [day, sorted[Math.floor(sorted.length / 2)]!] as const;
-  });
-}
-
-/** Battery health: usable capacity now ÷ usable capacity on the first day, in %. */
-export function batteryHealthPct(rows: Array<{ ts: string; usable_kwh: number }> | null | undefined): number | null {
-  // A server that answers with an object instead of a list gives no reading; the Car page must not fail on it.
-  const days = dailyCapacity(Array.isArray(rows) ? rows : []);
-  if (days.length === 0) return null;
-  const first = days[0]![1];
-  const now = days[days.length - 1]![1];
-  return first > 0 ? Math.min(100, (now / first) * 100) : null;
+/** Battery health in %, with the shared rule of Car and Insights (median per app-timezone day, latest ÷ first). */
+export function batteryHealthPct(rows: Array<{ ts: string; usable_kwh: number }> | null | undefined, timezone = getAppTimezone()): number | null {
+  return sharedBatteryHealthPct(capacityByDay(rows, timezone));
 }
 
 export interface TripCoverage {

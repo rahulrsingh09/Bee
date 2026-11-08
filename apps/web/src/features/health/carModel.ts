@@ -213,7 +213,8 @@ function dailyCapacity(rows: Array<{ ts: string; usable_kwh: number }>) {
 
 /** Battery health: usable capacity now ÷ usable capacity on the first day, in %. */
 export function batteryHealthPct(rows: Array<{ ts: string; usable_kwh: number }> | null | undefined): number | null {
-  const days = dailyCapacity(rows ?? []);
+  // A server that answers with an object instead of a list gives no reading; the Car page must not fail on it.
+  const days = dailyCapacity(Array.isArray(rows) ? rows : []);
   if (days.length === 0) return null;
   const first = days[0]![1];
   const now = days[days.length - 1]![1];

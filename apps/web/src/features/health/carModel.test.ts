@@ -69,6 +69,8 @@ describe('Car tab model', () => {
       { ts: '2026-11-07T09:00:00Z', usable_kwh: 87.8 },
     ])).toBeCloseTo(99.77, 1);
     expect(batteryHealthPct([])).toBeNull();
+    // A non-list answer gives no reading instead of an error.
+    expect(batteryHealthPct({} as unknown as [])).toBeNull();
   });
 
   it('compares the odometer with recorded trips', () => {

@@ -131,14 +131,14 @@ function buildMapLibreStyle(mode: MapStyleMode, basemap: BasemapConfig, preferen
   return {
     version: 8 as const,
     sources: {
-      'carto-base': {
+      'basemap-raster': {
         type: 'raster' as const,
         tiles: [url],
         tileSize: 256,
         attribution: basemap.attributions?.map((item) => item.label).join(' | ') ?? basemap.attribution ?? '',
       },
     },
-    layers: [{ id: 'background', type: 'raster' as const, source: 'carto-base' }],
+    layers: [{ id: 'background', type: 'raster' as const, source: 'basemap-raster' }],
   };
 }
 

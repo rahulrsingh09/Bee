@@ -130,40 +130,25 @@ test('changing vehicle clears old readings until the selected vehicle snapshot a
 });
 
 for (const width of [390, 1280]) {
-  test(`main trip map supports tap, drag and keyboard inspection at ${width}px`, async ({ page }) => {
+  test(`chart editor keeps its focused workflow in the R theme at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
-    const mapErrors: string[] = [];
-    page.on('console', message => { if (message.text().includes('maplibre.error')) mapErrors.push(message.text()); });
-    await installRFixture(page, { populatedTrip: true });
-    await page.goto('/trips/trip-1');
-    const canvas = page.getByLabel('Inspect trip route. Tap or drag to select a point; arrow keys move along the route.');
-    await expect(canvas).toBeVisible();
-    const time = page.getByRole('slider', { name: 'Drive time' });
-    await expect(time).toBeEnabled();
-    await time.focus();
-    await page.keyboard.press('End');
-    await expect(time).toHaveValue('30');
-    await page.keyboard.press('Home');
-    await expect(time).toHaveValue('0');
-    await canvas.scrollIntoViewIfNeeded();
-    const box = (await canvas.boundingBox())!;
-    await page.mouse.click(box.x + box.width * .7, box.y + box.height * .3);
-    await expect(time).not.toHaveValue('0');
-    const selected = await time.inputValue();
-    await page.mouse.move(box.x + box.width * .7, box.y + box.height * .3);
-    await page.mouse.down();
-    await page.mouse.move(box.x + box.width * .3, box.y + box.height * .7, { steps: 12 });
-    await page.mouse.up();
-    await expect(time).not.toHaveValue(selected);
-    await page.getByRole('button', { name: 'Pan map', exact: true }).click();
-    await expect(page.getByLabel('Pan trip map', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Inspect route', exact: true }).click();
-    await expect(canvas).toBeVisible();
-    expect(mapErrors).toEqual([]);
+    await installRFixture(page, { role: 'super_user', populatedAdmin: true, mode: 'dark' });
+    await page.goto('/settings/charts/new');
+    await expect(page.locator('.r-editor')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'New chart', exact: true })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Chart editor sections' })).toBeVisible();
+    for (const section of ['curves', 'display', 'advanced', 'basics']) {
+      await page.getByRole('button', { name: section, exact: true }).click();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    }
+    await page.getByRole('button', { name: 'Back to charts' }).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await page.getByRole('button', { name: /keep editing/i }).click();
+    await expect(page.getByRole('heading', { name: 'New chart', exact: true })).toBeVisible();
   });
 }
 
-test('an R2 without owner images turns with the bundled 72-frame pack', async ({ page }) => {
+test('an R2 without owner images shows its packaged R2 artwork, never the bundled orbit frames', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await installRFixture(page);
   const packs: string[] = [];

@@ -16,7 +16,11 @@ const activeTab: Array<[string, typeof tabs[number][0]]> = [
   ['/insights/cost', 'Insights'],
   ['/insights/battery', 'Insights'],
   ['/insights/lifetime', 'Insights'],
-  ['/charging', 'Insights'],
+  ['/insights', 'Insights'],
+  ['/charging/charge-1', 'Activity'],
+  ['/battery', 'Insights'],
+  ['/battery/phantom-drain', 'Insights'],
+  ['/efficiency', 'Insights'],
   ['/vehicle-health', 'Car'],
 ];
 
